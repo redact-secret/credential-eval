@@ -22,7 +22,8 @@ call it, or produce the same order some other way.
 | `scanners[].assertions` | `(case_id, method, variant, baseline, candidate, assertion, status, reason)` |
 | `variants` | `(case_id, variant)` |
 | `comparisons` | `(case_id, variant, reference, peer, ...)` |
-| every map (`groups`, `resolution`, `action_counts`, `configuration`, ...) | key, in byte order |
+| `review_queue` | `id` (then the remaining fields), with duplicates removed |
+| every map (`groups`, `resolution`, `by_target`, `resolution_by_target`, `action_counts`, `configuration`, ...) | key, in byte order |
 
 Collections whose order *is* semantic keep their authored order. There is one
 such collection: `span_outcomes`, which follows the order of the case's

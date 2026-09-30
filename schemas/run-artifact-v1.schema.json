@@ -21,6 +21,14 @@
       "description": "Timestamps and host diagnostics. Excluded from the semantic digest.",
       "$ref": "#/$defs/NonSemantic"
     },
+    "review_queue": {
+      "description": "Occurrences that need an authored decision (differential\ndisagreements and variants whose expectation could not be derived),\nsorted by `id`. Never a verdict on any scanner.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ReviewOccurrence"
+      }
+    },
     "scanners": {
       "description": "Per-scanner results, sorted by scanner id.",
       "type": "array",
@@ -192,6 +200,17 @@
       "description": "Aggregates for one scanner.",
       "type": "object",
       "properties": {
+        "by_target": {
+          "description": "Per-target groups: for each target family, the `<kind>/<tier>` groups\nof the cases that target it, accounted over the corpus groups that\nhold them (a selected positive's twin and the selection's `T0` cases\ntravel with the group; legacy `selectionGroups`).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/GroupAggregate"
+            }
+          },
+          "default": {}
+        },
         "groups": {
           "description": "Case groups keyed `<kind>/<tier>` (e.g. `must-redact/T1`), with all\n`T0` cases in `pending/T0`. No cross-group totals.",
           "type": "object",
@@ -204,6 +223,17 @@
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/AccountedCounts"
+          },
+          "default": {}
+        },
+        "resolution_by_target": {
+          "description": "Per-target assertion resolution, keyed like `resolution`\n(cases without targets count under `unassigned`).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/AccountedCounts"
+            }
           },
           "default": {}
         }
@@ -530,6 +560,13 @@
           "description": "Case id.",
           "$ref": "#/$defs/CaseId"
         },
+        "evidence_class": {
+          "description": "Evidence class label (`Case.grouping.evidence_class`), if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "expected": {
           "description": "Authored spans (envelope reasons omitted).",
           "type": "array",
@@ -544,6 +581,10 @@
             "null"
           ]
         },
+        "group": {
+          "description": "Corpus group / category of the case (`Case.grouping.group`).",
+          "type": "string"
+        },
         "kind": {
           "description": "Measurement population.",
           "$ref": "#/$defs/CaseKind"
@@ -556,9 +597,30 @@
           "description": "Fixture path.",
           "$ref": "#/$defs/FixturePath"
         },
+        "targets": {
+          "description": "Families the case targets (`Case.grouping.targets`; reporting strata\nonly). Sorted, unique; omitted when empty.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "taxonomy": {
+          "description": "Benign-control taxonomy axis (`Case.grouping.taxonomy`), if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "tier": {
           "description": "Evidence tier.",
           "$ref": "#/$defs/EvidenceTier"
+        },
+        "twin_mutation_kind": {
+          "description": "Mutated property of an authored twin (`Case.twin.mutation_kind`), if any.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "twin_of": {
           "description": "Positive case this control is a twin of, if any.",
@@ -578,6 +640,7 @@
         "path",
         "kind",
         "tier",
+        "group",
         "expected",
         "actual",
         "measurement"
@@ -1520,6 +1583,90 @@
       "required": [
         "count",
         "agreed"
+      ]
+    },
+    "ReviewOccurrence": {
+      "description": "One entry of the review queue: an occurrence that needs an authored\ndecision. Neither scanner of a disagreement is ground truth.",
+      "type": "object",
+      "properties": {
+        "baseline": {
+          "description": "Baseline variant, for relation occurrences.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate": {
+          "description": "Candidate variant, for relation occurrences.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "case_id": {
+          "description": "Evaluation case id.",
+          "$ref": "#/$defs/CaseId"
+        },
+        "disagreement": {
+          "description": "Disagreement kind, for differential disagreements.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Disagreement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "description": "Stable canonical id. It binds the case, its source digest and the\nobservation, and excludes every part of the reference scanner's\nidentity except its id, so reference releases do not re-key reviews.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "method": {
+          "description": "Method that queued the occurrence.",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "peer": {
+          "description": "Peer scanner, for differential disagreements.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "description": "Reference scanner, for differential disagreements.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "variant": {
+          "description": "Variant the occurrence is about.",
+          "$ref": "#/$defs/ComponentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "method",
+        "variant"
       ]
     },
     "RunArtifactSchema": {

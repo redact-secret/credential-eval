@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc fed7dd5078f543eb470abb5069d620c5c4fee7efd4ab3343e50d4af087f1e7e8 # shrinks to expected = [ScoredSpan { start: 5, end: 9, role: Companion, envelope: None }, ScoredSpan { start: 20, end: 25, role: Companion, envelope: None }, ScoredSpan { start: 32, end: 37, role: Secret, envelope: None }], actual = [ObservedRange { start: 19, end: 35, family: None, action: None }, ObservedRange { start: 33, end: 37, family: None, action: None }], scoped = false

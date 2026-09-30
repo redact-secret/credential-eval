@@ -145,8 +145,30 @@ does not need fixture bytes, the kernel or product code. The test
 validates the committed smoke artifact with only the schema, then interprets
 it from plain JSON.
 
+`aggregates.by_target` holds, for every target family, the `<kind>/<tier>`
+groups of the cases that target it. They are accounted over the corpus
+groups that hold those cases, and a selected positive's twin and the
+selection's `T0` cases travel with the group (legacy `selectionGroups`).
+`aggregates.resolution_by_target` is the per-target assertion resolution,
+keyed like `resolution`.
+
+Each `CaseResult` also carries the grouping it was measured under: `group`,
+`targets` (omitted when empty), `taxonomy`, `evidence_class` and
+`twin_mutation_kind`. A consumer can select cases by target without loading
+the snapshot.
+
+`review_queue[]` lists occurrences that need an authored decision: differential
+disagreements (`reference`, `peer`, `disagreement`) and generated variants
+whose expectation could not be derived. Each has a stable canonical `id` that
+excludes every part of the reference scanner's identity except its id, so a
+new reference release does not re-key reviewed entries. An occurrence is
+never a verdict on either scanner.
+
 ### Implementation status
 
-In issue #2 the kernel fills `cases[]` using the exact legacy lattice port.
-`aggregates`, `assertions`, `variants` and `comparisons` are left empty, and
-issue #3 fills them under the shapes defined here.
+Issue #3 fills every section: `cases[]` and `aggregates` (`build_artifact`),
+and, for evaluation methods, `assertions`, `aggregates.resolution*`,
+`variants`, `comparisons` and `review_queue`
+(`evaluation::EvaluationReport::artifact_parts`). Intentional differences from
+the legacy engine are listed in
+[../migration/kernel-deltas.md](../migration/kernel-deltas.md).
