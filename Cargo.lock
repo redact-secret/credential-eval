@@ -131,6 +131,7 @@ name = "credential-eval-cli"
 version = "0.1.0"
 dependencies = [
  "credential-eval-adapters",
+ "credential-eval-compat",
  "credential-eval-contracts",
  "credential-eval-kernel",
  "ctrlc",
@@ -138,6 +139,17 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "credential-eval-compat"
+version = "0.1.0"
+dependencies = [
+ "credential-eval-contracts",
+ "credential-eval-kernel",
+ "regex",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -156,9 +168,9 @@ name = "credential-eval-kernel"
 version = "0.1.0"
 dependencies = [
  "credential-eval-contracts",
+ "fancy-regex",
  "jsonschema",
  "proptest",
- "regex",
  "serde",
  "serde_json",
 ]

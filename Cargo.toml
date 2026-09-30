@@ -5,6 +5,7 @@ members = [
     "crates/credential-eval-kernel",
     "crates/credential-eval-adapters",
     "crates/credential-eval-cli",
+    "crates/credential-eval-compat",
 ]
 
 [workspace.package]
@@ -21,12 +22,14 @@ repository = "https://github.com/redact-secret/credential-eval"
 credential-eval-contracts = { path = "crates/credential-eval-contracts" }
 credential-eval-kernel = { path = "crates/credential-eval-kernel" }
 credential-eval-adapters = { path = "crates/credential-eval-adapters" }
+credential-eval-compat = { path = "crates/credential-eval-compat" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 schemars = "1"
 sha2 = "0.10"
 jsonschema = { version = "0.58", default-features = false }
 regex = { version = "1", default-features = false, features = ["std", "perf", "unicode"] }
+fancy-regex = { version = "0.19", default-features = false, features = ["std", "perf", "unicode"] }
 url = "2"
 tempfile = "3"
 ctrlc = "3"

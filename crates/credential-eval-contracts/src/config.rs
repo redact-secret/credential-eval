@@ -26,6 +26,43 @@ pub struct RunConfig {
     pub execution: ExecutionBounds,
     /// Accounting parameters (engine v1.1 semantics).
     pub accounting: AccountingConfig,
+    /// Evaluation-method parameters. Present exactly when `methods` is
+    /// non-empty; absent for a plain corpus measurement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluation: Option<EvaluationSettings>,
+}
+
+/// Parameters of an evaluation-method run. Every field can change a semantic
+/// result, so all of them are part of the config hash.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EvaluationSettings {
+    /// Reference scanner of differential comparisons. Absent: differential
+    /// cases record no comparisons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<ScannerId>,
+    /// How variant seeds are named. Operators draw their seeded choices from
+    /// the seed string, so it changes generated variants.
+    pub seed: SeedConvention,
+    /// Canonical digest of the evaluation evidence (family contracts, value
+    /// validators by name, benign taxonomy vocabulary, allowlist rule).
+    pub evidence_digest: Sha256Digest,
+    /// Whether a finding's family is kept only when it is a family of the
+    /// evidence contract table (the legacy `eval` classification rule).
+    pub family_allowlist: bool,
+}
+
+/// Seed naming convention of an evaluation run.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum SeedConvention {
+    /// The corpus case id (canonical).
+    CaseId,
+    /// Legacy `<category>/<fixtureId>`, recovered from a migration snapshot
+    /// whose case ids are `<category>--<fixtureId>` (parity runs only).
+    LegacyCategory,
 }
 
 impl RunConfig {
