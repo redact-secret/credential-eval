@@ -192,6 +192,14 @@ support matrix / release decision
 
 That interpretation currently remains in the Redact Secret benchmark/product qualification layer.
 
+[docs/qualification-boundary.md](docs/qualification-boundary.md) lists the
+policy that stays outside this repository and defines the consumer API: the
+schema-validated run artifact, nothing else.
+[docs/migration/redact-secret-cutover.md](docs/migration/redact-secret-cutover.md)
+is the plan for the Redact Secret tooling to consume it.
+`examples/qualification-consumer/` is a dependency-free reference consumer
+with an illustrative toy policy.
+
 ## Status
 
 The repository is private and in its migration and architecture phase.
@@ -219,6 +227,9 @@ crates/
 schemas/                           generated JSON Schemas (*-v1.schema.json)
 docs/contracts/                    contract, range, identity, outcome and determinism rules
 docs/migration/legacy-map.md       inventory of the legacy TypeScript engine
+docs/migration/redact-secret-cutover.md  handoff plan for Redact Secret tooling
+docs/qualification-boundary.md     what stays outside the engine; the consumer API
+examples/qualification-consumer/   reference artifact consumer (Node 22, toy policy)
 tests/fixtures/contracts-smoke/    synthetic end-to-end fixtures and golden run artifact
 ```
 
