@@ -19,7 +19,7 @@ four conditions hold:
 |---|---|---|
 | An explicit input/output contract exists | #2 | done: v1 schemas in `schemas/`, not yet frozen |
 | Current scanners run through the extracted engine | #4 (adapters), #7 (CLI) | in progress |
-| Result parity is demonstrated on a pinned corpus and toolchain | #5 | not started |
+| Result parity is demonstrated on a pinned corpus and toolchain | #5 | done for both pipelines: [../parity/parity-report.md](../parity/parity-report.md) |
 | Redact Secret qualification consumes generated artifacts without importing engine internals | #6 (this plan and the boundary document), then the product-side switch | boundary and reference consumer done; product switch not started |
 
 Until then the TypeScript engine stays the behavioral oracle and remains the
@@ -74,7 +74,11 @@ engine switches underneath them. It lives in credential-eval (the legacy
 schemas are an output format of this engine), in one clearly named, removable
 module; the canonical model is never reshaped around it (`ARCHITECTURE.md`,
 Compatibility). It is written by #5 alongside parity, because parity compares
-through it. Its duties, all taken from [legacy-map.md](legacy-map.md):
+through it: `crates/credential-eval-compat` (`bench`: artifact → per-category
+files and `summary.json`, via `credential-eval compat legacy-bench`; `eval`:
+report → the semantic subset of `evaluation.json`, via `run --legacy-eval-out`)
+plus the legacy exporter `tools/legacy-export/export.mts`. Its duties, all
+taken from [legacy-map.md](legacy-map.md):
 
 - **Failure-state folding.** The contract distinguishes `timeout`,
   `malformed` and `error`; legacy has only `error` (legacy-map §2.10,

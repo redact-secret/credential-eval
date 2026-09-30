@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 
-use regex::Regex;
+use fancy_regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 
 use crate::twin_probe::UnprobeableRecord;
@@ -31,10 +31,11 @@ pub struct SegmentRule {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FamilyContract {
-    /// Lexical pattern of the family's value. Interpreted with the `regex`
-    /// crate; the ECMAScript subset used by the legacy contracts (anchors,
-    /// classes, counted repetition, non-capturing groups, alternation) has the
-    /// same meaning there. Lexical operators require it.
+    /// Lexical pattern of the family's value. Interpreted with the
+    /// `fancy-regex` crate (backtracking, `regex` syntax plus look-around);
+    /// the ECMAScript subset used by the legacy contracts (anchors, classes,
+    /// counted repetition, non-capturing groups, alternation and look-ahead)
+    /// has the same meaning there. Lexical operators require it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pattern: Option<String>,
     /// Segment layout, when the family has one.
@@ -49,6 +50,10 @@ pub struct FamilyContract {
 /// `FormatContract.validate`, `benchmarks/types.ts:94`). Validators are code,
 /// not data, so the evidence owner supplies them explicitly.
 pub type ValueValidator = Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
+/// Backtracking bound of one contract-pattern match (explicit execution
+/// bound; the legacy contract patterns need a few hundred steps at most).
+pub const BACKTRACK_LIMIT: usize = 1_000_000;
 
 /// The family contract table the methods consult.
 #[derive(Clone, Default)]
@@ -94,10 +99,13 @@ impl FamilyContracts {
         let mut compiled = BTreeMap::new();
         for (family, contract) in &families {
             if let Some(pattern) = &contract.pattern {
-                let regex = Regex::new(pattern).map_err(|_| InvalidContract {
-                    family: family.clone(),
-                    reason: "pattern does not compile",
-                })?;
+                let regex = RegexBuilder::new(pattern)
+                    .backtrack_limit(BACKTRACK_LIMIT)
+                    .build()
+                    .map_err(|_| InvalidContract {
+                        family: family.clone(),
+                        reason: "pattern does not compile",
+                    })?;
                 compiled.insert(family.clone(), regex);
             }
             if let Some(rule) = &contract.segments {
@@ -148,9 +156,13 @@ impl FamilyContracts {
     }
 
     /// Whether `value` satisfies the family's pattern and validator
-    /// (`operators/lexical.ts:21`). `false` for families without a pattern.
+    /// (`operators/lexical.ts:21`). `false` for families without a pattern,
+    /// and for a match that exceeds the backtracking bound (the variant is
+    /// then `review-required`, never silently `derived`).
     pub fn is_valid(&self, family: &str, value: &str) -> bool {
-        self.compiled.get(family).is_some_and(|r| r.is_match(value))
+        self.compiled
+            .get(family)
+            .is_some_and(|r| r.is_match(value).unwrap_or(false))
             && self.validators.get(family).is_none_or(|v| v(value))
     }
 }

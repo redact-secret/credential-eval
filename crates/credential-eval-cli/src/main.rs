@@ -5,14 +5,26 @@
 //!                     [--config <run-config.json>] [--scanner <id>]... [--jobs N]
 //!                     [--observations-out <file>] [--node-dir <dir>]
 //!                     [--candidate-root <scanner>=<dir>]... [--work-dir <dir>]
-//!                     [--require-complete]
+//!                     [--methods <m,...|all> [--reference <scanner>] [--evidence <file>]
+//!                      [--seed case-id|legacy-category] [--fail-on-assertions]
+//!                      [--legacy-eval-out <file>]]
+//!                     [--require-complete] [--strict]
+//! credential-eval compat legacy-bench --artifact <artifact.json> --index <legacy-index.json>
+//!                     --out-dir <dir>
 //! credential-eval default-config [--scanner <id>]... [--jobs N]
 //! credential-eval --version
 //! ```
 //!
+//! Without `--methods`, `run` measures the corpus cases (the legacy `bench`
+//! pipeline). With `--methods`, it builds evaluation cases from the corpus,
+//! generates every variant, scans the variant corpus and evaluates it (the
+//! legacy `eval` pipeline).
+//!
 //! Exit codes: 0 artifact written; 1 run failed (no artifact); 2 usage or
-//! configuration error; 3 artifact written but a scanner did not complete and
-//! `--require-complete` was given; 130 cancelled.
+//! configuration error; 3 artifact written but `--require-complete`/`--strict`
+//! was given and a scanner did not complete (or, for methods, a generation
+//! error occurred, or an assertion failed under `--fail-on-assertions`);
+//! 130 cancelled.
 
 #![forbid(unsafe_code)]
 
@@ -25,10 +37,14 @@ use std::process::ExitCode;
 
 use credential_eval_adapters::AdapterEnv;
 use credential_eval_adapters::process::CancelToken;
-use credential_eval_cli::orchestrate::{self, RunError, RunRequest};
-use credential_eval_contracts::config::RunConfig;
+use credential_eval_cli::evidence;
+use credential_eval_cli::orchestrate::{self, MethodRequest, RunError, RunRequest};
+use credential_eval_contracts::artifact::RunArtifact;
+use credential_eval_contracts::config::{EvaluationSettings, RunConfig, SeedConvention};
 use credential_eval_contracts::corpus::CorpusSnapshot;
+use credential_eval_contracts::ids::ScannerId;
 use credential_eval_contracts::observation::ScannerStatus;
+use credential_eval_kernel::evaluation::{GenerationLimits, MethodId};
 
 const USAGE: &str = "\
 usage:
@@ -36,9 +52,15 @@ usage:
                       [--config <run-config.json>] [--scanner <id>]... [--jobs N]
                       [--observations-out <file>] [--node-dir <dir>]
                       [--candidate-root <scanner>=<dir>]... [--work-dir <dir>]
-                      [--require-complete]
+                      [--methods <m,...|all> [--reference <scanner>] [--evidence <file>]
+                       [--seed case-id|legacy-category] [--fail-on-assertions]
+                       [--legacy-eval-out <file>]]
+                      [--require-complete] [--strict]
+  credential-eval compat legacy-bench --artifact <artifact.json>
+                      --index <legacy-index.json> --out-dir <dir>
   credential-eval default-config [--scanner <id>]... [--jobs N]
-  credential-eval --version";
+  credential-eval --version
+methods: twin, benign, metamorphic, mutation, differential";
 
 struct Usage(String);
 
@@ -58,6 +80,28 @@ struct RunArgs {
     candidate_roots: BTreeMap<String, PathBuf>,
     work_dir: Option<PathBuf>,
     require_complete: bool,
+    methods: Option<Vec<MethodId>>,
+    reference: Option<ScannerId>,
+    evidence: Option<PathBuf>,
+    seed: Option<SeedConvention>,
+    fail_on_assertions: bool,
+    legacy_eval_out: Option<PathBuf>,
+}
+
+fn parse_methods(list: &str) -> Result<Vec<MethodId>, Usage> {
+    if list == "all" {
+        return Ok(MethodId::ALL.to_vec());
+    }
+    let mut methods = Vec::new();
+    for id in list.split(',') {
+        let method = MethodId::parse(id).ok_or_else(|| usage(format!("unknown method {id:?}")))?;
+        if methods.contains(&method) {
+            return Err(usage(format!("duplicate method {id:?}")));
+        }
+        methods.push(method);
+    }
+    methods.sort();
+    Ok(methods)
 }
 
 fn parse(args: &[OsString]) -> Result<RunArgs, Usage> {
@@ -103,7 +147,30 @@ fn parse(args: &[OsString]) -> Result<RunArgs, Usage> {
                     .candidate_roots
                     .insert(id.to_owned(), PathBuf::from(dir));
             }
-            "--require-complete" => parsed.require_complete = true,
+            "--require-complete" | "--strict" => parsed.require_complete = true,
+            "--fail-on-assertions" => parsed.fail_on_assertions = true,
+            "--methods" => {
+                let list = value()?
+                    .into_string()
+                    .map_err(|_| usage("--methods must be UTF-8"))?;
+                parsed.methods = Some(parse_methods(&list)?);
+            }
+            "--reference" => {
+                let id = value()?
+                    .into_string()
+                    .map_err(|_| usage("--reference must be UTF-8"))?;
+                parsed.reference =
+                    Some(ScannerId::new(id).map_err(|e| usage(format!("--reference: {e}")))?);
+            }
+            "--evidence" => parsed.evidence = Some(value()?.into()),
+            "--legacy-eval-out" => parsed.legacy_eval_out = Some(value()?.into()),
+            "--seed" => {
+                parsed.seed = Some(match value()?.to_str() {
+                    Some("case-id") => SeedConvention::CaseId,
+                    Some("legacy-category") => SeedConvention::LegacyCategory,
+                    _ => return Err(usage("--seed takes case-id or legacy-category")),
+                });
+            }
             other => return Err(usage(format!("unknown argument {other:?}"))),
         }
     }
@@ -157,6 +224,123 @@ fn pretty<T: serde::Serialize>(value: &T) -> Vec<u8> {
     bytes
 }
 
+fn read_bounded(path: &Path, limit: u64, what: &str) -> Result<Vec<u8>, String> {
+    let meta = fs::metadata(path).map_err(|e| format!("cannot read {what}: {e}"))?;
+    if meta.len() > limit {
+        return Err(format!("{what} exceeds {limit} bytes"));
+    }
+    fs::read(path).map_err(|e| format!("cannot read {what}: {e}"))
+}
+
+/// Method-run inputs resolved from the arguments.
+struct MethodInputs {
+    methods: Vec<MethodId>,
+    loaded: evidence::LoadedEvidence,
+}
+
+/// Resolve `--methods`/`--evidence`/`--reference`/`--seed` into the config.
+fn method_inputs(args: &RunArgs, config: &mut RunConfig) -> Result<Option<MethodInputs>, Usage> {
+    let Some(methods) = &args.methods else {
+        if !config.methods.is_empty() || config.evaluation.is_some() {
+            return Err(usage(
+                "the configuration names evaluation methods; select them with --methods",
+            ));
+        }
+        if args.reference.is_some()
+            || args.evidence.is_some()
+            || args.seed.is_some()
+            || args.fail_on_assertions
+            || args.legacy_eval_out.is_some()
+        {
+            return Err(usage(
+                "--reference, --evidence, --seed, --fail-on-assertions and --legacy-eval-out need --methods",
+            ));
+        }
+        return Ok(None);
+    };
+    let bytes = match &args.evidence {
+        Some(path) => {
+            read_bounded(path, evidence::MAX_EVIDENCE_BYTES, "--evidence").map_err(usage)?
+        }
+        None => format!(
+            r#"{{"schema":"{}","families":{{}}}}"#,
+            evidence::EVIDENCE_SCHEMA
+        )
+        .into_bytes(),
+    };
+    let loaded = evidence::load(&bytes).map_err(usage)?;
+    config.methods = methods.iter().map(|m| m.component()).collect();
+    config.evaluation = Some(EvaluationSettings {
+        reference: args.reference.clone(),
+        seed: args.seed.unwrap_or(SeedConvention::CaseId),
+        evidence_digest: loaded.digest.clone(),
+        family_allowlist: loaded.allowlist.is_some(),
+    });
+    Ok(Some(MethodInputs {
+        methods: methods.clone(),
+        loaded,
+    }))
+}
+
+/// Print a sanitized summary (identities, statuses and counts only). Returns
+/// whether a scanner did not complete.
+fn summarize(artifact: &RunArtifact) -> bool {
+    let mut incomplete = false;
+    for (identity, run) in artifact.manifest.scanners.iter().zip(&artifact.scanners) {
+        incomplete |= run.status != ScannerStatus::Complete;
+        eprintln!(
+            "{} {}: {:?}{} ({} findings)",
+            identity.id,
+            identity.version.as_deref().unwrap_or("unknown-version"),
+            run.status,
+            run.detail
+                .as_deref()
+                .map(|d| format!(" - {d}"))
+                .unwrap_or_default(),
+            run.findings.len()
+        );
+    }
+    if !artifact.variants.is_empty() {
+        let assertions: usize = artifact.scanners.iter().map(|s| s.assertions.len()).sum();
+        eprintln!(
+            "{} variants · {} assertions · {} comparisons · {} review occurrences",
+            artifact.variants.len(),
+            assertions,
+            artifact.comparisons.len(),
+            artifact.review_queue.len()
+        );
+    }
+    if let Some(execution) = &artifact.non_semantic.execution {
+        eprintln!(
+            "jobs {} · wall {} ms · scanner processes {} ({} ms) · evaluator {} ms",
+            execution.jobs,
+            execution.wall_ms,
+            execution.processes,
+            execution.scanner_process_ms,
+            execution.evaluator_ms
+        );
+    }
+    eprintln!("semantic digest {}", artifact.semantic_digest());
+    incomplete
+}
+
+fn fail(error: RunError) -> ExitCode {
+    match error {
+        RunError::Cancelled => {
+            eprintln!("run cancelled; no artifact written");
+            ExitCode::from(130)
+        }
+        error @ RunError::Config(_) => {
+            eprintln!("error: {error}");
+            ExitCode::from(2)
+        }
+        error => {
+            eprintln!("error: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn run(args: &[OsString]) -> ExitCode {
     let args = match parse(args) {
         Ok(args) => args,
@@ -176,8 +360,15 @@ fn run(args: &[OsString]) -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let config = match load_config(&args) {
+    let mut config = match load_config(&args) {
         Ok(config) => config,
+        Err(Usage(message)) => {
+            eprintln!("error: {message}");
+            return ExitCode::from(2);
+        }
+    };
+    let methods = match method_inputs(&args, &mut config) {
+        Ok(methods) => methods,
         Err(Usage(message)) => {
             eprintln!("error: {message}");
             return ExitCode::from(2);
@@ -211,67 +402,124 @@ fn run(args: &[OsString]) -> ExitCode {
         work_dir: args.work_dir.as_deref(),
         cancel: &cancel,
     };
-    let output = match orchestrate::run(&request) {
-        Ok(output) => output,
-        Err(RunError::Cancelled) => {
-            eprintln!("run cancelled; no artifact written");
-            return ExitCode::from(130);
-        }
-        Err(error @ RunError::Config(_)) => {
-            eprintln!("error: {error}");
-            return ExitCode::from(2);
-        }
-        Err(error) => {
-            eprintln!("error: {error}");
-            return ExitCode::from(1);
+    let (observations, artifact, method_failure) = match &methods {
+        None => match orchestrate::run(&request) {
+            Ok(output) => (output.observations, output.artifact, false),
+            Err(error) => return fail(error),
+        },
+        Some(inputs) => {
+            let method_request = MethodRequest {
+                methods: &inputs.methods,
+                evidence: &inputs.loaded.evidence,
+                allowlist: inputs.loaded.allowlist.as_ref(),
+                limits: GenerationLimits::default(),
+            };
+            let output = match orchestrate::run_methods(&request, &method_request) {
+                Ok(output) => output,
+                Err(error) => return fail(error),
+            };
+            if let Some(path) = &args.legacy_eval_out {
+                let view = credential_eval_compat::eval::render(
+                    &output.plan,
+                    &output.report,
+                    &output.observations,
+                );
+                if let Err(e) = write_atomic(path, &pretty(&view)) {
+                    eprintln!("error: cannot write --legacy-eval-out: {e}");
+                    return ExitCode::from(1);
+                }
+            }
+            let failed = output
+                .report
+                .exit_code(args.require_complete, args.fail_on_assertions)
+                != 0;
+            (output.observations, output.artifact, failed)
         }
     };
     if let Some(path) = &args.observations_out {
-        if let Err(e) = write_atomic(path, &pretty(&output.observations)) {
+        if let Err(e) = write_atomic(path, &pretty(&observations)) {
             eprintln!("error: cannot write --observations-out: {e}");
             return ExitCode::from(1);
         }
     }
-    if let Err(e) = write_atomic(out, &pretty(&output.artifact)) {
+    if let Err(e) = write_atomic(out, &pretty(&artifact)) {
         eprintln!("error: cannot write --out: {e}");
         return ExitCode::from(1);
     }
-    // Sanitized summary: identities, statuses and counts only.
-    let mut incomplete = false;
-    for (identity, run) in output
-        .artifact
-        .manifest
-        .scanners
-        .iter()
-        .zip(&output.artifact.scanners)
+    let incomplete = summarize(&artifact);
+    if (args.require_complete && incomplete)
+        || ((args.require_complete || args.fail_on_assertions) && method_failure)
     {
-        incomplete |= run.status != ScannerStatus::Complete;
-        eprintln!(
-            "{} {}: {:?}{} ({} findings)",
-            identity.id,
-            identity.version.as_deref().unwrap_or("unknown-version"),
-            run.status,
-            run.detail
-                .as_deref()
-                .map(|d| format!(" - {d}"))
-                .unwrap_or_default(),
-            run.findings.len()
-        );
-    }
-    if let Some(execution) = &output.artifact.non_semantic.execution {
-        eprintln!(
-            "jobs {} · wall {} ms · scanner processes {} ({} ms) · evaluator {} ms",
-            execution.jobs,
-            execution.wall_ms,
-            execution.processes,
-            execution.scanner_process_ms,
-            execution.evaluator_ms
-        );
-    }
-    eprintln!("semantic digest {}", output.artifact.semantic_digest());
-    if args.require_complete && incomplete {
         return ExitCode::from(3);
     }
+    ExitCode::SUCCESS
+}
+
+/// `compat` subcommands (migration-only; removed with `credential-eval-compat`).
+fn compat_command(args: &[OsString]) -> ExitCode {
+    let Some("legacy-bench") = args.first().and_then(|a| a.to_str()) else {
+        eprintln!("error: compat takes a subcommand: legacy-bench\n{USAGE}");
+        return ExitCode::from(2);
+    };
+    let (mut artifact, mut index, mut out_dir) = (None, None, None);
+    let mut iter = args[1..].iter();
+    while let Some(flag) = iter.next() {
+        let slot = match flag.to_str() {
+            Some("--artifact") => &mut artifact,
+            Some("--index") => &mut index,
+            Some("--out-dir") => &mut out_dir,
+            _ => {
+                eprintln!("error: unknown argument {flag:?}\n{USAGE}");
+                return ExitCode::from(2);
+            }
+        };
+        let Some(value) = iter.next() else {
+            eprintln!("error: {flag:?} needs a value");
+            return ExitCode::from(2);
+        };
+        *slot = Some(PathBuf::from(value));
+    }
+    let (Some(artifact), Some(index), Some(out_dir)) = (artifact, index, out_dir) else {
+        eprintln!("error: legacy-bench needs --artifact, --index and --out-dir\n{USAGE}");
+        return ExitCode::from(2);
+    };
+    let load = || -> Result<_, String> {
+        let artifact: RunArtifact = serde_json::from_slice(
+            &fs::read(&artifact).map_err(|e| format!("cannot read --artifact: {e}"))?,
+        )
+        .map_err(|e| format!("invalid artifact: {e}"))?;
+        let index: credential_eval_compat::bench::LegacyIndex = serde_json::from_slice(
+            &fs::read(&index).map_err(|e| format!("cannot read --index: {e}"))?,
+        )
+        .map_err(|e| format!("invalid legacy index: {e}"))?;
+        credential_eval_compat::bench::render(&artifact, &index).map_err(|e| e.to_string())
+    };
+    let outputs = match load() {
+        Ok(outputs) => outputs,
+        Err(message) => {
+            eprintln!("error: {message}");
+            return ExitCode::from(1);
+        }
+    };
+    if let Err(e) = fs::create_dir_all(&out_dir) {
+        eprintln!("error: cannot create --out-dir: {e}");
+        return ExitCode::from(1);
+    }
+    for (name, body) in outputs
+        .categories
+        .iter()
+        .map(|(k, v)| (k.as_str(), v))
+        .chain([("summary", &outputs.summary)])
+    {
+        if let Err(e) = write_atomic(&out_dir.join(format!("{name}.json")), &pretty(body)) {
+            eprintln!("error: cannot write {name}.json: {e}");
+            return ExitCode::from(1);
+        }
+    }
+    eprintln!(
+        "wrote {} category files and summary.json",
+        outputs.categories.len()
+    );
     ExitCode::SUCCESS
 }
 
@@ -308,6 +556,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("run") => run(&args[1..]),
+        Some("compat") => compat_command(&args[1..]),
         Some("default-config") => default_config_command(&args[1..]),
         Some("--help" | "-h" | "help") => {
             println!("{USAGE}");

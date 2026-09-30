@@ -9,7 +9,9 @@
 use std::collections::BTreeSet;
 
 use credential_eval_contracts::ids::FixturePath;
-use credential_eval_contracts::observation::NormalizedFinding;
+use credential_eval_contracts::observation::{
+    NormalizedFinding, ObservationResult, ObservationSet,
+};
 
 /// Replay agreement verdict.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +64,22 @@ pub fn restrict_family(
         family: finding.family.filter(keep),
         ..finding
     }
+}
+
+/// Apply [`restrict_family`] to every finding of every complete observation
+/// (the legacy `eval` rule applies it at observation time, `runtime.ts:88-94`).
+/// Every adapter here reports classifications, so `classification` is `true`.
+/// Order and every other field are kept.
+pub fn restrict_observations(set: &ObservationSet, allowlist: &BTreeSet<String>) -> ObservationSet {
+    let mut out = set.clone();
+    for observation in &mut out.observations {
+        if let ObservationResult::Complete { findings, .. } = &mut observation.result {
+            for finding in findings.iter_mut() {
+                *finding = restrict_family(finding.clone(), true, Some(allowlist));
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]

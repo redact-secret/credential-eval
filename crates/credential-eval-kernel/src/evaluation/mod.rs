@@ -449,6 +449,106 @@ impl EvaluationReport {
         }
     }
 
+    /// Assemble the canonical run artifact of an evaluation-method run.
+    ///
+    /// The scanned corpus is the plan's variant corpus, so `scanners[].cases`
+    /// holds one [`CaseResult`] per generated variant, read with the method
+    /// observation rule ([`assertions::observe`]: an authored `must-flip`
+    /// variant is scoped to its family). `manifest.evidence` is the **base**
+    /// snapshot (the variant corpus is derived from it and the evaluation
+    /// settings in the config hash). Method runs publish assertions,
+    /// resolution, variants, comparisons and the review queue; per-group
+    /// v1.1 aggregates stay empty because variant populations repeat their
+    /// seeds (legacy `eval` publishes none either).
+    ///
+    /// `observations` must be the set [`evaluate`] consumed.
+    pub fn artifact(
+        &self,
+        plan: &EvaluationPlan,
+        base: &CorpusSnapshot,
+        config: &credential_eval_contracts::config::RunConfig,
+        observations: &ObservationSet,
+    ) -> Result<credential_eval_contracts::artifact::RunArtifact, KernelError> {
+        use credential_eval_contracts::artifact::{
+            Aggregates, EngineIdentity, NonSemantic, RunArtifact, RunManifest,
+        };
+        base.validate()?;
+        validate_accounting(&config.accounting)?;
+        let corpus = plan.variant_corpus(&base.identity);
+        observations.validate_against(&corpus)?;
+        let parts = self.artifact_parts(plan);
+        let variants: BTreeMap<&FixturePath, &GeneratedVariant> = plan
+            .cases
+            .iter()
+            .flat_map(|g| g.variants.iter().map(|v| (&v.fixture.path, v)))
+            .collect();
+        let by_path = findings_by_path(observations);
+        let mut scanners = Vec::with_capacity(observations.observations.len());
+        for o in &observations.observations {
+            let mut run = crate::score::score_scanner(&corpus, o);
+            if let Some(found) = by_path.get(&o.scanner.id) {
+                for case in &mut run.cases {
+                    let v = variants[&case.path];
+                    let on = found.get(&case.path).cloned().unwrap_or_default();
+                    *case = assertions::observe(v, &on);
+                }
+            }
+            run.assertions = parts
+                .assertions
+                .get(&o.scanner.id)
+                .cloned()
+                .unwrap_or_default();
+            run.aggregates = Aggregates {
+                resolution: parts
+                    .resolution
+                    .get(&o.scanner.id)
+                    .cloned()
+                    .unwrap_or_default(),
+                resolution_by_target: parts
+                    .resolution_by_target
+                    .get(&o.scanner.id)
+                    .cloned()
+                    .unwrap_or_default(),
+                ..Aggregates::default()
+            };
+            scanners.push(run);
+        }
+        let durations_ms = observations
+            .observations
+            .iter()
+            .filter_map(|o| o.duration_ms.map(|ms| (o.scanner.id.to_string(), ms)))
+            .collect();
+        let mut artifact = RunArtifact {
+            schema: credential_eval_contracts::schema::RunArtifactSchema,
+            manifest: RunManifest {
+                engine: EngineIdentity {
+                    name: credential_eval_contracts::ENGINE_NAME.to_owned(),
+                    version: crate::score::ENGINE_VERSION.to_owned(),
+                },
+                protocol_version: credential_eval_contracts::PROTOCOL_VERSION.to_owned(),
+                evidence: base.identity.clone(),
+                config_hash: config.config_hash(),
+                accounting: config.accounting.clone(),
+                methods: parts.methods,
+                scanners: observations
+                    .observations
+                    .iter()
+                    .map(|o| o.scanner.clone())
+                    .collect(),
+            },
+            scanners,
+            variants: parts.variants,
+            comparisons: parts.comparisons,
+            review_queue: parts.review_queue,
+            non_semantic: NonSemantic {
+                durations_ms,
+                ..NonSemantic::default()
+            },
+        };
+        artifact.canonicalize();
+        Ok(artifact)
+    }
+
     /// Process exit code (legacy `exitCode`, `engine/runner.ts:11-14`): `1`
     /// when a scanner errored (or, with `strict`, did not complete), or when
     /// `fail_on_assertions` and an assertion failed. Generation errors are

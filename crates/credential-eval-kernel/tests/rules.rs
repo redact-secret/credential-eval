@@ -851,3 +851,25 @@ fn assertions_follow_the_protocol() {
         action: None,
     };
 }
+
+// Regression (#5 parity): two pinned legacy contracts use ECMAScript
+// look-ahead (`composio-api-key`, `travisci-api-token`). The `regex` crate
+// refused them, so no evaluation over the full legacy contract table could
+// start. Patterns now compile with look-around support.
+#[test]
+fn look_ahead_contract_patterns_compile_and_match() {
+    let pattern = "^zq_(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])[A-Za-z0-9_-]{20}$";
+    let contracts = FamilyContracts::new(BTreeMap::from([(
+        "synthetic-mixed-case".to_owned(),
+        FamilyContract {
+            pattern: Some(pattern.to_owned()),
+            ..FamilyContract::default()
+        },
+    )]))
+    .expect("look-ahead patterns compile");
+    let valid = |v: String| contracts.is_valid("synthetic-mixed-case", &v);
+    assert!(valid(format!("zq_{}", "aB".repeat(10))));
+    assert!(!valid(format!("zq_{}", "ab".repeat(10))));
+    assert!(!valid(format!("zq_{}", "AB".repeat(10))));
+    assert!(!valid(format!("zq_{}", "aB".repeat(11))));
+}

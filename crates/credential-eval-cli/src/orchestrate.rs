@@ -23,11 +23,17 @@ use credential_eval_adapters::{
     ScannerObservation, ScannerProvenance, classify, request,
 };
 use credential_eval_contracts::artifact::{ExecutionDiagnostics, RunArtifact};
-use credential_eval_contracts::config::{RunConfig, ScannerSpec};
+use credential_eval_contracts::config::{RunConfig, ScannerSpec, SeedConvention};
 use credential_eval_contracts::corpus::CorpusSnapshot;
 use credential_eval_contracts::ids::FixturePath;
 use credential_eval_contracts::observation::{ObservationSet, Replays};
 use credential_eval_contracts::schema::ObservationSetSchema;
+use credential_eval_kernel::evaluation::cases::build_cases;
+use credential_eval_kernel::evaluation::{
+    EvaluateOptions, EvaluationEvidence, EvaluationPlan, EvaluationReport, GenerationLimits,
+    MethodId, evaluate, plan_evaluation,
+};
+use credential_eval_kernel::observe::restrict_observations;
 
 /// A run-level failure (the run produces no artifact).
 #[derive(Debug)]
@@ -207,32 +213,90 @@ struct Queue {
     failed: Vec<Option<u32>>,
 }
 
-/// Execute `request` and build the artifact.
+/// Timing of a run, accumulated across its phases (non-semantic).
+struct Timing {
+    wall: Instant,
+    started_at: String,
+    evaluator: Duration,
+    processes: u64,
+    scanner_process: Duration,
+}
+
+impl Timing {
+    fn start() -> Self {
+        Self {
+            wall: Instant::now(),
+            started_at: crate::time::now_rfc3339(),
+            evaluator: Duration::ZERO,
+            processes: 0,
+            scanner_process: Duration::ZERO,
+        }
+    }
+
+    /// Record the run's non-semantic metadata on `artifact`.
+    fn stamp(self, artifact: &mut RunArtifact, jobs: u32) {
+        artifact.non_semantic.started_at = Some(self.started_at);
+        artifact.non_semantic.finished_at = Some(crate::time::now_rfc3339());
+        artifact.non_semantic.host = Some(format!(
+            "{}-{}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        ));
+        artifact.non_semantic.execution = Some(ExecutionDiagnostics {
+            jobs,
+            processes: self.processes,
+            wall_ms: millis(self.wall.elapsed()),
+            scanner_process_ms: millis(self.scanner_process),
+            evaluator_ms: millis(self.evaluator),
+        });
+    }
+}
+
+/// Execute `request` and build the artifact (a corpus measurement: the
+/// legacy `bench` pipeline).
 pub fn run(request: &RunRequest<'_>) -> Result<RunOutput, RunError> {
-    let wall = Instant::now();
-    let started_at = crate::time::now_rfc3339();
+    let mut timing = Timing::start();
+    request
+        .corpus
+        .validate()
+        .map_err(|e| RunError::Corpus(e.to_string()))?;
+    let observations = scan(request, request.corpus, &mut timing)?;
+    let phase = Instant::now();
+    let artifact = credential_eval_kernel::score::build_artifact(
+        request.corpus,
+        request.config,
+        &observations,
+    )
+    .map_err(|e| RunError::Config(e.to_string()))?;
+    timing.evaluator += phase.elapsed();
+    let mut artifact = artifact;
+    timing.stamp(&mut artifact, request.config.execution.jobs);
+    Ok(RunOutput {
+        observations,
+        artifact,
+    })
+}
+
+/// Scan `corpus` with every configured scanner: materialize, execute bounded
+/// parallel (scanner, replay) tasks, and collate observations
+/// deterministically. The materialized fixtures are removed before return.
+fn scan(
+    request: &RunRequest<'_>,
+    corpus: &CorpusSnapshot,
+    timing: &mut Timing,
+) -> Result<ObservationSet, RunError> {
     let mut evaluator = Duration::ZERO;
     let mut processes = 0u64;
     let mut scanner_process = Duration::ZERO;
 
     let phase = Instant::now();
-    request
-        .corpus
-        .validate()
-        .map_err(|e| RunError::Corpus(e.to_string()))?;
     let scanners = bind(request.config)?;
-    let (guard, root) = materialize(request.corpus, request.work_dir)?;
-    let mut paths: Vec<&str> = request
-        .corpus
-        .cases
-        .iter()
-        .map(|c| c.path.as_str())
-        .collect();
+    let (guard, root) = materialize(corpus, request.work_dir)?;
+    let mut paths: Vec<&str> = corpus.cases.iter().map(|c| c.path.as_str()).collect();
     paths.sort_unstable();
     let fixtures = Fixtures::new(
         root.clone(),
-        request
-            .corpus
+        corpus
             .cases
             .iter()
             .map(|c| (c.path.as_str(), c.content.as_str())),
@@ -384,33 +448,106 @@ pub fn run(request: &RunRequest<'_>) -> Result<RunOutput, RunError> {
         .collect();
     let observations = ObservationSet {
         schema: ObservationSetSchema,
-        corpus_digest: request.corpus.identity.corpus_digest.clone(),
+        corpus_digest: corpus.identity.corpus_digest.clone(),
         observations,
     };
     drop(guard); // remove the materialized fixtures
-    let mut artifact = credential_eval_kernel::score::build_artifact(
-        request.corpus,
-        request.config,
+    evaluator += phase.elapsed();
+    timing.evaluator += evaluator;
+    timing.processes += processes;
+    timing.scanner_process += scanner_process;
+    Ok(observations)
+}
+
+/// Inputs of an evaluation-method run beyond [`RunRequest`].
+pub struct MethodRequest<'a> {
+    /// Methods to apply.
+    pub methods: &'a [MethodId],
+    /// Evaluation evidence (family contracts, validators, taxonomies).
+    pub evidence: &'a EvaluationEvidence,
+    /// Classification allowlist applied to findings before evaluation
+    /// (`None`: families pass through).
+    pub allowlist: Option<&'a BTreeSet<String>>,
+    /// Generation bounds.
+    pub limits: GenerationLimits,
+}
+
+/// Result of an evaluation-method run.
+pub struct MethodOutput {
+    /// The generated plan (its variant corpus is what the scanners saw).
+    pub plan: EvaluationPlan,
+    /// Observations over the variant corpus, after the family allowlist.
+    pub observations: ObservationSet,
+    /// The evaluation report.
+    pub report: EvaluationReport,
+    /// The canonical artifact.
+    pub artifact: RunArtifact,
+}
+
+/// Execute an evaluation-method run (the legacy `eval` pipeline): build the
+/// cases of `request.corpus`, generate every variant before any scanner runs,
+/// scan the variant corpus, then evaluate. `request.config.evaluation` must
+/// be set; its reference and seed convention drive the kernel.
+pub fn run_methods(
+    request: &RunRequest<'_>,
+    methods: &MethodRequest<'_>,
+) -> Result<MethodOutput, RunError> {
+    let mut timing = Timing::start();
+    let settings = request.config.evaluation.as_ref().ok_or_else(|| {
+        RunError::Config("an evaluation-method run needs evaluation settings".into())
+    })?;
+    if methods.methods.is_empty() {
+        return Err(RunError::Config("no evaluation methods selected".into()));
+    }
+    if let Some(reference) = &settings.reference {
+        if !request.config.scanners.iter().any(|s| &s.id == reference) {
+            return Err(RunError::Config(format!(
+                "reference scanner {reference} is not a configured scanner"
+            )));
+        }
+    }
+    let phase = Instant::now();
+    request
+        .corpus
+        .validate()
+        .map_err(|e| RunError::Corpus(e.to_string()))?;
+    let seed: &dyn Fn(&credential_eval_contracts::corpus::Case) -> String = match settings.seed {
+        SeedConvention::CaseId => &credential_eval_kernel::evaluation::cases::case_id_seed,
+        SeedConvention::LegacyCategory => &credential_eval_kernel::compat::legacy_seed,
+    };
+    let cases = build_cases(request.corpus, methods.methods, seed)
+        .map_err(|e| RunError::Corpus(e.to_string()))?;
+    let plan = plan_evaluation(cases, methods.evidence, &methods.limits)
+        .map_err(|e| RunError::Corpus(e.to_string()))?;
+    let variants = plan.variant_corpus(&request.corpus.identity);
+    timing.evaluator += phase.elapsed();
+
+    let observed = scan(request, &variants, &mut timing)?;
+
+    let phase = Instant::now();
+    let observations = match methods.allowlist {
+        Some(allowlist) => restrict_observations(&observed, allowlist),
+        None => observed,
+    };
+    let report = evaluate(
+        &plan,
+        &request.corpus.identity,
         &observations,
+        EvaluateOptions {
+            reference: settings.reference.as_ref(),
+            accounting: &request.config.accounting,
+        },
     )
     .map_err(|e| RunError::Config(e.to_string()))?;
-    evaluator += phase.elapsed();
-    artifact.non_semantic.started_at = Some(started_at);
-    artifact.non_semantic.finished_at = Some(crate::time::now_rfc3339());
-    artifact.non_semantic.host = Some(format!(
-        "{}-{}",
-        std::env::consts::OS,
-        std::env::consts::ARCH
-    ));
-    artifact.non_semantic.execution = Some(ExecutionDiagnostics {
-        jobs: request.config.execution.jobs,
-        processes,
-        wall_ms: millis(wall.elapsed()),
-        scanner_process_ms: millis(scanner_process),
-        evaluator_ms: millis(evaluator),
-    });
-    Ok(RunOutput {
+    let mut artifact = report
+        .artifact(&plan, request.corpus, request.config, &observations)
+        .map_err(|e| RunError::Config(e.to_string()))?;
+    timing.evaluator += phase.elapsed();
+    timing.stamp(&mut artifact, request.config.execution.jobs);
+    Ok(MethodOutput {
+        plan,
         observations,
+        report,
         artifact,
     })
 }

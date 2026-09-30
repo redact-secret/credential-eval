@@ -9,6 +9,17 @@
       "description": "Accounting parameters (engine v1.1 semantics).",
       "$ref": "#/$defs/AccountingConfig"
     },
+    "evaluation": {
+      "description": "Evaluation-method parameters. Present exactly when `methods` is\nnon-empty; absent for a plain corpus measurement.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvaluationSettings"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "execution": {
       "description": "Global execution bounds.",
       "$ref": "#/$defs/ExecutionBounds"
@@ -116,6 +127,41 @@
       "maxLength": 128,
       "minLength": 1,
       "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "EvaluationSettings": {
+      "description": "Parameters of an evaluation-method run. Every field can change a semantic\nresult, so all of them are part of the config hash.",
+      "type": "object",
+      "properties": {
+        "evidence_digest": {
+          "description": "Canonical digest of the evaluation evidence (family contracts, value\nvalidators by name, benign taxonomy vocabulary, allowlist rule).",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "family_allowlist": {
+          "description": "Whether a finding's family is kept only when it is a family of the\nevidence contract table (the legacy `eval` classification rule).",
+          "type": "boolean"
+        },
+        "reference": {
+          "description": "Reference scanner of differential comparisons. Absent: differential\ncases record no comparisons.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seed": {
+          "description": "How variant seeds are named. Operators draw their seeded choices from\nthe seed string, so it changes generated variants.",
+          "$ref": "#/$defs/SeedConvention"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "seed",
+        "evidence_digest",
+        "family_allowlist"
+      ]
     },
     "ExecutionBounds": {
       "description": "Global, explicit execution bounds.",
@@ -262,6 +308,27 @@
         "network",
         "limits"
       ]
+    },
+    "SeedConvention": {
+      "description": "Seed naming convention of an evaluation run.",
+      "oneOf": [
+        {
+          "description": "The corpus case id (canonical).",
+          "type": "string",
+          "const": "case-id"
+        },
+        {
+          "description": "Legacy `<category>/<fixtureId>`, recovered from a migration snapshot\nwhose case ids are `<category>--<fixtureId>` (parity runs only).",
+          "type": "string",
+          "const": "legacy-category"
+        }
+      ]
+    },
+    "Sha256Digest": {
+      "type": "string",
+      "maxLength": 71,
+      "minLength": 1,
+      "pattern": "^sha256:[0-9a-f]{64}$"
     }
   }
 }

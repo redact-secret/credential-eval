@@ -1,6 +1,6 @@
 [package]
-name = "credential-eval-cli"
-description = "Command-line interface for credential-eval."
+name = "credential-eval-compat"
+description = "Migration-only legacy compatibility for credential-eval (legacy validators and legacy result writers). Removable."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,22 +8,12 @@ license.workspace = true
 publish.workspace = true
 repository.workspace = true
 
-[[bin]]
-name = "credential-eval"
-path = "src/main.rs"
-
 [dependencies]
 credential-eval-contracts.workspace = true
 credential-eval-kernel.workspace = true
-credential-eval-adapters.workspace = true
-credential-eval-compat.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tempfile.workspace = true
-ctrlc.workspace = true
-
-[dev-dependencies]
-jsonschema.workspace = true
+regex.workspace = true
 
 [lints]
 workspace = true

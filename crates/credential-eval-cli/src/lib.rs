@@ -4,6 +4,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod evidence;
 pub mod orchestrate;
 pub mod time;
 
@@ -59,6 +60,7 @@ pub fn default_config(scanners: &[String], jobs: u32) -> Result<RunConfig, Strin
         methods: Vec::new(),
         execution: ExecutionBounds { jobs },
         accounting: default_accounting(),
+        evaluation: None,
     })
 }
 

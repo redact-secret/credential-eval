@@ -101,19 +101,24 @@ same semantics
 
 ## CLI direction
 
-The final interface is not frozen, but the intended experience is similar to:
+The interface is not frozen. Today:
 
 ```bash
-credential-eval run \
-  --corpus ./snapshot \
-  --scanner redact-secret \
-  --scanner gitleaks \
-  --scanner trufflehog \
-  --methods twin,benign,mutation,metamorphic \
-  --jobs 12
+# Corpus measurement (per-case lattice, v1.1 group accounting)
+credential-eval run --corpus snapshot.json --out artifact.json \
+  --scanner redact-secret --scanner gitleaks --scanner trufflehog --jobs 12
+
+# Evaluation methods over generated variants, with a differential reference
+credential-eval run --corpus snapshot.json --out artifact.json \
+  --scanner redact-secret --scanner gitleaks --scanner trufflehog --jobs 12 \
+  --methods twin,benign,mutation,metamorphic,differential \
+  --reference redact-secret --evidence evidence.json [--strict]
 ```
 
-A run should be reproducible from explicit input identities.
+A run is reproducible from explicit input identities: the snapshot's corpus
+digest, the config hash (scanners, limits, methods, reference, seed
+convention, evidence digest, accounting) and each scanner's identity and
+provenance, all recorded in the artifact.
 
 ## Scanner adapters
 
@@ -208,16 +213,20 @@ What exists today:
 
 - The v1 input/output contracts (#2), with their Rust types and generated
   JSON Schemas.
-- An exact port of the legacy span lattice, used to exercise the contracts
-  end to end on a synthetic fixture set.
+- The measurement kernel (#3): lattice, v1.1 accounting, twin, benign,
+  mutation, metamorphic and differential methods, and the review queue.
 - Scanner adapters (#4) for Gitleaks, TruffleHog, Redact Secret,
   flare-redact and OpenRedaction, ported from the legacy adapters, and a
   `credential-eval run` command with bounded parallel execution
-  ([docs/adapters.md](docs/adapters.md)).
+  ([docs/adapters.md](docs/adapters.md)). `run --methods ...` runs the
+  evaluation methods end to end.
+- Dual-run parity with the legacy TypeScript engine on the pinned legacy
+  corpus (#5): [docs/parity/parity-report.md](docs/parity/parity-report.md).
+  The legacy exporter, the compatibility writers and the comparator are
+  migration-only and removable (`tools/legacy-export/`, `tools/parity/`,
+  `crates/credential-eval-compat/`).
 
-The rest of the kernel (#3: aggregates, accounting, methods) and parity (#5)
-are not implemented yet. The v1 schemas are not frozen, so do not depend on
-internal APIs yet.
+The v1 schemas are not frozen, so do not depend on internal APIs yet.
 
 ## Layout
 
@@ -225,17 +234,21 @@ internal APIs yet.
 Cargo.toml                         Cargo workspace
 crates/
   credential-eval-contracts/       serde types for every input/output document; schema generation
-  credential-eval-kernel/          measurement kernel (lattice port today; accounting/methods in #3)
+  credential-eval-kernel/          measurement kernel: lattice, accounting, methods, review queue
   credential-eval-adapters/        scanner adapters: execution, provenance, normalization
   credential-eval-cli/             `credential-eval` binary and run orchestration
+  credential-eval-compat/          migration-only legacy validators and legacy result writers (removable)
 adapters/node/                     Node shim + pinned npm scanner packages (npm ci --ignore-scripts)
 schemas/                           generated JSON Schemas (*-v1.schema.json)
 docs/contracts/                    contract, range, identity, outcome and determinism rules
 docs/adapters.md                   adapter protocol, built-in adapters, adding a scanner
 docs/migration/legacy-map.md       inventory of the legacy TypeScript engine
 docs/migration/redact-secret-cutover.md  handoff plan for Redact Secret tooling
+docs/parity/                       dual-run parity report and sanitized summary (#5)
 docs/qualification-boundary.md     what stays outside the engine; the consumer API
 examples/qualification-consumer/   reference artifact consumer (Node 22, toy policy)
+tools/legacy-export/               migration-only legacy corpus exporter (tsx, imports the pinned legacy TS)
+tools/parity/                      migration-only parity comparator, run script and parity run config
 tests/fixtures/contracts-smoke/    synthetic end-to-end fixtures and golden run artifact
 ```
 
