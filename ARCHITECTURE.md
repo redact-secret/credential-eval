@@ -246,6 +246,10 @@ That conclusion belongs to a consumer policy.
 
 The Redact Secret product qualification layer currently remains with the Redact Secret benchmark/release tooling.
 
+The inventory of that policy, the artifact fields it consumes, and the consumer
+API (the schema-validated run artifact only) are in
+[docs/qualification-boundary.md](docs/qualification-boundary.md).
+
 No new `redact-secret-qualification` repository is required by this architecture.
 
 ## Compatibility

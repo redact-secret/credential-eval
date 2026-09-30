@@ -1,0 +1,12 @@
+{
+  "policy": "toy-illustrative-policy",
+  "version": 1,
+  "notice": "ILLUSTRATIVE TOY POLICY. This is not the Redact Secret support policy, not any product's release policy, and not a recommendation. Its thresholds are arbitrary and exist only to show that a consumer can change policy without changing credential-eval.",
+  "positiveKinds": ["must-redact", "policy"],
+  "acceptableOutcomes": ["EXACT", "COVERED"],
+  "minimumScoredPositiveCases": 1,
+  "maximumNonAcceptableSpans": 0,
+  "maximumBenignFalseAlarms": 0,
+  "minimumTwinPairs": 0,
+  "maximumTwinFailures": 0
+}
