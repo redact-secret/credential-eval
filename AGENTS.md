@@ -3,8 +3,8 @@
 @/Users/minhokang/.codex/RTK.md
 
 Read `README.md` and `ARCHITECTURE.md` before changing this repository. They
-define the repository boundary and take precedence over copied conventions or
-assumptions from `redact-secret-benchmarks`.
+define the repository boundary and take precedence over inherited conventions
+or assumptions from predecessor repositories.
 
 ## Repository boundary
 
