@@ -73,7 +73,16 @@ Scanner execution inputs:
   - `network` is `disabled` unless the run explicitly allows network access.
   - `limits` are explicit: `timeout_ms`, `max_stdout_bytes`,
     `max_stderr_bytes` and `concurrency`. Nothing is unbounded by default.
-- `methods[]`: the evaluation methods to apply.
+- `methods[]`: the evaluation methods to apply (sorted, unique). Empty for a
+  plain corpus measurement.
+- `evaluation`: present exactly when `methods` is non-empty.
+  `{reference?, seed, evidence_digest, family_allowlist}`: the differential
+  reference scanner, the seed naming convention (`case-id`, or
+  `legacy-category` for migration parity runs), the canonical digest of the
+  evaluation evidence file (family contracts, validator names, benign
+  taxonomy vocabulary; `credential-eval/evaluation-evidence/v1`) and whether
+  finding families are restricted to that contract table before evaluation.
+  Each of them can change a result, so all are hashed.
 - `execution.jobs`: the global concurrency bound.
 - `accounting`: the engine v1.1 accounting parameters (`min_denominator`,
   the floors, `replays`, `interval_z`, `interval_precision`). The floors
@@ -136,6 +145,19 @@ across groups, and no score ranks scanners.
 
 `aggregates.resolution` holds the counts that resolve assertions per method
 stratum.
+
+**Evaluation-method runs.** When `manifest.methods` is non-empty, the scanned
+corpus is the variant corpus the kernel generated from the snapshot (every
+variant is materialized at `cases/<case>/<variant>.txt`), while
+`manifest.evidence` still names the base snapshot. `scanners[].cases` then
+holds one `CaseResult` per generated variant, read with the method
+observation rule (an authored `must-flip` variant is scoped to its family),
+`scanners[].findings` are the findings on the variant corpus (after the
+family allowlist when `evaluation.family_allowlist` is set), and
+`aggregates.groups`/`by_target` are empty: variants repeat their seeds, so
+per-group v1.1 figures are published only by plain corpus runs. Method runs
+fill `assertions`, `aggregates.resolution*`, `variants`, `comparisons` and
+`review_queue`.
 
 ### What a consumer needs
 

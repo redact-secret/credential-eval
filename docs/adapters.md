@@ -103,6 +103,21 @@ legacy fixture corpus that happens for 5 Gitleaks ranges and no others. The
 Node shim scans paths in sorted order, and each package's own emission order
 is deterministic.
 
+OpenRedaction 1.1.5 aborts any single regex execution that takes longer than
+its `regexTimeout` (100 ms wall clock by default) and skips that pattern for
+the input. On a heavily loaded host a long input can therefore produce
+different findings in two replays. The replay rule catches it: the scanner is
+`unstable` and its findings are discarded, never scored. Legacy runs the
+package in process with the same default and is exposed to the same effect.
+
+Legacy runs the three npm scanners in process without a timeout or output
+cap; here they run in the bounded Node shim. The default 120 s timeout and
+16 MiB stdout cap are enough for a corpus measurement of the legacy corpus but
+not for its ~48k evaluation variants on a loaded host, so the parity run
+config (`tools/parity/run-config.json`) raises both for the three shim
+scanners (30 min, 256 MiB). Exceeding a bound is `timeout`/`malformed`, never
+an empty result.
+
 ## Provenance
 
 `ScannerIdentity.provenance` records how the scanner was set up. It uses
