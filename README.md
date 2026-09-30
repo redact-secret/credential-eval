@@ -1,0 +1,199 @@
+# credential-eval
+
+A scanner-neutral credential evaluation engine focused on reproducibility, large-scale stress testing, and high-performance range evaluation.
+
+`credential-eval` is being extracted from `redact-secret/redact-secret-benchmarks` and rebuilt around a high-performance Rust kernel and CLI.
+
+The goal is not “benchmark Redact Secret.”
+
+The goal is:
+
+> Evaluate any credential scanner against versioned credential evidence using reproducible, inspectable measurement semantics.
+
+## Core idea
+
+```text
+credential-evidence snapshot
+          +
+scanner adapters
+          ↓
+    credential-eval
+          ↓
+normalized observations
+          ↓
+measurement artifacts
+```
+
+The engine does not decide whether a product is `stable`, `provisional`, `pending`, “better,” or release-ready.
+
+It measures.
+
+## What this repository owns
+
+- scanner adapter interface;
+- corpus loading and fixture materialization;
+- scanner execution orchestration;
+- normalized file/range findings;
+- EXACT / COVERED / OVERBROAD / PARTIAL / MISS lattice;
+- benign and false-alarm evaluation;
+- twin discrimination;
+- mutation evaluation;
+- metamorphic evaluation;
+- differential observations;
+- accounting;
+- bounded parallel execution;
+- reproducible run manifests;
+- sanitized public result artifacts;
+- stress and scale evaluation.
+
+## What it does not own
+
+- canonical credential facts and expectations — `credential-evidence`;
+- Redact Secret support policy;
+- product release blockers;
+- public site content;
+- scanner marketing claims;
+- independent ground truth.
+
+## Why Rust
+
+The existing TypeScript benchmark/evaluation engine has already proved the measurement model.
+
+This migration is therefore an opportunity to optimize the hot path rather than only relocate it.
+
+Target architecture:
+
+```text
+credential-eval
+├─ Rust engine / CLI
+│  ├─ corpus loader
+│  ├─ materialization
+│  ├─ process orchestration
+│  ├─ range normalization
+│  ├─ outcome lattice
+│  ├─ accounting
+│  ├─ mutation / metamorphic generation
+│  ├─ bounded parallel execution
+│  └─ result writer
+│
+├─ scanner adapters
+│  ├─ external process adapters
+│  ├─ Node/Python shims where useful
+│  └─ native adapters where justified
+│
+└─ thin JS/TS tooling
+   ├─ migration compatibility
+   ├─ configuration
+   └─ report/developer utilities
+```
+
+Rust is not the goal by itself.
+
+The acceptance target is:
+
+```text
+same semantics
++ same normalized results
++ lower evaluator overhead
++ larger stress-test capacity
++ lower CI/time cost
+```
+
+## CLI direction
+
+The final interface is not frozen, but the intended experience is similar to:
+
+```bash
+credential-eval run \
+  --corpus ./snapshot \
+  --scanner redact-secret \
+  --scanner gitleaks \
+  --scanner trufflehog \
+  --methods twin,benign,mutation,metamorphic \
+  --jobs 12
+```
+
+A run should be reproducible from explicit input identities.
+
+## Scanner adapters
+
+A scanner does not have to be implemented in Rust.
+
+Adapters may:
+
+- invoke external binaries;
+- launch Node/Python shims;
+- call a package CLI;
+- normalize structured scanner output.
+
+The engine owns the adapter protocol and normalized result model.
+
+The adapter owns scanner-specific execution and parsing.
+
+## Measurement, not ranking
+
+The engine should answer questions such as:
+
+- was the required span fully covered?
+- was only part of it covered?
+- was the scanner overbroad?
+- did a benign twin remain clean?
+- how did a mutation change behavior?
+- did two scanners disagree?
+
+It should not collapse those observations into a single universal “best scanner” score.
+
+## Performance and stress
+
+The Rust kernel should make larger evaluations practical.
+
+Target workload classes include:
+
+- 10k+ cases;
+- 100k+ mutations;
+- Unicode and invisible-character perturbations;
+- chunk-boundary sweeps;
+- prefix/length/alphabet mutation matrices;
+- large-file adversarial inputs;
+- repeated short-input/log-line workloads;
+- high detector-count ruleset scenarios;
+- scanner timeout/failure pressure;
+- multi-version differential evaluation.
+
+Parallelism must remain bounded and deterministic.
+
+## Migration
+
+Current work is tracked under:
+
+- #1 — migration epic
+- #2 — input/output contracts
+- #3 — lattice/accounting/evaluation extraction
+- #4 — scanner adapter API
+- #5 — legacy dual-run parity
+- #6 — product qualification separation
+- #7 — high-performance Rust CLI/kernel
+
+The current TypeScript engine remains the behavioral oracle until parity is proven.
+
+## Relationship to Redact Secret
+
+Redact Secret is one scanner that can be evaluated by this engine.
+
+Product-specific qualification remains outside the generic evaluator.
+
+```text
+credential-eval result
+        ↓
+Redact Secret qualification policy
+        ↓
+support matrix / release decision
+```
+
+That interpretation currently remains in the Redact Secret benchmark/product qualification layer.
+
+## Status
+
+Private migration and architecture phase.
+
+Do not depend on current internal APIs until the input/output contracts are frozen.
