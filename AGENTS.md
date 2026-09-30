@@ -47,11 +47,7 @@ expected result merely to match a scanner's output.
   is the only option. If creating something new is cheaper, propose that
   first.
 - When challenged, answer the objection actually raised, not an easier one.
-- Before benchmark measurements (`eval:classify`, `eval:matrix`,
-  `benchmark:candidate`), check that `trufflehog --version` matches the pin
-  (3.97.4). A self-update that bumps only the patch version changes the
-  stable count from 43 to 5 (redact-secret-benchmarks#180). If it differs, do
-  not report the numbers; put the pinned binary first on `PATH` and rerun.
+- Before benchmark measurements check that `trufflehog --version` matches the pin(3.97.4). A self-update that bumps only the patch version changes the stable count. If it differs, do not report the numbers; put the pinned binary first on `PATH` and rerun.
   Always state the mode (published or candidate) alongside a stable count.
 
 ## Before finishing
