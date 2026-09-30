@@ -1,0 +1,515 @@
+{
+  "schema": "credential-eval/run-artifact/v1",
+  "manifest": {
+    "engine": {
+      "name": "credential-eval",
+      "version": "0.1.0"
+    },
+    "protocol_version": "credential-eval-protocol/1",
+    "evidence": {
+      "source": "synthetic:contracts-smoke",
+      "revision": "contracts-smoke-1",
+      "evidence_schema": "synthetic-v1",
+      "corpus_digest": "sha256:c7343b0567254cacae883e32bfa93a86747ff4b6beac2189c0e4bd59b6207523"
+    },
+    "config_hash": "sha256:d432963315a86d921d6f399037d491fd63ba0f13dac51cb09c4d0331a2edada5",
+    "accounting": {
+      "min_denominator": 5,
+      "resolved_rate_floor": {
+        "default": 0.9,
+        "differential": 0.0
+      },
+      "measurable_share_floor": {
+        "default": 0.7,
+        "policy": 0.0
+      },
+      "twin_coverage_floor": {
+        "default": 0.5,
+        "policy": 0.0
+      },
+      "replays": 2,
+      "interval_z": 1.96,
+      "interval_precision": 6
+    },
+    "methods": [],
+    "scanners": [
+      {
+        "id": "fake-scanner-a",
+        "version": "1.0.0",
+        "mode": "canned findings",
+        "adapter": {
+          "id": "canned",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:fb506980b5157ca5e891c674ab0627a0e14e39bf3c15f673bd0973678e9987ff"
+      },
+      {
+        "id": "fake-scanner-b",
+        "version": null,
+        "mode": "canned timeout",
+        "adapter": {
+          "id": "canned",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:d6dc29e57faa6cfb39c505e490b98410973c11c2d2c056f7a21ebd21b2e1e4cd"
+      }
+    ]
+  },
+  "scanners": [
+    {
+      "scanner": "fake-scanner-a",
+      "status": "complete",
+      "replays": {
+        "count": 2,
+        "agreed": true
+      },
+      "findings": [
+        {
+          "path": "contracts-smoke/benign-placeholder.txt",
+          "start": 11,
+          "end": 30,
+          "family": "example-api-key",
+          "action": "warn"
+        },
+        {
+          "path": "contracts-smoke/pending-review.txt",
+          "start": 14,
+          "end": 37
+        },
+        {
+          "path": "contracts-smoke/positive-envelope.txt",
+          "start": 15,
+          "end": 57,
+          "family": "example-bearer-token"
+        },
+        {
+          "path": "contracts-smoke/positive-exact.txt",
+          "start": 38,
+          "end": 71,
+          "family": "example-api-key"
+        },
+        {
+          "path": "contracts-smoke/positive-miss-companion.txt",
+          "start": 10,
+          "end": 26
+        },
+        {
+          "path": "contracts-smoke/positive-overbroad.txt",
+          "start": 0,
+          "end": 39
+        },
+        {
+          "path": "contracts-smoke/positive-partial.txt",
+          "start": 20,
+          "end": 40,
+          "family": "example-api-key"
+        },
+        {
+          "path": "contracts-smoke/twin-length.txt",
+          "start": 27,
+          "end": 34,
+          "family": "example-other-family"
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "benign-placeholder",
+          "path": "contracts-smoke/benign-placeholder.txt",
+          "kind": "must-not-flag",
+          "tier": "T1",
+          "family": "example-api-key",
+          "expected": [],
+          "actual": [
+            {
+              "start": 11,
+              "end": 30,
+              "family": "example-api-key",
+              "action": "warn"
+            }
+          ],
+          "measurement": {
+            "type": "control",
+            "flagged": true,
+            "findings": 1,
+            "co_detected": false,
+            "action_counts": {
+              "warn": 1
+            }
+          }
+        },
+        {
+          "case_id": "pending-review",
+          "path": "contracts-smoke/pending-review.txt",
+          "kind": "must-redact",
+          "tier": "T0",
+          "family": "example-api-key",
+          "expected": [
+            {
+              "start": 14,
+              "end": 37,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 14,
+              "end": 37
+            }
+          ],
+          "measurement": {
+            "type": "pending"
+          }
+        },
+        {
+          "case_id": "positive-envelope",
+          "path": "contracts-smoke/positive-envelope.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-bearer-token",
+          "expected": [
+            {
+              "start": 22,
+              "end": 57,
+              "role": "secret",
+              "envelope": {
+                "start": 15,
+                "end": 57
+              }
+            }
+          ],
+          "actual": [
+            {
+              "start": 15,
+              "end": 57,
+              "family": "example-bearer-token"
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "COVERED"
+            ],
+            "leaked_bytes": 0,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "positive-exact",
+          "path": "contracts-smoke/positive-exact.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-api-key",
+          "expected": [
+            {
+              "start": 38,
+              "end": 71,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 38,
+              "end": 71,
+              "family": "example-api-key"
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "EXACT"
+            ],
+            "leaked_bytes": 0,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "positive-miss-companion",
+          "path": "contracts-smoke/positive-miss-companion.txt",
+          "kind": "policy",
+          "tier": "T1",
+          "family": "example-key-pair",
+          "expected": [
+            {
+              "start": 10,
+              "end": 26,
+              "role": "companion"
+            },
+            {
+              "start": 34,
+              "end": 70,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 10,
+              "end": 26
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "MISS"
+            ],
+            "leaked_bytes": 36,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "positive-overbroad",
+          "path": "contracts-smoke/positive-overbroad.txt",
+          "kind": "must-redact",
+          "tier": "T2",
+          "family": "example-api-key",
+          "expected": [
+            {
+              "start": 6,
+              "end": 39,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "OVERBROAD"
+            ],
+            "leaked_bytes": 0,
+            "collateral_bytes": 6
+          }
+        },
+        {
+          "case_id": "positive-partial",
+          "path": "contracts-smoke/positive-partial.txt",
+          "kind": "must-redact",
+          "tier": "T2",
+          "family": "example-api-key",
+          "expected": [
+            {
+              "start": 20,
+              "end": 57,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 20,
+              "end": 40,
+              "family": "example-api-key"
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "PARTIAL"
+            ],
+            "leaked_bytes": 17,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "twin-length",
+          "path": "contracts-smoke/twin-length.txt",
+          "kind": "must-not-flag",
+          "tier": "T1",
+          "family": "example-api-key",
+          "twin_of": "positive-exact",
+          "expected": [],
+          "actual": [
+            {
+              "start": 27,
+              "end": 34,
+              "family": "example-other-family"
+            }
+          ],
+          "measurement": {
+            "type": "control",
+            "flagged": false,
+            "findings": 1,
+            "co_detected": true
+          }
+        }
+      ],
+      "assertions": [],
+      "aggregates": {
+        "groups": {},
+        "resolution": {}
+      }
+    },
+    {
+      "scanner": "fake-scanner-b",
+      "status": "timeout",
+      "detail": "timed out after 1000 ms",
+      "findings": [],
+      "cases": [
+        {
+          "case_id": "benign-placeholder",
+          "path": "contracts-smoke/benign-placeholder.txt",
+          "kind": "must-not-flag",
+          "tier": "T1",
+          "family": "example-api-key",
+          "expected": [],
+          "actual": [],
+          "measurement": {
+            "type": "not-measured",
+            "status": "timeout"
+          }
+        },
+        {
+          "case_id": "pending-review",
+          "path": "contracts-smoke/pending-review.txt",
+          "kind": "must-redact",
+          "tier": "T0",
+          "family": "example-api-key",
+          "expected": [
+            {
+              "start": 14,
+              "end": 37,
+              "role": "secret"
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "not-measured",
+            "status": "timeout"
+          }
+        },
+        {
+          "case_id": "positive-envelope",
+          "path": "contracts-smoke/positive-envelope.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-bearer-token",
+          "expected": [
+            {
+              "start": 22,
+              "end": 57,
+              "role": "secret",
+              "envelope": {
+                "start": 15,
+                "end": 57
+              }
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "not-measured",
+            "status": "timeout"
+          }
+        },
+        {
+          "case_id": "positive-exact",
+          "path": "contracts-smoke/positive-exact.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-api-key",
+          "expected": [
+            {
+              "start": 38,
+              "end": 71,
+              "role": "secret"
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "not-measured",
+            "status": "timeout"
+          }
+        },
+        {
+          "case_id": "positive-miss-companion",
+          "path": "contracts-smoke/positive-miss-companion.txt",
+          "kind": "policy",
+          "tier": "T1",
+          "family": "example-key-pair",
+          "expected": [
+            {
+              "start": 10,
+              "end": 26,
+              "role": "companion"
+            },
+            {
+              "start": 34,
+              "end": 70,
+              "role": "secret"
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "not-measured",
+            "status": "timeout"
+          }
+        },
+        {
+          "case_id": "positive-overbroad",
+          "path": "contracts-smoke/positive-overbroad.txt",
+          "kind": "must-redact",
+          "tier": "T2",
+          "family": "example-api-key",
+          "expected": [
+            {
+              "start": 6,
+              "end": 39,
+              "role": "secret"
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "not-measured",
+            "status": "timeout"
+          }
+        },
+        {
+          "case_id": "positive-partial",
+          "path": "contracts-smoke/positive-partial.txt",
+          "kind": "must-redact",
+          "tier": "T2",
+          "family": "example-api-key",
+          "expected": [
+            {
+              "start": 20,
+              "end": 57,
+              "role": "secret"
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "not-measured",
+            "status": "timeout"
+          }
+        },
+        {
+          "case_id": "twin-length",
+          "path": "contracts-smoke/twin-length.txt",
+          "kind": "must-not-flag",
+          "tier": "T1",
+          "family": "example-api-key",
+          "twin_of": "positive-exact",
+          "expected": [],
+          "actual": [],
+          "measurement": {
+            "type": "not-measured",
+            "status": "timeout"
+          }
+        }
+      ],
+      "assertions": [],
+      "aggregates": {
+        "groups": {},
+        "resolution": {}
+      }
+    }
+  ],
+  "variants": [],
+  "comparisons": [],
+  "non_semantic": {
+    "durations_ms": {
+      "fake-scanner-a": 7
+    }
+  }
+}

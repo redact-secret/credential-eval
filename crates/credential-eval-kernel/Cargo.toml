@@ -1,0 +1,19 @@
+[package]
+name = "credential-eval-kernel"
+description = "Measurement kernel for credential-eval: outcome lattice, accounting and evaluation methods."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+credential-eval-contracts.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+jsonschema.workspace = true
+
+[lints]
+workspace = true

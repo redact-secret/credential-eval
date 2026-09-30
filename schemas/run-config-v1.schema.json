@@ -1,0 +1,267 @@
+{
+  "$id": "https://github.com/redact-secret/credential-eval/schemas/run-config-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunConfig",
+  "description": "Everything besides the corpus and scanner binaries that determines a run.\nIts canonical digest is the run's `config_hash`.",
+  "type": "object",
+  "properties": {
+    "accounting": {
+      "description": "Accounting parameters (engine v1.1 semantics).",
+      "$ref": "#/$defs/AccountingConfig"
+    },
+    "execution": {
+      "description": "Global execution bounds.",
+      "$ref": "#/$defs/ExecutionBounds"
+    },
+    "methods": {
+      "description": "Evaluation methods to apply (e.g. `twin`, `benign`, `mutation`,\n`metamorphic`, `differential`). Sorted, unique.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ComponentId"
+      }
+    },
+    "scanners": {
+      "description": "Scanners to execute, in any order (results are sorted by id).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ScannerSpec"
+      }
+    },
+    "schema": {
+      "description": "Document tag: `credential-eval/run-config/v1`.",
+      "$ref": "#/$defs/RunConfigSchema"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "scanners",
+    "methods",
+    "execution",
+    "accounting"
+  ],
+  "$defs": {
+    "AccountingConfig": {
+      "description": "Engine v1.1 accounting parameters (legacy `AccountingConfig`,\n`benchmarks/types.ts:55-58`, values in `qualification/suite-v1.json`).\nFloors withhold rates as `insufficient-evidence`/`insufficient-coverage`;\nthey are measurement rules, not support thresholds.",
+      "type": "object",
+      "properties": {
+        "interval_precision": {
+          "description": "Decimal places of published points and bounds (1..=12).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "interval_z": {
+          "description": "z value of the Wilson interval.",
+          "type": "number",
+          "format": "double"
+        },
+        "measurable_share_floor": {
+          "description": "Minimum measurable (non-T0) share per kind.",
+          "$ref": "#/$defs/Floor"
+        },
+        "min_denominator": {
+          "description": "Smallest denominator for which a rate is published.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "replays": {
+          "description": "Stability replays per scanner (>= 2).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "resolved_rate_floor": {
+          "description": "Minimum resolved share per method stratum.",
+          "$ref": "#/$defs/Floor"
+        },
+        "twin_coverage_floor": {
+          "description": "Minimum twin coverage (pairs / positives) per kind.",
+          "$ref": "#/$defs/Floor"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "min_denominator",
+        "resolved_rate_floor",
+        "measurable_share_floor",
+        "twin_coverage_floor",
+        "replays",
+        "interval_z",
+        "interval_precision"
+      ]
+    },
+    "AdapterIdentity": {
+      "description": "Identity of a scanner adapter.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Adapter id (e.g. `gitleaks`).",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "version": {
+          "description": "Adapter implementation version. Changes whenever parsing or offset\nconversion changes.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "ComponentId": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "ExecutionBounds": {
+      "description": "Global, explicit execution bounds.",
+      "type": "object",
+      "properties": {
+        "jobs": {
+          "description": "Maximum concurrently running scanner jobs across all scanners (>= 1).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "jobs"
+      ]
+    },
+    "Floor": {
+      "description": "A floor: one value, or a default plus per-key overrides.",
+      "anyOf": [
+        {
+          "description": "The same floor for every key.",
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "description": "A default with per-key overrides.",
+          "type": "object",
+          "properties": {
+            "default": {
+              "description": "Floor for keys without an override.",
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "additionalProperties": {
+            "type": "number",
+            "format": "double"
+          },
+          "required": [
+            "default"
+          ]
+        }
+      ]
+    },
+    "NetworkPolicy": {
+      "description": "Network permission for a scanner.",
+      "oneOf": [
+        {
+          "description": "No network access is expected or permitted (default posture).",
+          "type": "string",
+          "const": "disabled"
+        },
+        {
+          "description": "The run explicitly authorizes network access (e.g. verification).",
+          "type": "string",
+          "const": "allowed"
+        }
+      ]
+    },
+    "RunConfigSchema": {
+      "type": "string",
+      "const": "credential-eval/run-config/v1"
+    },
+    "ScannerId": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "ScannerLimits": {
+      "description": "Per-scanner bounds. Every limit is explicit; there are no unbounded defaults.",
+      "type": "object",
+      "properties": {
+        "concurrency": {
+          "description": "Maximum concurrent invocations of this scanner (>= 1).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "max_stderr_bytes": {
+          "description": "Maximum captured stderr bytes (never published).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_stdout_bytes": {
+          "description": "Maximum captured stdout bytes; exceeding it is a `malformed`/`error` state.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "timeout_ms": {
+          "description": "Wall-clock timeout per scanner invocation, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "timeout_ms",
+        "max_stdout_bytes",
+        "max_stderr_bytes",
+        "concurrency"
+      ]
+    },
+    "ScannerSpec": {
+      "description": "How one scanner is to be executed.",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "description": "Adapter that executes and normalizes this scanner.",
+          "$ref": "#/$defs/AdapterIdentity"
+        },
+        "configuration": {
+          "description": "Adapter-specific configuration. Recorded verbatim and hashed; it must\nnot contain credentials.",
+          "type": "object",
+          "additionalProperties": true,
+          "default": {}
+        },
+        "id": {
+          "description": "Scanner id, unique within the run.",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "limits": {
+          "description": "Per-scanner resource bounds.",
+          "$ref": "#/$defs/ScannerLimits"
+        },
+        "mode": {
+          "description": "Human-readable scanner mode (e.g. \"directory scan, default rules\").",
+          "type": "string"
+        },
+        "network": {
+          "description": "Whether the scanner may use the network. Verification calls are off\nunless a run explicitly authorizes them.",
+          "$ref": "#/$defs/NetworkPolicy"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "adapter",
+        "mode",
+        "network",
+        "limits"
+      ]
+    }
+  }
+}

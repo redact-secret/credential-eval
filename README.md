@@ -194,6 +194,47 @@ That interpretation currently remains in the Redact Secret benchmark/product qua
 
 ## Status
 
-Private migration and architecture phase.
+The repository is private and in its migration and architecture phase.
 
-Do not depend on current internal APIs until the input/output contracts are frozen.
+What exists today:
+
+- The v1 input/output contracts (#2), with their Rust types and generated
+  JSON Schemas.
+- An exact port of the legacy span lattice, used to exercise the contracts
+  end to end on a synthetic fixture set.
+
+The kernel (#3), the adapters (#4), parity (#5) and the `run` command are
+not implemented yet. The v1 schemas are not frozen, so do not depend on
+internal APIs yet.
+
+## Layout
+
+```text
+Cargo.toml                         Cargo workspace
+crates/
+  credential-eval-contracts/       serde types for every input/output document; schema generation
+  credential-eval-kernel/          measurement kernel (lattice port today; accounting/methods in #3)
+  credential-eval-adapters/        scanner adapters (placeholder until #4)
+  credential-eval-cli/             `credential-eval` binary (only --version today)
+schemas/                           generated JSON Schemas (*-v1.schema.json)
+docs/contracts/                    contract, range, identity, outcome and determinism rules
+docs/migration/legacy-map.md       inventory of the legacy TypeScript engine
+tests/fixtures/contracts-smoke/    synthetic end-to-end fixtures and golden run artifact
+```
+
+## Development
+
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
+
+`cargo test` also checks that `schemas/` still matches the contract types. It
+also checks the golden artifact in `tests/fixtures/contracts-smoke/`. After an
+intentional contract change, regenerate both and review the diff:
+
+```bash
+UPDATE_SCHEMAS=1 cargo test -p credential-eval-contracts --test schema_drift
+UPDATE_GOLDEN=1 cargo test -p credential-eval-kernel --test contracts_smoke
+```

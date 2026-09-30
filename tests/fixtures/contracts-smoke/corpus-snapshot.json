@@ -1,0 +1,158 @@
+{
+  "schema": "credential-eval/corpus-snapshot/v1",
+  "identity": {
+    "source": "synthetic:contracts-smoke",
+    "revision": "contracts-smoke-1",
+    "evidence_schema": "synthetic-v1",
+    "corpus_digest": "sha256:c7343b0567254cacae883e32bfa93a86747ff4b6beac2189c0e4bd59b6207523"
+  },
+  "cases": [
+    {
+      "id": "positive-exact",
+      "path": "contracts-smoke/positive-exact.txt",
+      "content": "# café config (synthetic)\napi_key = \"EXAMPLE_FAKE_KEY_0123456789abcdef\"\n",
+      "expected": [
+        {
+          "start": 38,
+          "end": 71,
+          "role": "secret"
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T1",
+        "group": "contracts-smoke",
+        "family": "example-api-key"
+      }
+    },
+    {
+      "id": "positive-envelope",
+      "path": "contracts-smoke/positive-envelope.txt",
+      "content": "Authorization: Bearer EXAMPLE_FAKE_TOKEN_abcdef0123456789\n",
+      "expected": [
+        {
+          "start": 22,
+          "end": 57,
+          "role": "secret",
+          "envelope": {
+            "start": 15,
+            "end": 57,
+            "reason": "The Bearer scheme word is part of the credential header value."
+          }
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T1",
+        "group": "contracts-smoke",
+        "family": "example-bearer-token"
+      }
+    },
+    {
+      "id": "positive-overbroad",
+      "path": "contracts-smoke/positive-overbroad.txt",
+      "content": "token=EXAMPLE_FAKE_KEY_fedcba9876543210 # ünïcode trailer\n",
+      "expected": [
+        {
+          "start": 6,
+          "end": 39,
+          "role": "secret"
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T2",
+        "group": "contracts-smoke",
+        "family": "example-api-key"
+      }
+    },
+    {
+      "id": "positive-partial",
+      "path": "contracts-smoke/positive-partial.txt",
+      "content": "export SECRET_VALUE=EXAMPLE_FAKE_KEY_00001111222233334444\n",
+      "expected": [
+        {
+          "start": 20,
+          "end": 57,
+          "role": "secret"
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T2",
+        "group": "contracts-smoke",
+        "family": "example-api-key"
+      }
+    },
+    {
+      "id": "positive-miss-companion",
+      "path": "contracts-smoke/positive-miss-companion.txt",
+      "content": "密钥 id=EXAMPLEKEYID0001 secret=EXAMPLE_FAKE_SECRET_aaaabbbbccccdddd\n",
+      "expected": [
+        {
+          "start": 10,
+          "end": 26,
+          "role": "companion"
+        },
+        {
+          "start": 34,
+          "end": 70,
+          "role": "secret"
+        }
+      ],
+      "grouping": {
+        "kind": "policy",
+        "tier": "T1",
+        "group": "contracts-smoke",
+        "family": "example-key-pair"
+      }
+    },
+    {
+      "id": "benign-placeholder",
+      "path": "contracts-smoke/benign-placeholder.txt",
+      "content": "api_key = \"<YOUR_API_KEY_HERE>\"\n",
+      "expected": [],
+      "grouping": {
+        "kind": "must-not-flag",
+        "tier": "T1",
+        "group": "contracts-smoke",
+        "family": "example-api-key"
+      }
+    },
+    {
+      "id": "twin-length",
+      "path": "contracts-smoke/twin-length.txt",
+      "content": "# café config (synthetic)\napi_key = \"EXAMPLE_FAKE_KEY_0123456789abcde\"\n",
+      "expected": [],
+      "grouping": {
+        "kind": "must-not-flag",
+        "tier": "T1",
+        "group": "contracts-smoke",
+        "family": "example-api-key"
+      },
+      "twin": {
+        "twin_of": "positive-exact",
+        "mutation": "Remove the final character so the value no longer meets the documented length.",
+        "mutation_kind": "length"
+      }
+    },
+    {
+      "id": "pending-review",
+      "path": "contracts-smoke/pending-review.txt",
+      "content": "maybe_secret: EXAMPLE_FAKE_MAYBE_0000\n",
+      "expected": [
+        {
+          "start": 14,
+          "end": 37,
+          "role": "secret"
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T0",
+        "group": "contracts-smoke",
+        "family": "example-api-key"
+      }
+    }
+  ]
+}
