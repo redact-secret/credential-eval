@@ -59,7 +59,12 @@ checks that the declared digest matches.
   `hash(configuration)` in `substrate/runtime.ts:80`.
 - `RunConfig::config_hash()` is the canonical digest of the whole typed run
   configuration: scanners, methods, execution bounds and accounting. It is
-  recorded as `manifest.config_hash`.
+  recorded as `manifest.config_hash`. Two normalizations apply before
+  hashing. Scanners are sorted by id, because their order is not semantic.
+  Scheduling bounds (`execution.jobs` and every `limits.concurrency`) are set
+  to `1`. The determinism rule forbids them from changing semantic output, so
+  a `--jobs 8` run has the identity of the equivalent serial run. Timeouts
+  and output caps are hashed as given.
 
 ## Stale-result protection
 
@@ -79,6 +84,7 @@ invalid range. So scanner results are never applied to changed fixture bytes.
 | scanner | `manifest.scanners[] {id, version, mode}` |
 | adapter | `manifest.scanners[].adapter {id, version}` |
 | scanner configuration | `manifest.scanners[].configuration_hash` |
+| scanner setup | `manifest.scanners[].provenance` (network posture; executable, runtime, shim, lockfile and npm package digests/versions/integrity) |
 | run configuration | `manifest.config_hash` (plus `manifest.accounting` inline) |
 | methods | `manifest.methods[] {id, version}` |
 

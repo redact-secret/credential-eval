@@ -664,6 +664,27 @@ pub struct NonSemantic {
     /// Scanner wall-clock durations in milliseconds, by scanner id.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub durations_ms: BTreeMap<String, u64>,
+    /// How the run was scheduled and where its time went.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<ExecutionDiagnostics>,
+}
+
+/// Scheduling and timing diagnostics of a run. Never measurements.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutionDiagnostics {
+    /// Effective global job bound the run was scheduled with.
+    pub jobs: u32,
+    /// Scanner process invocations that ran (version probes and scans).
+    pub processes: u64,
+    /// Wall-clock time of the whole run, in milliseconds.
+    pub wall_ms: u64,
+    /// Sum of scanner process wall-clock times, in milliseconds. With
+    /// parallel jobs this can exceed `wall_ms`.
+    pub scanner_process_ms: u64,
+    /// Evaluator-owned time, in milliseconds: corpus loading, materialization,
+    /// output normalization, scoring and serialization (summed over jobs).
+    pub evaluator_ms: u64,
 }
 
 impl RunArtifact {

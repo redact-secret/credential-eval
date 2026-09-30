@@ -59,6 +59,21 @@
       "minLength": 1,
       "pattern": "^(?!/)(?!.*/$)(?!.*//)(?!(.*/)?\\.{1,2}(/|$))[A-Za-z0-9_./-]+$"
     },
+    "NetworkPolicy": {
+      "description": "Network permission for a scanner.",
+      "oneOf": [
+        {
+          "description": "No network access is expected or permitted (default posture).",
+          "type": "string",
+          "const": "disabled"
+        },
+        {
+          "description": "The run explicitly authorizes network access (e.g. verification).",
+          "type": "string",
+          "const": "allowed"
+        }
+      ]
+    },
     "NormalizedFinding": {
       "description": "A normalized finding: a file and a UTF-8 byte range, plus optional\nscanner-reported classification. Never the matched value.",
       "type": "object",
@@ -261,6 +276,80 @@
       "type": "string",
       "const": "credential-eval/observation-set/v1"
     },
+    "ProvenanceComponent": {
+      "description": "One executable, runtime or package that took part in a scan.",
+      "type": "object",
+      "properties": {
+        "integrity": {
+          "description": "npm Subresource Integrity string from the lockfile, for packages.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Component kind.",
+          "$ref": "#/$defs/ProvenanceKind"
+        },
+        "name": {
+          "description": "Name: the configured program name, or the npm package name.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of the component's bytes (an executable file, a lockfile, or a\npackage tree digest).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Version, when the component reports or declares one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name"
+      ]
+    },
+    "ProvenanceKind": {
+      "description": "Kind of a [`ProvenanceComponent`].",
+      "oneOf": [
+        {
+          "description": "A scanner executable resolved from the configured program.",
+          "type": "string",
+          "const": "executable"
+        },
+        {
+          "description": "A language runtime that hosts a shim (e.g. `node`).",
+          "type": "string",
+          "const": "runtime"
+        },
+        {
+          "description": "A shim script the adapter runs.",
+          "type": "string",
+          "const": "shim"
+        },
+        {
+          "description": "A lockfile pinning the packages.",
+          "type": "string",
+          "const": "lockfile"
+        },
+        {
+          "description": "An installed npm package.",
+          "type": "string",
+          "const": "npm-package"
+        }
+      ]
+    },
     "Replays": {
       "description": "Stability replay record.",
       "type": "object",
@@ -308,6 +397,17 @@
           "description": "Scanner mode as configured.",
           "type": "string"
         },
+        "provenance": {
+          "description": "Setup provenance recorded by the adapter: the network posture and the\ndigests of the executables and packages that actually ran. Absent in\nreplayed or canned observations that did not record it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "version": {
           "description": "Reported scanner version; `null` when it could not be determined\n(e.g. the scanner is unavailable).",
           "type": [
@@ -350,6 +450,35 @@
       "required": [
         "scanner",
         "result"
+      ]
+    },
+    "ScannerProvenance": {
+      "description": "How a scanner was set up for a run. Every field is a reproduction\nidentity: it names bytes (by digest) and versions, never host paths.",
+      "type": "object",
+      "properties": {
+        "components": {
+          "description": "Executables, runtimes and packages that ran, sorted by `(kind, name)`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProvenanceComponent"
+          }
+        },
+        "network": {
+          "description": "Network posture the adapter ran the scanner under.",
+          "$ref": "#/$defs/NetworkPolicy"
+        },
+        "network_controls": {
+          "description": "What the adapter did to keep the posture, e.g.\n`[\"--no-verification\", \"--no-update\"]`. Sorted, unique.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "network",
+        "components"
       ]
     },
     "Sha256Digest": {
