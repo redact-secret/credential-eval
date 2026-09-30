@@ -69,7 +69,7 @@ Legacy has only `complete`, `unstable`, `unsupported`, `unavailable` and
 (`scanners/index.mjs:40-60`). The compatibility mapping sends `timeout` and
 `malformed` to `error`.
 
-## Group aggregates (implemented in #3)
+## Group aggregates
 
 Groups are keyed `<kind>/<tier>`, and every `T0` case goes to `pending/T0`
 (`lattice.ts:99`). No figure is ever summed across groups.
@@ -111,3 +111,16 @@ v1.1 publication from `accountGroups`,
   (`accounting/shared/primitives.ts:36-54`), or `null` for ratios.
 - Exact-match `diagnostics` (tp/fp/fn/tn) are carried for inspection only.
   They are not comparable across scanners.
+- Rounding reproduces JavaScript `Number(x.toFixed(p))`: round half up on
+  the exact binary value (`credential_eval_kernel::jsnum::round_to_fixed`).
+  When a point exceeds 1 (twin coverage with several twins for one
+  positive) the Wilson bound is undefined and is published as `null`, as in
+  legacy.
+- A case whose measurement contradicts its population (a `must-redact` case
+  without a secret span, a twin that is not a control) is refused, never
+  aggregated.
+- `by_target` groups use the legacy cross-suite selection rule
+  (`run-summary.ts:39-50`) with `CaseResult.group` as the suite.
+
+Implemented in `credential_eval_kernel::accounting` and checked against the
+legacy engine by the oracle tests (`tests/fixtures/oracle/`).

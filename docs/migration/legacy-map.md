@@ -7,7 +7,9 @@ This is an inventory of the TypeScript evaluation engine in
 repository root unless they start with `crates/` or `docs/`.
 
 The agents for issues #3 (kernel), #4 (adapters), #5 (parity) and
-#6 (qualification separation) work from this document. The contracts they
+#6 (qualification separation) work from this document. The kernel's
+intentional differences from what is described here are listed in
+[kernel-deltas.md](kernel-deltas.md). The contracts they
 target are in `docs/contracts/` and `crates/credential-eval-contracts`.
 
 Classification legend:

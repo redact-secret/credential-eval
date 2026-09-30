@@ -118,6 +118,7 @@
           "kind": "must-not-flag",
           "tier": "T1",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [],
           "actual": [
             {
@@ -143,6 +144,7 @@
           "kind": "must-redact",
           "tier": "T0",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 14,
@@ -166,6 +168,7 @@
           "kind": "must-redact",
           "tier": "T1",
           "family": "example-bearer-token",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 22,
@@ -199,6 +202,7 @@
           "kind": "must-redact",
           "tier": "T1",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 38,
@@ -228,6 +232,7 @@
           "kind": "policy",
           "tier": "T1",
           "family": "example-key-pair",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 10,
@@ -261,6 +266,7 @@
           "kind": "must-redact",
           "tier": "T2",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 6,
@@ -289,6 +295,7 @@
           "kind": "must-redact",
           "tier": "T2",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 20,
@@ -319,6 +326,8 @@
           "tier": "T1",
           "family": "example-api-key",
           "twin_of": "positive-exact",
+          "group": "contracts-smoke",
+          "twin_mutation_kind": "length",
           "expected": [],
           "actual": [
             {
@@ -337,8 +346,144 @@
       ],
       "assertions": [],
       "aggregates": {
-        "groups": {},
-        "resolution": {}
+        "groups": {
+          "must-not-flag/T1": {
+            "population": "control",
+            "files": 2,
+            "flagged_files": 1,
+            "findings": 2,
+            "false_alarm_rate": "insufficient-evidence",
+            "mean_findings_per_flagged": "insufficient-evidence",
+            "diagnostics": {
+              "fp": 2,
+              "tn": 1
+            }
+          },
+          "must-redact/T1": {
+            "population": "positive",
+            "files": 2,
+            "spans": 2,
+            "secret_bytes": 68,
+            "outcomes": {
+              "EXACT": 1,
+              "COVERED": 1,
+              "OVERBROAD": 0,
+              "PARTIAL": 0,
+              "MISS": 0
+            },
+            "pending_files": 1,
+            "measurable_share": "insufficient-evidence",
+            "envelope_width": {
+              "spans": 1,
+              "bytes": 7
+            },
+            "leaked_spans": 0,
+            "leaked_span_rate": "insufficient-evidence",
+            "leaked_bytes": 0,
+            "leaked_byte_rate": "insufficient-evidence",
+            "collateral_bytes": 0,
+            "collateral_ratio": "insufficient-evidence",
+            "twins": {
+              "positives": 2,
+              "pairs": 1,
+              "discriminated": 1,
+              "co_detected": 1,
+              "coverage": "insufficient-evidence",
+              "rate": "insufficient-evidence"
+            },
+            "diagnostics": {
+              "tp": 1,
+              "fp": 1,
+              "fn": 1
+            }
+          },
+          "must-redact/T2": {
+            "population": "positive",
+            "files": 2,
+            "spans": 2,
+            "secret_bytes": 70,
+            "outcomes": {
+              "EXACT": 0,
+              "COVERED": 0,
+              "OVERBROAD": 1,
+              "PARTIAL": 1,
+              "MISS": 0
+            },
+            "pending_files": 1,
+            "measurable_share": "insufficient-evidence",
+            "envelope_width": {
+              "spans": 0,
+              "bytes": 0
+            },
+            "leaked_spans": 1,
+            "leaked_span_rate": "insufficient-evidence",
+            "leaked_bytes": 17,
+            "leaked_byte_rate": "insufficient-evidence",
+            "collateral_bytes": 6,
+            "collateral_ratio": "insufficient-evidence",
+            "twins": {
+              "positives": 2,
+              "pairs": 0,
+              "discriminated": 0,
+              "co_detected": 0,
+              "coverage": "insufficient-evidence",
+              "rate": null
+            },
+            "diagnostics": {
+              "tp": 0,
+              "fp": 2,
+              "fn": 2
+            }
+          },
+          "pending/T0": {
+            "population": "pending",
+            "files": 1,
+            "candidate_kinds": {
+              "must-redact": 1
+            }
+          },
+          "policy/T1": {
+            "population": "positive",
+            "files": 1,
+            "spans": 1,
+            "secret_bytes": 36,
+            "outcomes": {
+              "EXACT": 0,
+              "COVERED": 0,
+              "OVERBROAD": 0,
+              "PARTIAL": 0,
+              "MISS": 1
+            },
+            "pending_files": 0,
+            "measurable_share": "insufficient-evidence",
+            "envelope_width": {
+              "spans": 0,
+              "bytes": 0
+            },
+            "leaked_spans": 1,
+            "leaked_span_rate": "insufficient-evidence",
+            "leaked_bytes": 36,
+            "leaked_byte_rate": "insufficient-evidence",
+            "collateral_bytes": 0,
+            "collateral_ratio": "insufficient-evidence",
+            "twins": {
+              "positives": 1,
+              "pairs": 0,
+              "discriminated": 0,
+              "co_detected": 0,
+              "coverage": "insufficient-evidence",
+              "rate": null
+            },
+            "diagnostics": {
+              "tp": 0,
+              "fp": 1,
+              "fn": 1
+            }
+          }
+        },
+        "resolution": {},
+        "by_target": {},
+        "resolution_by_target": {}
       }
     },
     {
@@ -353,6 +498,7 @@
           "kind": "must-not-flag",
           "tier": "T1",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [],
           "actual": [],
           "measurement": {
@@ -366,6 +512,7 @@
           "kind": "must-redact",
           "tier": "T0",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 14,
@@ -385,6 +532,7 @@
           "kind": "must-redact",
           "tier": "T1",
           "family": "example-bearer-token",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 22,
@@ -408,6 +556,7 @@
           "kind": "must-redact",
           "tier": "T1",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 38,
@@ -427,6 +576,7 @@
           "kind": "policy",
           "tier": "T1",
           "family": "example-key-pair",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 10,
@@ -451,6 +601,7 @@
           "kind": "must-redact",
           "tier": "T2",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 6,
@@ -470,6 +621,7 @@
           "kind": "must-redact",
           "tier": "T2",
           "family": "example-api-key",
+          "group": "contracts-smoke",
           "expected": [
             {
               "start": 20,
@@ -490,6 +642,8 @@
           "tier": "T1",
           "family": "example-api-key",
           "twin_of": "positive-exact",
+          "group": "contracts-smoke",
+          "twin_mutation_kind": "length",
           "expected": [],
           "actual": [],
           "measurement": {
@@ -501,12 +655,15 @@
       "assertions": [],
       "aggregates": {
         "groups": {},
-        "resolution": {}
+        "resolution": {},
+        "by_target": {},
+        "resolution_by_target": {}
       }
     }
   ],
   "variants": [],
   "comparisons": [],
+  "review_queue": [],
   "non_semantic": {
     "durations_ms": {
       "fake-scanner-a": 7

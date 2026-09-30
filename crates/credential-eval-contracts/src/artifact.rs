@@ -41,6 +41,11 @@ pub struct RunArtifact {
     /// `(case_id, variant, reference, peer)`.
     #[serde(default)]
     pub comparisons: Vec<DifferentialComparison>,
+    /// Occurrences that need an authored decision (differential
+    /// disagreements and variants whose expectation could not be derived),
+    /// sorted by `id`. Never a verdict on any scanner.
+    #[serde(default)]
+    pub review_queue: Vec<ReviewOccurrence>,
     /// Timestamps and host diagnostics. Excluded from the semantic digest.
     pub non_semantic: NonSemantic,
 }
@@ -131,6 +136,21 @@ pub struct CaseResult {
     /// Positive case this control is a twin of, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub twin_of: Option<CaseId>,
+    /// Corpus group / category of the case (`Case.grouping.group`).
+    pub group: String,
+    /// Families the case targets (`Case.grouping.targets`; reporting strata
+    /// only). Sorted, unique; omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub targets: Vec<String>,
+    /// Benign-control taxonomy axis (`Case.grouping.taxonomy`), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taxonomy: Option<String>,
+    /// Evidence class label (`Case.grouping.evidence_class`), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_class: Option<String>,
+    /// Mutated property of an authored twin (`Case.twin.mutation_kind`), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub twin_mutation_kind: Option<String>,
     /// Authored spans (envelope reasons omitted).
     pub expected: Vec<ScoredSpan>,
     /// Findings on this case's path, sorted by `(start, end)`.
@@ -409,6 +429,38 @@ pub struct DifferentialComparison {
     pub classification_compared: Option<bool>,
 }
 
+/// One entry of the review queue: an occurrence that needs an authored
+/// decision. Neither scanner of a disagreement is ground truth.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewOccurrence {
+    /// Stable canonical id. It binds the case, its source digest and the
+    /// observation, and excludes every part of the reference scanner's
+    /// identity except its id, so reference releases do not re-key reviews.
+    pub id: Sha256Digest,
+    /// Evaluation case id.
+    pub case_id: CaseId,
+    /// Method that queued the occurrence.
+    pub method: ComponentId,
+    /// Variant the occurrence is about.
+    pub variant: ComponentId,
+    /// Baseline variant, for relation occurrences.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<ComponentId>,
+    /// Candidate variant, for relation occurrences.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate: Option<ComponentId>,
+    /// Reference scanner, for differential disagreements.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<ScannerId>,
+    /// Peer scanner, for differential disagreements.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peer: Option<ScannerId>,
+    /// Disagreement kind, for differential disagreements.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disagreement: Option<Disagreement>,
+}
+
 /// Aggregates for one scanner.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -419,6 +471,16 @@ pub struct Aggregates {
     /// Assertion resolution per stratum key `<method>/<kind>:<tier>/<assertion>`.
     #[serde(default)]
     pub resolution: BTreeMap<String, AccountedCounts>,
+    /// Per-target groups: for each target family, the `<kind>/<tier>` groups
+    /// of the cases that target it, accounted over the corpus groups that
+    /// hold them (a selected positive's twin and the selection's `T0` cases
+    /// travel with the group; legacy `selectionGroups`).
+    #[serde(default)]
+    pub by_target: BTreeMap<String, BTreeMap<String, GroupAggregate>>,
+    /// Per-target assertion resolution, keyed like `resolution`
+    /// (cases without targets count under `unassigned`).
+    #[serde(default)]
+    pub resolution_by_target: BTreeMap<String, BTreeMap<String, AccountedCounts>>,
 }
 
 /// One aggregate group.
@@ -705,6 +767,8 @@ impl RunArtifact {
         self.variants
             .sort_by(|a, b| (&a.case_id, &a.variant).cmp(&(&b.case_id, &b.variant)));
         self.comparisons.sort();
+        self.review_queue.sort();
+        self.review_queue.dedup();
     }
 
     /// Digest of the semantic content: the canonical JSON of the artifact with

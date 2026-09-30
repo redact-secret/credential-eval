@@ -70,6 +70,10 @@ fn complete_scan_maps_ranges_families_and_provenance() {
     assert!(!text.contains("\"Secret\""));
     let diagnostics = out.artifact.non_semantic.execution.as_ref().unwrap();
     assert_eq!(diagnostics.processes, 3); // version probe + 2 replays
+    // The kernel accounts the complete scanner's cases into the artifact.
+    let aggregates = &out.artifact.scanners[0].aggregates;
+    assert!(aggregates.groups.contains_key("must-redact/T1"));
+    assert!(aggregates.groups.contains_key("pending/T0"));
     assert_schema_valid(&out.artifact);
 }
 
