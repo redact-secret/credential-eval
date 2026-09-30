@@ -1,0 +1,34 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/credential-eval-contracts",
+    "crates/credential-eval-kernel",
+    "crates/credential-eval-adapters",
+    "crates/credential-eval-cli",
+]
+
+[workspace.package]
+# Implementation version. The measurement protocol and artifact schema
+# versions are separate constants in credential-eval-contracts.
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "UNLICENSED"
+publish = false
+repository = "https://github.com/redact-secret/credential-eval"
+
+[workspace.dependencies]
+credential-eval-contracts = { path = "crates/credential-eval-contracts" }
+credential-eval-kernel = { path = "crates/credential-eval-kernel" }
+credential-eval-adapters = { path = "crates/credential-eval-adapters" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+sha2 = "0.10"
+jsonschema = { version = "0.58", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

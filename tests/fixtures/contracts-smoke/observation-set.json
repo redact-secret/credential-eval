@@ -1,0 +1,96 @@
+{
+  "schema": "credential-eval/observation-set/v1",
+  "corpus_digest": "sha256:c7343b0567254cacae883e32bfa93a86747ff4b6beac2189c0e4bd59b6207523",
+  "observations": [
+    {
+      "scanner": {
+        "id": "fake-scanner-b",
+        "version": null,
+        "mode": "canned timeout",
+        "adapter": {
+          "id": "canned",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:d6dc29e57faa6cfb39c505e490b98410973c11c2d2c056f7a21ebd21b2e1e4cd"
+      },
+      "result": {
+        "status": "timeout",
+        "timeout_ms": 1000
+      }
+    },
+    {
+      "scanner": {
+        "id": "fake-scanner-a",
+        "version": "1.0.0",
+        "mode": "canned findings",
+        "adapter": {
+          "id": "canned",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:fb506980b5157ca5e891c674ab0627a0e14e39bf3c15f673bd0973678e9987ff"
+      },
+      "result": {
+        "status": "complete",
+        "findings": [
+          {
+            "path": "contracts-smoke/positive-exact.txt",
+            "start": 38,
+            "end": 71,
+            "family": "example-api-key"
+          },
+          {
+            "path": "contracts-smoke/positive-exact.txt",
+            "start": 38,
+            "end": 71,
+            "family": "example-api-key"
+          },
+          {
+            "path": "contracts-smoke/positive-envelope.txt",
+            "start": 15,
+            "end": 57,
+            "family": "example-bearer-token"
+          },
+          {
+            "path": "contracts-smoke/positive-overbroad.txt",
+            "start": 0,
+            "end": 39
+          },
+          {
+            "path": "contracts-smoke/positive-partial.txt",
+            "start": 20,
+            "end": 40,
+            "family": "example-api-key"
+          },
+          {
+            "path": "contracts-smoke/positive-miss-companion.txt",
+            "start": 10,
+            "end": 26
+          },
+          {
+            "path": "contracts-smoke/benign-placeholder.txt",
+            "start": 11,
+            "end": 30,
+            "family": "example-api-key",
+            "action": "warn"
+          },
+          {
+            "path": "contracts-smoke/twin-length.txt",
+            "start": 27,
+            "end": 34,
+            "family": "example-other-family"
+          },
+          {
+            "path": "contracts-smoke/pending-review.txt",
+            "start": 14,
+            "end": 37
+          }
+        ],
+        "replays": {
+          "count": 2,
+          "agreed": true
+        }
+      },
+      "duration_ms": 7
+    }
+  ]
+}

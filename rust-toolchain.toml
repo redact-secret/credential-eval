@@ -1,0 +1,5 @@
+[toolchain]
+# Pinned so formatting, lints and results do not drift with new stable releases.
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
