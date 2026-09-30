@@ -1,4 +1,4 @@
-# credential-eval
+# Credential Identify Evaluation (Cieval)
 
 A scanner-neutral credential evaluation engine focused on reproducibility, large-scale stress testing, and high-performance range evaluation.
 
@@ -276,3 +276,4 @@ packages installed (`cd adapters/node && npm ci --ignore-scripts`):
 ```bash
 CREDENTIAL_EVAL_REAL_SCANNERS=1 cargo test -p credential-eval-cli --test real_scanners -- --nocapture
 ```
+

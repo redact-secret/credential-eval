@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-adapters"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "credential-eval-contracts",
  "regex",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-cli"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "credential-eval-adapters",
  "credential-eval-compat",
@@ -143,7 +143,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-compat"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "credential-eval-contracts",
  "credential-eval-kernel",
@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-contracts"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "jsonschema",
  "schemars",
@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-kernel"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "credential-eval-contracts",
  "fancy-regex",
