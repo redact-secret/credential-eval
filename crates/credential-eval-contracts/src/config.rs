@@ -30,8 +30,24 @@ pub struct RunConfig {
 
 impl RunConfig {
     /// Canonical digest of this configuration.
+    ///
+    /// Two normalizations keep the hash about semantics, not presentation:
+    ///
+    /// * scheduling bounds (`execution.jobs` and each scanner's
+    ///   `limits.concurrency`) are set to their serial value `1`: by the
+    ///   determinism rule they cannot change semantic output, so a run with
+    ///   `--jobs 8` has the identity of the equivalent serial run;
+    /// * scanners are sorted by id, since their order is not semantic.
+    ///
+    /// Every other field, including timeouts and output caps, is hashed as given.
     pub fn config_hash(&self) -> Sha256Digest {
-        sha256_canonical(self)
+        let mut identity = self.clone();
+        identity.scanners.sort_by(|a, b| a.id.cmp(&b.id));
+        identity.execution.jobs = 1;
+        for scanner in &mut identity.scanners {
+            scanner.limits.concurrency = 1;
+        }
+        sha256_canonical(&identity)
     }
 }
 
@@ -85,7 +101,9 @@ pub struct AdapterIdentity {
 }
 
 /// Network permission for a scanner.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum NetworkPolicy {
     /// No network access is expected or permitted (default posture).

@@ -781,6 +781,50 @@
         }
       ]
     },
+    "ExecutionDiagnostics": {
+      "description": "Scheduling and timing diagnostics of a run. Never measurements.",
+      "type": "object",
+      "properties": {
+        "evaluator_ms": {
+          "description": "Evaluator-owned time, in milliseconds: corpus loading, materialization,\noutput normalization, scoring and serialization (summed over jobs).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "jobs": {
+          "description": "Effective global job bound the run was scheduled with.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "processes": {
+          "description": "Scanner process invocations that ran (version probes and scans).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "scanner_process_ms": {
+          "description": "Sum of scanner process wall-clock times, in milliseconds. With\nparallel jobs this can exceed `wall_ms`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "wall_ms": {
+          "description": "Wall-clock time of the whole run, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "jobs",
+        "processes",
+        "wall_ms",
+        "scanner_process_ms",
+        "evaluator_ms"
+      ]
+    },
     "FixturePath": {
       "type": "string",
       "maxLength": 512,
@@ -1061,6 +1105,21 @@
         "version"
       ]
     },
+    "NetworkPolicy": {
+      "description": "Network permission for a scanner.",
+      "oneOf": [
+        {
+          "description": "No network access is expected or permitted (default posture).",
+          "type": "string",
+          "const": "disabled"
+        },
+        {
+          "description": "The run explicitly authorizes network access (e.g. verification).",
+          "type": "string",
+          "const": "allowed"
+        }
+      ]
+    },
     "NonSemantic": {
       "description": "Non-semantic run metadata. Two runs of identical inputs may differ here\nand nowhere else.",
       "type": "object",
@@ -1073,6 +1132,17 @@
             "format": "uint64",
             "minimum": 0
           }
+        },
+        "execution": {
+          "description": "How the run was scheduled and where its time went.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionDiagnostics"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "finished_at": {
           "description": "RFC 3339 finish time.",
@@ -1288,6 +1358,80 @@
         "fn"
       ]
     },
+    "ProvenanceComponent": {
+      "description": "One executable, runtime or package that took part in a scan.",
+      "type": "object",
+      "properties": {
+        "integrity": {
+          "description": "npm Subresource Integrity string from the lockfile, for packages.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Component kind.",
+          "$ref": "#/$defs/ProvenanceKind"
+        },
+        "name": {
+          "description": "Name: the configured program name, or the npm package name.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of the component's bytes (an executable file, a lockfile, or a\npackage tree digest).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Version, when the component reports or declares one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name"
+      ]
+    },
+    "ProvenanceKind": {
+      "description": "Kind of a [`ProvenanceComponent`].",
+      "oneOf": [
+        {
+          "description": "A scanner executable resolved from the configured program.",
+          "type": "string",
+          "const": "executable"
+        },
+        {
+          "description": "A language runtime that hosts a shim (e.g. `node`).",
+          "type": "string",
+          "const": "runtime"
+        },
+        {
+          "description": "A shim script the adapter runs.",
+          "type": "string",
+          "const": "shim"
+        },
+        {
+          "description": "A lockfile pinning the packages.",
+          "type": "string",
+          "const": "lockfile"
+        },
+        {
+          "description": "An installed npm package.",
+          "type": "string",
+          "const": "npm-package"
+        }
+      ]
+    },
     "Published": {
       "description": "A published figure: a rate with its pessimistic bound, or an explicit\nwithholding. Where a figure is nullable, `null` means a zero denominator.",
       "anyOf": [
@@ -1458,6 +1602,17 @@
           "description": "Scanner mode as configured.",
           "type": "string"
         },
+        "provenance": {
+          "description": "Setup provenance recorded by the adapter: the network posture and the\ndigests of the executables and packages that actually ran. Absent in\nreplayed or canned observations that did not record it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "version": {
           "description": "Reported scanner version; `null` when it could not be determined\n(e.g. the scanner is unavailable).",
           "type": [
@@ -1472,6 +1627,35 @@
         "mode",
         "adapter",
         "configuration_hash"
+      ]
+    },
+    "ScannerProvenance": {
+      "description": "How a scanner was set up for a run. Every field is a reproduction\nidentity: it names bytes (by digest) and versions, never host paths.",
+      "type": "object",
+      "properties": {
+        "components": {
+          "description": "Executables, runtimes and packages that ran, sorted by `(kind, name)`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProvenanceComponent"
+          }
+        },
+        "network": {
+          "description": "Network posture the adapter ran the scanner under.",
+          "$ref": "#/$defs/NetworkPolicy"
+        },
+        "network_controls": {
+          "description": "What the adapter did to keep the posture, e.g.\n`[\"--no-verification\", \"--no-update\"]`. Sorted, unique.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "network",
+        "components"
       ]
     },
     "ScannerRun": {

@@ -16,6 +16,13 @@ path = "src/main.rs"
 credential-eval-contracts.workspace = true
 credential-eval-kernel.workspace = true
 credential-eval-adapters.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+ctrlc.workspace = true
+
+[dev-dependencies]
+jsonschema.workspace = true
 
 [lints]
 workspace = true

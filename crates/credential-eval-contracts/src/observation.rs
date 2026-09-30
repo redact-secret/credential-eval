@@ -11,7 +11,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::ContractError;
-use crate::config::AdapterIdentity;
+use crate::config::{AdapterIdentity, NetworkPolicy};
 use crate::corpus::CorpusSnapshot;
 use crate::ids::{FixturePath, ScannerId, Sha256Digest};
 use crate::range::ByteRange;
@@ -46,6 +46,68 @@ pub struct ScannerIdentity {
     pub adapter: AdapterIdentity,
     /// Canonical digest of the scanner configuration.
     pub configuration_hash: Sha256Digest,
+    /// Setup provenance recorded by the adapter: the network posture and the
+    /// digests of the executables and packages that actually ran. Absent in
+    /// replayed or canned observations that did not record it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<ScannerProvenance>,
+}
+
+/// How a scanner was set up for a run. Every field is a reproduction
+/// identity: it names bytes (by digest) and versions, never host paths.
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(deny_unknown_fields)]
+pub struct ScannerProvenance {
+    /// Network posture the adapter ran the scanner under.
+    pub network: NetworkPolicy,
+    /// What the adapter did to keep the posture, e.g.
+    /// `["--no-verification", "--no-update"]`. Sorted, unique.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub network_controls: Vec<String>,
+    /// Executables, runtimes and packages that ran, sorted by `(kind, name)`.
+    pub components: Vec<ProvenanceComponent>,
+}
+
+/// One executable, runtime or package that took part in a scan.
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(deny_unknown_fields)]
+pub struct ProvenanceComponent {
+    /// Component kind.
+    pub kind: ProvenanceKind,
+    /// Name: the configured program name, or the npm package name.
+    pub name: String,
+    /// Version, when the component reports or declares one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// SHA-256 of the component's bytes (an executable file, a lockfile, or a
+    /// package tree digest).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<Sha256Digest>,
+    /// npm Subresource Integrity string from the lockfile, for packages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integrity: Option<String>,
+}
+
+/// Kind of a [`ProvenanceComponent`].
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProvenanceKind {
+    /// A scanner executable resolved from the configured program.
+    Executable,
+    /// A language runtime that hosts a shim (e.g. `node`).
+    Runtime,
+    /// A shim script the adapter runs.
+    Shim,
+    /// A lockfile pinning the packages.
+    Lockfile,
+    /// An installed npm package.
+    NpmPackage,
 }
 
 /// One scanner's observation.

@@ -129,6 +129,7 @@ fn sample() -> RunArtifact {
                     version: "1".into(),
                 },
                 configuration_hash: digest('c'),
+                provenance: None,
             }],
         },
         scanners: vec![ScannerRun {

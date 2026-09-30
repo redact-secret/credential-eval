@@ -26,9 +26,21 @@ serde_json = "1"
 schemars = "1"
 sha2 = "0.10"
 jsonschema = { version = "0.58", default-features = false }
+regex = { version = "1", default-features = false, features = ["std", "perf", "unicode"] }
+url = "2"
+tempfile = "3"
+ctrlc = "3"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Hashing scanner executables (TruffleHog is ~160 MiB) and regex matching are
+# hot even in debug test runs; optimize those dependencies in every profile.
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.regex-automata]
+opt-level = 3

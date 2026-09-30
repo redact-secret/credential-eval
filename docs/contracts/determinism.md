@@ -35,8 +35,10 @@ differ in `family` or `action`, the value from the **last** one in adapter
 emission order wins. Legacy does the same with `Map.set` in
 `benchmarks/lib/scoring.ts:92-98`. Emission order can therefore matter only
 when one scanner reports the same range twice with different
-classifications. Adapters should emit their findings in a deterministic
-order.
+classifications. Adapters must emit their findings in a deterministic
+order. Gitleaks and TruffleHog do not keep their report order stable
+between runs, so their adapters process report rows in a canonical order
+([adapters.md](../adapters.md#determinism)).
 
 ## Semantic digest
 
@@ -47,7 +49,9 @@ for reproduction, dual-run and regression comparisons.
 ## Non-semantic metadata
 
 Only `non_semantic` may vary between identical runs. It holds `run_id`,
-`started_at`, `finished_at`, `host`, and per-scanner `durations_ms`.
+`started_at`, `finished_at`, `host`, per-scanner `durations_ms`, and
+`execution` (effective `jobs`, process count, `wall_ms`,
+`scanner_process_ms` and `evaluator_ms`).
 Durations separate scanner execution time from evaluator overhead, and they
 are diagnostics, never measurements.
 

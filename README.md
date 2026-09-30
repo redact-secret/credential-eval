@@ -210,9 +210,13 @@ What exists today:
   JSON Schemas.
 - An exact port of the legacy span lattice, used to exercise the contracts
   end to end on a synthetic fixture set.
+- Scanner adapters (#4) for Gitleaks, TruffleHog, Redact Secret,
+  flare-redact and OpenRedaction, ported from the legacy adapters, and a
+  `credential-eval run` command with bounded parallel execution
+  ([docs/adapters.md](docs/adapters.md)).
 
-The kernel (#3), the adapters (#4), parity (#5) and the `run` command are
-not implemented yet. The v1 schemas are not frozen, so do not depend on
+The rest of the kernel (#3: aggregates, accounting, methods) and parity (#5)
+are not implemented yet. The v1 schemas are not frozen, so do not depend on
 internal APIs yet.
 
 ## Layout
@@ -222,10 +226,12 @@ Cargo.toml                         Cargo workspace
 crates/
   credential-eval-contracts/       serde types for every input/output document; schema generation
   credential-eval-kernel/          measurement kernel (lattice port today; accounting/methods in #3)
-  credential-eval-adapters/        scanner adapters (placeholder until #4)
-  credential-eval-cli/             `credential-eval` binary (only --version today)
+  credential-eval-adapters/        scanner adapters: execution, provenance, normalization
+  credential-eval-cli/             `credential-eval` binary and run orchestration
+adapters/node/                     Node shim + pinned npm scanner packages (npm ci --ignore-scripts)
 schemas/                           generated JSON Schemas (*-v1.schema.json)
 docs/contracts/                    contract, range, identity, outcome and determinism rules
+docs/adapters.md                   adapter protocol, built-in adapters, adding a scanner
 docs/migration/legacy-map.md       inventory of the legacy TypeScript engine
 docs/migration/redact-secret-cutover.md  handoff plan for Redact Secret tooling
 docs/qualification-boundary.md     what stays outside the engine; the consumer API
@@ -248,4 +254,12 @@ intentional contract change, regenerate both and review the diff:
 ```bash
 UPDATE_SCHEMAS=1 cargo test -p credential-eval-contracts --test schema_drift
 UPDATE_GOLDEN=1 cargo test -p credential-eval-kernel --test contracts_smoke
+```
+
+The real-scanner integration test is skipped unless enabled. It needs
+Gitleaks 8.30.1 and TruffleHog 3.97.4 first on `PATH` and the Node shim
+packages installed (`cd adapters/node && npm ci --ignore-scripts`):
+
+```bash
+CREDENTIAL_EVAL_REAL_SCANNERS=1 cargo test -p credential-eval-cli --test real_scanners -- --nocapture
 ```

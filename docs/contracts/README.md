@@ -89,7 +89,9 @@ a different corpus.
 
 Each `ScannerObservation` has:
 
-- `scanner`: `{id, version, mode, adapter, configuration_hash}`.
+- `scanner`: `{id, version, mode, adapter, configuration_hash, provenance?}`.
+  `provenance` records the network posture and the digests and versions of
+  what ran (see [../adapters.md](../adapters.md#provenance)).
 - `result`: tagged by `status`. The statuses are `complete` (findings plus
   replay record), `unstable` (replays disagreed; findings discarded),
   `unsupported`, `unavailable`, `timeout`, `malformed` and `error`.
@@ -107,7 +109,7 @@ raw scanner output.
 | `scanners[]` | One entry per scanner. Each has `status`, a sanitized `detail`, `replays`, deduplicated `findings[]`, `cases[]` (one `CaseResult` per corpus case), `assertions[]` (method assertions) and `aggregates`. |
 | `variants[]` | Lineage of generated variants: method, operator, parameters, strategy, relation, content digest. |
 | `comparisons[]` | Differential observations between a reference scanner and each peer. |
-| `non_semantic` | `run_id`, timestamps, host and durations. It is excluded from the semantic digest. |
+| `non_semantic` | `run_id`, timestamps, host, durations and execution diagnostics (jobs, wall, scanner-process and evaluator time). It is excluded from the semantic digest. |
 
 A `CaseResult` embeds `expected` (spans and envelopes, without reasons) and
 `actual` (the finding ranges on that path). A consumer can therefore
