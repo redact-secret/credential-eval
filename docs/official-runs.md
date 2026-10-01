@@ -68,9 +68,26 @@ and ignores everything else. It does not check who published the release, so
 a product-owned corpus is pinned the same way when its owner publishes a
 manifest in this shape
 ([multi-corpus-qualification.md](multi-corpus-qualification.md) §2). The release format belongs to
-`credential-evidence` (redact-secret/credential-evidence#17) and is not
-defined there yet. If #17 settles on different field names, the verifier
-follows it. That is a CLI change, not a contract change.
+`credential-evidence`: its ADR 0011 and `docs/releases.md` define it
+(`release-manifest.json`, format `credential-evidence/release-manifest` v1).
+The corpus snapshot is published as the release asset
+`credential-eval-corpus-snapshot.json` and listed in the manifest under the
+path `credential-eval/corpus-snapshot.json`; the manifest digest ships as
+`release-manifest.json.sha256`. The first release is `snapshot-2026.10.01`.
+For example:
+
+```bash
+gh release download snapshot-2026.10.01 -R redact-secret/credential-evidence
+credential-eval run --run-class official \
+  --corpus credential-eval-corpus-snapshot.json \
+  --evidence-release snapshot-2026.10.01 \
+  --evidence-manifest release-manifest.json \
+  --evidence-manifest-digest "$(cut -c1-64 release-manifest.json.sha256)" \
+  --config <run-config.json> --out results/local/artifact.json
+```
+
+If the release format changes field names, the verifier follows it. That is a
+CLI change, not a contract change.
 
 ## Scanner pins
 
