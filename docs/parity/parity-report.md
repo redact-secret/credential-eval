@@ -43,6 +43,42 @@ pipeline produced identical semantic digests.
 | Run config | [`tools/parity/run-config.json`](../../tools/parity/run-config.json) (built-in specs; Node-shim timeout 30 min and stdout cap 256 MiB, see below); `bench` config hash `sha256:79e8e4c4…`, `eval` config hash `sha256:fc299b4d…` |
 | Accounting | legacy `qualification/suite-v1.json` values (`min_denominator 5`, floors, `replays 2`, `z 1.96`, precision 6) |
 
+## Pin alignment with credential-evidence (issue #14)
+
+credential-eval's parity was proven at legacy
+`c403475476647bc98cc5864bccd7265eddebeb91`. credential-evidence proved its
+projection parity at legacy `ade8a10bd7922765110a68986b0690eb3861f2e5`
+(its `docs/migration/cutover.md`). `ade8a10` is an ancestor of `c403475`, 7
+commits earlier. Both results have to describe the same legacy inputs before
+`redact-secret-benchmarks` switches over.
+
+**This is a path-diff proof, not a re-run.** Parity was not re-run at either
+revision for this alignment. In the pinned legacy clone:
+
+```bash
+git diff --stat ade8a10 c403475 -- benchmarks/ scanners/ fixtures/ corpora/ schemas/ baselines/ \
+  package.json package-lock.json scripts/generate-fixtures.mjs
+#  benchmarks/feature-claims.json | 1090 ++++++++++++++++++++++++++++++++++++++++
+#  1 file changed, 1090 insertions(+)
+```
+
+The paths cover everything either parity harness reads: the legacy engine,
+`bench` and `eval` sources (`benchmarks/`), scanner adapters and peer pins
+(`scanners/`), fixtures and their generator, corpora, schemas, baselines and
+the npm dependency pins. The only change is a new data file,
+`benchmarks/feature-claims.json`. Nothing on the parity path reads it:
+`git grep -l feature-claims c403475` lists only the file itself, a decision
+record, `tests/feature-claims.test.mjs` and the site under `web/`, and none of
+the legacy engine, `bench`, `eval`, `tools/legacy-export/` or `tools/parity/`
+refers to it.
+
+So for every parity input the two revisions are byte-identical, and
+credential-eval's parity (above) and credential-evidence's projection parity
+hold at both `ade8a10` and `c403475`. The evidence is the path diff alone. If
+either repository re-pins to another legacy revision, the alignment must be
+proven again: by a new path diff that comes out clean in the same way, or,
+if any parity input changed, by re-running parity at the new pin.
+
 ## Reproduction
 
 ```sh

@@ -115,6 +115,25 @@ pub struct ScannerSpec {
     pub network: NetworkPolicy,
     /// Per-scanner resource bounds.
     pub limits: ScannerLimits,
+    /// What the scanner must resolve to (revision v1.1). An official run
+    /// requires a pin on every scanner and refuses to scan when one does not
+    /// match; an exploratory run ignores pins.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pin: Option<ScannerPin>,
+}
+
+/// The pinned identity of a scanner for an official run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ScannerPin {
+    /// Required resolved scanner version (`ScannerIdentity.version`).
+    pub version: String,
+    /// Required SHA-256 of the scanner executable (the provenance component
+    /// of kind `executable`). Only for executable scanners; npm-package
+    /// scanners are bound by their lockfile and package integrity in
+    /// provenance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<Sha256Digest>,
 }
 
 impl ScannerSpec {

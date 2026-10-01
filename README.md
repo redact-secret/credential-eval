@@ -120,6 +120,15 @@ digest, the config hash (scanners, limits, methods, reference, seed
 convention, evidence digest, accounting) and each scanner's identity and
 provenance, all recorded in the artifact.
 
+`--run-class official` verifies the snapshot against a pinned evidence
+release (`--evidence-release`, `--evidence-manifest`,
+`--evidence-manifest-digest`) and every scanner against its `pin` in the run
+configuration, and refuses to run (exit 4) on any mismatch. Runs are
+`exploratory` by default. Every artifact records its run class and a derived
+publication class, and only `public` artifacts may be consumed outside
+product qualification. Local runs go to the gitignored `results/local/` and
+are never published. See [docs/official-runs.md](docs/official-runs.md).
+
 ## Scanner adapters
 
 A scanner does not have to be implemented in Rust.
@@ -247,6 +256,7 @@ schemas/                           generated JSON Schemas (*-v1.schema.json)
 docs/contracts/                    contract, range, identity, outcome and determinism rules
 docs/decisions/                    architecture decision records (ADR 0001: v1 contract freeze)
 docs/adapters.md                   adapter protocol, built-in adapters, adding a scanner
+docs/official-runs.md              official vs exploratory runs, evidence release, pins, publication class
 docs/migration/legacy-map.md       inventory of the legacy TypeScript engine
 docs/migration/redact-secret-cutover.md  handoff plan for Redact Secret tooling
 docs/parity/                       dual-run parity report and sanitized summary (#5)

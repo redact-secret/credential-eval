@@ -8,6 +8,9 @@
 //!                     [--methods <m,...|all> [--reference <scanner>] [--evidence <file>]
 //!                      [--seed case-id|legacy-category] [--fail-on-assertions]
 //!                      [--legacy-eval-out <file>]]
+//!                     [--run-class official|exploratory]
+//!                     [--evidence-release <tag> --evidence-manifest <file>
+//!                      --evidence-manifest-digest <sha256>]
 //!                     [--require-complete] [--strict]
 //! credential-eval compat legacy-bench --artifact <artifact.json> --index <legacy-index.json>
 //!                     --out-dir <dir>
@@ -20,10 +23,18 @@
 //! generates every variant, scans the variant corpus and evaluates it (the
 //! legacy `eval` pipeline).
 //!
+//! `--run-class` defaults to `exploratory`. An `official` run needs a pinned
+//! evidence release and a `pin` on every configured scanner, and refuses to
+//! run when either does not verify (`docs/official-runs.md`). The evidence
+//! release flags may also be given to an exploratory run; a mismatch is then
+//! refused as well.
+//!
 //! Exit codes: 0 artifact written; 1 run failed (no artifact); 2 usage or
 //! configuration error; 3 artifact written but `--require-complete`/`--strict`
 //! was given and a scanner did not complete (or, for methods, a generation
 //! error occurred, or an assertion failed under `--fail-on-assertions`);
+//! 4 refused: the evidence snapshot did not verify against the pinned release,
+//! or (official run) a scanner did not match its pin (no artifact);
 //! 130 cancelled.
 
 #![forbid(unsafe_code)]
@@ -38,8 +49,9 @@ use std::process::ExitCode;
 use credential_eval_adapters::AdapterEnv;
 use credential_eval_adapters::process::CancelToken;
 use credential_eval_cli::evidence;
+use credential_eval_cli::official;
 use credential_eval_cli::orchestrate::{self, MethodRequest, RunError, RunRequest};
-use credential_eval_contracts::artifact::RunArtifact;
+use credential_eval_contracts::artifact::{RunArtifact, RunClass};
 use credential_eval_contracts::config::{EvaluationSettings, RunConfig, SeedConvention};
 use credential_eval_contracts::corpus::CorpusSnapshot;
 use credential_eval_contracts::ids::ScannerId;
@@ -55,6 +67,9 @@ usage:
                       [--methods <m,...|all> [--reference <scanner>] [--evidence <file>]
                        [--seed case-id|legacy-category] [--fail-on-assertions]
                        [--legacy-eval-out <file>]]
+                      [--run-class official|exploratory]
+                      [--evidence-release <tag> --evidence-manifest <file>
+                       --evidence-manifest-digest <sha256>]
                       [--require-complete] [--strict]
   credential-eval compat legacy-bench --artifact <artifact.json>
                       --index <legacy-index.json> --out-dir <dir>
@@ -86,6 +101,10 @@ struct RunArgs {
     seed: Option<SeedConvention>,
     fail_on_assertions: bool,
     legacy_eval_out: Option<PathBuf>,
+    run_class: Option<RunClass>,
+    evidence_release: Option<String>,
+    evidence_manifest: Option<PathBuf>,
+    evidence_manifest_digest: Option<String>,
 }
 
 fn parse_methods(list: &str) -> Result<Vec<MethodId>, Usage> {
@@ -164,6 +183,29 @@ fn parse(args: &[OsString]) -> Result<RunArgs, Usage> {
             }
             "--evidence" => parsed.evidence = Some(value()?.into()),
             "--legacy-eval-out" => parsed.legacy_eval_out = Some(value()?.into()),
+            "--run-class" => {
+                parsed.run_class = Some(
+                    value()?
+                        .to_str()
+                        .and_then(official::parse_run_class)
+                        .ok_or_else(|| usage("--run-class takes official or exploratory"))?,
+                );
+            }
+            "--evidence-release" => {
+                parsed.evidence_release = Some(
+                    value()?
+                        .into_string()
+                        .map_err(|_| usage("--evidence-release must be UTF-8"))?,
+                );
+            }
+            "--evidence-manifest" => parsed.evidence_manifest = Some(value()?.into()),
+            "--evidence-manifest-digest" => {
+                parsed.evidence_manifest_digest = Some(
+                    value()?
+                        .into_string()
+                        .map_err(|_| usage("--evidence-manifest-digest must be UTF-8"))?,
+                );
+            }
             "--seed" => {
                 parsed.seed = Some(match value()?.to_str() {
                     Some("case-id") => SeedConvention::CaseId,
@@ -320,8 +362,21 @@ fn summarize(artifact: &RunArtifact) -> bool {
             execution.evaluator_ms
         );
     }
+    eprintln!(
+        "run class {} · publication {}",
+        serde_name(&artifact.manifest.run_class),
+        serde_name(&artifact.manifest.publication)
+    );
     eprintln!("semantic digest {}", artifact.semantic_digest());
     incomplete
+}
+
+/// The serialized name of an optional enum value (`unrecorded` when absent).
+fn serde_name<T: serde::Serialize>(value: &Option<T>) -> String {
+    match serde_json::to_value(value) {
+        Ok(serde_json::Value::String(name)) => name,
+        _ => "unrecorded".into(),
+    }
 }
 
 fn fail(error: RunError) -> ExitCode {
@@ -333,6 +388,10 @@ fn fail(error: RunError) -> ExitCode {
         error @ RunError::Config(_) => {
             eprintln!("error: {error}");
             ExitCode::from(2)
+        }
+        error @ RunError::Refused(_) => {
+            eprintln!("error: {error}; no artifact written");
+            ExitCode::from(4)
         }
         error => {
             eprintln!("error: {error}");
@@ -374,16 +433,76 @@ fn run(args: &[OsString]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let corpus = match fs::read(corpus_path)
-        .map_err(|e| e.to_string())
-        .and_then(|bytes| CorpusSnapshot::from_json(&bytes).map_err(|e| e.to_string()))
-    {
+    let run_class = args.run_class.unwrap_or(RunClass::Exploratory);
+    let release = match (
+        &args.evidence_release,
+        &args.evidence_manifest,
+        &args.evidence_manifest_digest,
+    ) {
+        (None, None, None) => None,
+        (Some(tag), Some(manifest), Some(digest)) => Some((tag, manifest, digest)),
+        _ => {
+            eprintln!(
+                "error: --evidence-release, --evidence-manifest and --evidence-manifest-digest go together"
+            );
+            return ExitCode::from(2);
+        }
+    };
+    if run_class == RunClass::Official {
+        if release.is_none() {
+            eprintln!(
+                "error: an official run needs a pinned evidence release \
+                 (--evidence-release, --evidence-manifest, --evidence-manifest-digest)"
+            );
+            return ExitCode::from(2);
+        }
+        if let Err(message) = official::check_official_config(&config) {
+            eprintln!("error: {message}");
+            return ExitCode::from(2);
+        }
+    }
+    let corpus_bytes = match fs::read(corpus_path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln!("error: invalid corpus snapshot: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    let mut corpus = match CorpusSnapshot::from_json(&corpus_bytes) {
         Ok(corpus) => corpus,
         Err(message) => {
             eprintln!("error: invalid corpus snapshot: {message}");
             return ExitCode::from(1);
         }
     };
+    if corpus.identity.release.is_some() {
+        eprintln!(
+            "error: invalid corpus snapshot: identity.release is recorded by the evaluator \
+             after verification; pass --evidence-release instead"
+        );
+        return ExitCode::from(1);
+    }
+    if let Some((tag, manifest, digest)) = release {
+        let manifest = match read_bounded(
+            manifest,
+            official::MAX_RELEASE_MANIFEST_BYTES,
+            "--evidence-manifest",
+        ) {
+            Ok(bytes) => bytes,
+            Err(message) => {
+                eprintln!("error: {message}");
+                return ExitCode::from(2);
+            }
+        };
+        match official::verify_release(tag, digest, &manifest, &corpus_bytes) {
+            Ok(verified) => corpus.identity.release = Some(verified),
+            Err(message) => {
+                eprintln!("error: evidence release refused: {message}; no artifact written");
+                return ExitCode::from(4);
+            }
+        }
+    }
+    drop(corpus_bytes);
     let mut env = AdapterEnv::from_process();
     if let Some(dir) = &args.node_dir {
         env.node_dir.clone_from(dir);
@@ -401,6 +520,7 @@ fn run(args: &[OsString]) -> ExitCode {
         env: &env,
         work_dir: args.work_dir.as_deref(),
         cancel: &cancel,
+        enforce_pins: run_class == RunClass::Official,
     };
     let (observations, artifact, method_failure) = match &methods {
         None => match orchestrate::run(&request) {
@@ -436,6 +556,8 @@ fn run(args: &[OsString]) -> ExitCode {
             (output.observations, output.artifact, failed)
         }
     };
+    let mut artifact = artifact;
+    official::stamp(&mut artifact, run_class);
     if let Some(path) = &args.observations_out {
         if let Err(e) = write_atomic(path, &pretty(&observations)) {
             eprintln!("error: cannot write --observations-out: {e}");

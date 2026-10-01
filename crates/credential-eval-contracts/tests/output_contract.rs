@@ -5,9 +5,13 @@ use std::collections::BTreeMap;
 
 use credential_eval_contracts::artifact::*;
 use credential_eval_contracts::config::{AccountingConfig, AdapterIdentity, Floor};
-use credential_eval_contracts::corpus::{CaseKind, EvidenceTier, SnapshotIdentity, SpanRole};
-use credential_eval_contracts::ids::{CaseId, ComponentId, FixturePath, ScannerId, Sha256Digest};
-use credential_eval_contracts::observation::{ScannerIdentity, ScannerStatus};
+use credential_eval_contracts::corpus::{
+    CaseKind, EvidenceRelease, EvidenceTier, SnapshotIdentity, SpanRole,
+};
+use credential_eval_contracts::ids::{
+    CaseId, ComponentId, FixturePath, ReleaseTag, ScannerId, Sha256Digest,
+};
+use credential_eval_contracts::observation::{ScannerBuild, ScannerIdentity, ScannerStatus};
 use credential_eval_contracts::range::ByteRange;
 use credential_eval_contracts::schema::{RunArtifactSchema, all_schemas};
 use credential_eval_contracts::{ENGINE_NAME, PROTOCOL_VERSION};
@@ -102,6 +106,10 @@ fn sample() -> RunArtifact {
                 revision: "r1".into(),
                 evidence_schema: "synthetic-v1".into(),
                 corpus_digest: digest('a'),
+                release: Some(EvidenceRelease {
+                    tag: ReleaseTag::new("snapshot-2026.10.01").unwrap(),
+                    manifest_digest: digest('d'),
+                }),
             },
             config_hash: digest('b'),
             accounting: AccountingConfig {
@@ -130,7 +138,10 @@ fn sample() -> RunArtifact {
                 },
                 configuration_hash: digest('c'),
                 provenance: None,
+                build: Some(ScannerBuild::Released),
             }],
+            run_class: Some(RunClass::Official),
+            publication: Some(Publication::Public),
         },
         scanners: vec![ScannerRun {
             scanner: scanner.clone(),

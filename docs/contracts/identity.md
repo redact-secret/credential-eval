@@ -87,6 +87,9 @@ invalid range. So scanner results are never applied to changed fixture bytes.
 | scanner setup | `manifest.scanners[].provenance` (network posture; executable, runtime, shim, lockfile and npm package digests/versions/integrity) |
 | run configuration | `manifest.config_hash` (plus `manifest.accounting` inline) |
 | methods | `manifest.methods[] {id, version}` |
+| evidence release (v1.1, when pinned) | `manifest.evidence.release {tag, manifest_digest}` |
+| scanner build (v1.1) | `manifest.scanners[].build` (`released` \| `candidate`) |
+| run and publication class (v1.1) | `manifest.run_class`, `manifest.publication` |
 
 Together these identify a run for reproduction. Two runs with equal
 identities must produce equal semantic digests ([determinism.md](determinism.md)).
@@ -99,3 +102,10 @@ test `run_artifact_requires_every_reproduction_identity` in
 them stops being required. `methods` defaults to an empty list for a plain
 corpus run, and `provenance` is absent only in replayed or canned
 observations that did not record it.
+
+The v1.1 rows are optional for compatibility with v1.0 artifacts, but the CLI
+writes `run_class`, `publication` and every scanner's `build` on every run, and
+writes `evidence.release` whenever a release was verified. An official run
+always has one ([../official-runs.md](../official-runs.md)). A reader treats
+a missing `run_class` as `exploratory`, a missing `publication` as
+`internal`, and a missing `build` as not released.

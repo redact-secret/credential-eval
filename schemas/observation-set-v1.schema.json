@@ -371,6 +371,21 @@
         "agreed"
       ]
     },
+    "ScannerBuild": {
+      "description": "Release state of the scanner build that ran.",
+      "oneOf": [
+        {
+          "description": "A published release (a released binary or a published package).",
+          "type": "string",
+          "const": "released"
+        },
+        {
+          "description": "An unreleased candidate build (e.g. packages from a candidate root).",
+          "type": "string",
+          "const": "candidate"
+        }
+      ]
+    },
     "ScannerId": {
       "type": "string",
       "maxLength": 64,
@@ -384,6 +399,17 @@
         "adapter": {
           "description": "Adapter identity.",
           "$ref": "#/$defs/AdapterIdentity"
+        },
+        "build": {
+          "description": "Whether the scanner is a released or a candidate build, as its adapter\nreports from the configuration (revision v1.1). Absent in observations\nthat did not record it; a reader treats absence as unknown, never as\n`released`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerBuild"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "configuration_hash": {
           "description": "Canonical digest of the scanner configuration.",
