@@ -6,6 +6,12 @@ This is an inventory of the TypeScript evaluation engine in
 `file:line` references are to that commit. Paths are relative to the legacy
 repository root unless they start with `crates/` or `docs/`.
 
+The current parity pin is `1020d2b5905e8973098235e57c4cdca3359bba57`
+(issue #20). The engine and adapter code this map describes is unchanged
+between the two commits, so the `file:line` references stay at `c403475`;
+the changed inputs are listed in the
+[parity report](../parity/parity-report.md#re-pin-to-1020d2b5-issue-20).
+
 The agents for issues #3 (kernel), #4 (adapters), #5 (parity) and
 #6 (qualification separation) work from this document. The kernel's
 intentional differences from what is described here are listed in

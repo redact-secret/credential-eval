@@ -6,7 +6,9 @@
 meant to be behavior-identical, and the golden oracle tests
 (`crates/credential-eval-kernel/tests/oracle.rs`, goldens in
 `tests/fixtures/oracle/`) check it against the legacy TypeScript on synthetic
-inputs.
+inputs. The current parity pin is
+`1020d2b5905e8973098235e57c4cdca3359bba57`, whose engine code is identical
+([parity report](../parity/parity-report.md#re-pin-to-1020d2b5-issue-20)).
 
 This page lists every **intentional** difference. Issue #5 (full-corpus
 parity) must either configure the kernel to reproduce legacy behavior (the

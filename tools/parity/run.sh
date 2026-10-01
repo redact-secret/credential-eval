@@ -1,9 +1,9 @@
 #!/bin/sh
-# Dual-run parity (issue #5): legacy redact-secret-benchmarks@c403475 vs credential-eval.
+# Dual-run parity (issue #5): legacy redact-secret-benchmarks@1020d2b5 vs credential-eval.
 #
 # Usage (from the credential-eval repository root):
 #
-#   LEGACY=/path/to/redact-secret-benchmarks   # pinned clone at c403475..., `npm ci` done,
+#   LEGACY=/path/to/redact-secret-benchmarks   # pinned clone at 1020d2b5..., `npm ci` done,
 #                                              # fixtures generated (npm run fixtures)
 #   PEER_BIN=/path/to/peer-bin                 # gitleaks 8.30.1 + trufflehog 3.97.4, provisioned
 #                                              # by $LEGACY/scripts/provision-peers.mjs
