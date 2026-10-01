@@ -120,6 +120,122 @@ configurations is separate. In any run class it marks a mismatched scanner
 `unavailable` (not measured). The `pin` is the run-level guarantee that an
 official artifact never contains another version.
 
+## Official configuration
+
+The public credential population is measured with a committed
+configuration:
+
+| File | Platform |
+|---|---|
+| [`configs/official/credential-public-v1.json`](../configs/official/credential-public-v1.json) | linux-x64, the `redact-secret-benchmarks` CI platform (canonical) |
+| [`configs/official/credential-public-v1.darwin-arm64.json`](../configs/official/credential-public-v1.darwin-arm64.json) | darwin-arm64, for local reproduction |
+
+Both are `tools/parity/run-config.json` (the configuration parity was proven
+with: same adapters, scanner configurations, bounds and accounting) plus a
+`pin` on every scanner, with `execution.jobs` 4 and no `methods`. Every
+scanner has `network: disabled`.
+
+| Scanner | `pin.version` | `pin.sha256` linux-x64 | `pin.sha256` darwin-arm64 |
+|---|---|---|---|
+| `gitleaks` | 8.30.1 | `sha256:88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509` | `sha256:ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f` |
+| `trufflehog` | 3.97.4 | `sha256:95c2a42bce979fce6dd73cc629b37ae4d72731b0dc16e047fba41a77bc765620` | `sha256:8c7af13e84f217bffd10aec09780fb7bbe59892187c99006291cef9c6f001beb` |
+| `redact-secret` | 0.1.0-beta.12 | n/a (npm) | n/a (npm) |
+| `flare-redact` | 1.6.1 | n/a (npm) | n/a (npm) |
+| `openredaction` | 1.1.5 | n/a (npm) | n/a (npm) |
+
+A `pin.sha256` is the SHA-256 of the extracted executable, not of the
+release archive. Its source is the upstream release archive, checked against
+the upstream checksum file before extraction:
+
+| Archive | Archive SHA-256 | Checksum file |
+|---|---|---|
+| `gitleaks_8.30.1_linux_x64.tar.gz` | `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb` | <https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt> |
+| `trufflehog_3.97.4_linux_amd64.tar.gz` | `dc24007c2f233bd61c05beabeb44aa27ea9b43288166279209abe0458c5ce76b` | <https://github.com/trufflesecurity/trufflehog/releases/download/v3.97.4/trufflehog_3.97.4_checksums.txt> |
+| `gitleaks_8.30.1_darwin_arm64.tar.gz` | `b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5` | same file as linux |
+| `trufflehog_3.97.4_darwin_arm64.tar.gz` | `57e2a41c1e196cf96cae49ca2151f5e9207be2f5c41349b5ea49cb5dcfc606b7` | same file as linux |
+
+The darwin archive digests also equal the legacy `scanners/peer-checksums.json`
+that parity used. The npm scanners are pinned by version here. Their
+`sha512` integrity is pinned by `adapters/node/package-lock.json`
+(`@redact-secret/core` `sha512-fDVwt2U7VFSK…`, `flare-redact`
+`sha512-13Htu6VPk2tt…`, `@openredaction/core` `sha512-SpQTBhVV4p3r…`), and
+the run records the integrity and an installed-tree digest in provenance.
+The lockfile also pins the platform packages of `@redact-secret/core`
+(`node-linux-x64-gnu`, `node-darwin-arm64`, ...). npm installs the one for
+the host.
+
+A pin holds one digest, and the pin is part of the configuration, so it
+enters `config_hash` and the semantic digest. That is why each platform has
+its own file. The files differ only in the two `pin.sha256` values
+(`crates/credential-eval-cli/tests/official_configs.rs` enforces that, plus
+schema validity, a pin on every scanner, `network: disabled`, and npm pin
+versions equal to the lockfile). Compare official artifacts across releases
+only when they come from the same file. The CI steps are in
+[consumers/benchmarks-quickstart.md](consumers/benchmarks-quickstart.md).
+
+## Verified official run
+
+One end-to-end official run of the committed configuration, made before
+`redact-secret-benchmarks` started its official-run phase. It is a local
+verification, not the official measurement (see [Local runs](#local-runs)),
+and the artifact was not committed. Only this sanitized summary is recorded.
+
+| Input | Identity |
+|---|---|
+| credential-eval | `0.1.0-alpha.1` at `d5f2fb2` plus this change (no engine or adapter code changed), protocol `credential-eval-protocol/1`, release build |
+| Evidence release | `snapshot-2026.10.01.2` (credential-evidence `a5362d6`), manifest `sha256:2557a72ae8dec3ca6d734a6c87b6db9cb4881543541693a4555fdfd9f7ba26d8` |
+| Corpus | `source: credential-evidence`, `revision: records-tree-sha256:4cd72141c1deec4aef21c0f5b2d751c51eb3d7abe5088756219d99c93f464f50`, evidence schema `credential-evidence/schema/1.5.0`, 5,950 cases, `corpus_digest: sha256:1bc5a07b49dab7b8182f51bf11a65a9bb8a220adbd5216b364bc15b2d8e6a5af` |
+| Configuration | `configs/official/credential-public-v1.darwin-arm64.json`, `config_hash: sha256:042691470c89d6ae4b088dcb1ed941be33c499bb2269b18e60ffb137e19aa5d7` |
+| Host | darwin-arm64, Node v22.16.0, `--jobs 4`, `--require-complete`, shared host (load average about 50) |
+
+```bash
+credential-eval run --run-class official \
+  --corpus credential-eval-corpus-snapshot.json \
+  --evidence-release snapshot-2026.10.01.2 \
+  --evidence-manifest release-manifest.json \
+  --evidence-manifest-digest sha256:2557a72ae8dec3ca6d734a6c87b6db9cb4881543541693a4555fdfd9f7ba26d8 \
+  --config configs/official/credential-public-v1.darwin-arm64.json \
+  --node-dir adapters/node --jobs 4 --require-complete --out results/local/artifact.json
+```
+
+Result: exit 0, `run_class: official`, `publication: public`, artifact valid
+against `schemas/run-artifact-v1.schema.json`, semantic digest
+`sha256:babea44c2c5b79b13cefe32fec39534f24b593dc0da5279dbb2c940965e5410f`.
+
+| Scanner | Version (pin) | Build | Status | Replays | Findings | Scanner time |
+|---|---|---|---|---|---|---|
+| `flare-redact` | 1.6.1 | released | complete | 2, agreed | 1,111 | 46 s |
+| `gitleaks` | 8.30.1, executable `sha256:ba52fb1b…` | released | complete | 2, agreed | 2,410 | 36 s |
+| `openredaction` | 1.1.5 | released | complete | 2, agreed | 27,253 | 445 s |
+| `redact-secret` | 0.1.0-beta.12 | released | complete | 2, agreed | 3,156 | 45 s |
+| `trufflehog` | 3.97.4, executable `sha256:8c7af13e…` | released | complete | 2, agreed | 1,046 | 122 s |
+
+The finding counts equal those of credential-evidence's five-scanner dual run
+over the same corpus
+([parity report](parity/parity-report.md#coverage-at-1020d2b5)).
+
+Durations (indicative only, shared host): wall 287 s for the run (291 s
+including process start), 694 s of scanner process time over 18 processes,
+evaluator 12 s. Release build 924 s with `CARGO_BUILD_JOBS=2`.
+
+Before it, a cheap validation. The configurations parse and validate
+against the schema (`tests/official_configs.rs`), the release manifest
+digest and the snapshot entry digest match, `trufflehog --version` and
+`gitleaks version` match the pins, and a 25-case exploratory smoke (20 cases
+spread over the sorted ids plus their twins) completed for all five scanners
+in 89 s. Then refusals were checked. Each exited 4, before any scan, with no
+artifact:
+
+| Refusal | Message (sanitized) | Time |
+|---|---|---|
+| wrong `--evidence-manifest-digest` | release manifest digest … does not match the pinned … | 1 s |
+| TruffleHog `pin.sha256` set to the linux-x64 digest on darwin | scanner trufflehog: executable digest … does not match pin … | 57 s |
+| TruffleHog `pin.version` 3.97.6 | scanner trufflehog: resolved version 3.97.4 does not match pin 3.97.6 | 48 s |
+
+A pin refusal comes after every scanner is prepared (version probes and
+installed-tree digests of the npm packages), which takes most of that time
+on a loaded host. No corpus file is scanned.
+
 ## Publication class
 
 ```text
