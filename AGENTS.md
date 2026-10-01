@@ -8,10 +8,11 @@ or assumptions from predecessor repositories.
 
 ## Repository boundary
 
-`credential-eval` measures scanner behavior. It consumes versioned
-`credential-evidence` snapshots, runs scanners through adapters, normalizes
-file/range findings, applies the measurement protocol, and emits reproducible
-artifacts.
+`credential-eval` measures scanner behavior. It consumes versioned corpus
+snapshots (public `credential-evidence` releases or separately identified
+product-owned corpora, one population per run), runs scanners through
+adapters, normalizes file/range findings, applies the measurement protocol,
+and emits reproducible artifacts. See `docs/multi-corpus-qualification.md`.
 
 This repository does not own credential truth, Redact Secret support status,
 release policy, public-site content, or scanner rankings. Never change an
