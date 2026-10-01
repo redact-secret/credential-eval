@@ -51,9 +51,11 @@ The kernel scores every case of a non-`complete` scanner as
 
 ## Normalization rules (ported from legacy `scanners/index.mjs`)
 
-These rules reproduce the pinned oracle commit
-`c403475476647bc98cc5864bccd7265eddebeb91` exactly
-(`docs/migration/legacy-map.md` §5).
+These rules reproduce the legacy adapters exactly
+(`docs/migration/legacy-map.md` §5). They were ported at
+`c403475476647bc98cc5864bccd7265eddebeb91`; the current parity pin,
+`1020d2b5905e8973098235e57c4cdca3359bba57`, has byte-identical adapter code
+([parity report](parity/parity-report.md#re-pin-to-1020d2b5-issue-20)).
 
 - **Value + line → range** (`locate`): the reported value is byte-searched in
   the fixture, including overlapping hits. Candidates are filtered by the
@@ -174,7 +176,7 @@ the bytes.
 |---|---|---|---|
 | `gitleaks` | 2 | 8.30.1 (`required_version`) | `gitleaks dir <root> --no-banner --no-color --exit-code 0 --report-format json --report-path -`; 64 MiB stdout cap |
 | `trufflehog` | 2 | **3.97.4** (`required_version`; 3.97.6 re-keys results) | `trufflehog filesystem <root> --json --no-verification --no-update --results=verified,unknown,unverified` |
-| `redact-secret` | 3 | `@redact-secret/core` 0.1.0-beta.11 (lockfile) | shim, `initialize()` + `scan(text)` |
+| `redact-secret` | 3 | `@redact-secret/core` 0.1.0-beta.12 (lockfile) | shim, `initialize()` + `scan(text)` |
 | `flare-redact` | 1 | `flare-redact` 1.6.1 (lockfile) | shim, `scan(text, {disable:['pii','generic_assignment'], includeValues:false})` |
 | `openredaction` | 1 | `@openredaction/core` 1.1.5 (lockfile) | shim, `new OpenRedaction({}).detect(text)` |
 

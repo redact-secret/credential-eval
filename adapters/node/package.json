@@ -2,14 +2,14 @@
   "name": "credential-eval-node-shim",
   "version": "0.0.0",
   "private": true,
-  "description": "Node shim that runs npm-published scanners for credential-eval through their public APIs. Pins mirror redact-secret-benchmarks package.json at c403475476647bc98cc5864bccd7265eddebeb91.",
+  "description": "Node shim that runs npm-published scanners for credential-eval through their public APIs. Pins mirror redact-secret-benchmarks package.json at 1020d2b5905e8973098235e57c4cdca3359bba57.",
   "type": "module",
   "engines": {
     "node": ">=22.12.0 <23 || >=24 <25"
   },
   "dependencies": {
     "@openredaction/core": "1.1.5",
-    "@redact-secret/core": "0.1.0-beta.11",
+    "@redact-secret/core": "0.1.0-beta.12",
     "flare-redact": "1.6.1"
   }
 }

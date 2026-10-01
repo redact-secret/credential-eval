@@ -2,13 +2,13 @@
 // Dual-run parity comparator (issue #5; migration-only, delete with the compat layer).
 //
 // Compares the legacy TypeScript engine's outputs (redact-secret-benchmarks
-// @c403475) with credential-eval's outputs rendered through the
+// @1020d2b5) with credential-eval's outputs rendered through the
 // compatibility writer, dimension by dimension, and prints a sanitized
 // summary: counts, case/row ids and digests only. It never prints fixture
 // content, matched values or raw scanner output.
 //
 //   node tools/parity/compare.mjs bench <legacy public/results dir> <credential-eval compat dir>
-//        [--observations <credential-eval observation set>] [--json <summary.json>]
+//        [--observations <credential-eval observation set>] [--scanners <id,...>] [--json <summary.json>]
 //   node tools/parity/compare.mjs eval  <legacy evaluation.json> <credential-eval legacy-eval.json>
 //        [--observations <credential-eval observation set>] [--snapshot <exported snapshot>]
 //        [--json <summary.json>]
@@ -24,6 +24,10 @@
 // where legacy keeps whichever rule gitleaks happened to emit last. Every
 // effect of such a range (scores, groups, summaries) is listed by id.
 //
+// `--scanners` (bench only) restricts the comparison to the listed scanners,
+// for a minimal re-proof that re-ran only some of them (parity-report, issue
+// #20). Every other scanner in the legacy reports is skipped, not compared.
+//
 // Exit code: 0 when every difference is classified as explained, 1 otherwise.
 
 import { createHash } from 'node:crypto';
@@ -35,6 +39,8 @@ const option = (name) => { const i = rest.indexOf(name); return i >= 0 ? rest[i 
 const jsonOut = option('--json');
 const observationsPath = option('--observations');
 const snapshotPath = option('--snapshot');
+const onlyScanners = option('--scanners')?.split(',');
+const compared = (scanner) => !onlyScanners || onlyScanners.includes(scanner);
 if (!['bench', 'eval'].includes(mode) || !legacyPath || !oursPath) {
   console.error('usage: compare.mjs bench|eval <legacy> <ours> [--observations <file>] [--json <summary.json>]');
   process.exit(2);
@@ -133,7 +139,7 @@ function bench() {
     const ours = read(path.join(oursPath, file));
     record('bench.corpus-identity', legacy.corpusHash === ours.corpusHash && legacy.fixtureCount === ours.fixtureCount && legacy.expectedCount === ours.expectedCount, category);
     const oursById = new Map(ours.scanners.map((s) => [s.id, s]));
-    for (const ls of legacy.scanners) {
+    for (const ls of legacy.scanners.filter((s) => compared(s.id))) {
       const os = oursById.get(ls.id);
       const key = `${category}/${ls.id}`;
       record('bench.scanner-status', os && ls.status === os.status && ls.version === os.version && same(ls.replays ?? null, os.replays ?? null), key);
@@ -161,9 +167,9 @@ function bench() {
   // summary.json (cross-suite selection groups).
   const ls = read(path.join(legacyPath, 'summary.json')), os = read(path.join(oursPath, 'summary.json'));
   const knownScanners = new Set([...affected.keys()].map((k) => k.split('/')[1]));
-  for (const scanner of Object.keys(ls.overall)) record('bench.summary-overall', same(ls.overall[scanner], os.overall?.[scanner]), scanner, knownScanners.has(scanner) ? 'known-nondeterminism' : 'unexplained');
+  for (const scanner of Object.keys(ls.overall).filter(compared)) record('bench.summary-overall', same(ls.overall[scanner], os.overall?.[scanner]), scanner, knownScanners.has(scanner) ? 'known-nondeterminism' : 'unexplained');
   for (const detector of Object.keys(ls.byDetector))
-    for (const scanner of new Set([...Object.keys(ls.byDetector[detector]), ...Object.keys(os.byDetector?.[detector] ?? {})]))
+    for (const scanner of new Set([...Object.keys(ls.byDetector[detector]), ...Object.keys(os.byDetector?.[detector] ?? {})].filter(compared)))
       record('bench.summary-by-detector', same(ls.byDetector[detector][scanner], os.byDetector?.[detector]?.[scanner]), `${detector}/${scanner}`, knownScanners.has(scanner) ? 'known-nondeterminism' : 'unexplained');
   return { rows, knownFamilyRanges: [...knownFamilyRanges].sort(), affectedRows: Object.fromEntries([...affected].sort()) };
 }
@@ -328,7 +334,7 @@ for (const [name, d] of [...dimensions].sort(([a], [b]) => a.localeCompare(b))) 
   const note = Object.entries(d.deltas).map(([k, ids]) => `${k} ${ids.length}`).join(', ');
   console.log(`${name.padEnd(44)} ${String(d.matched).padStart(7)} / ${String(d.compared).padEnd(7)} ${note}`);
 }
-const summary = { mode, legacyDigest: digest(read(mode === 'eval' ? legacyPath : path.join(legacyPath, 'summary.json'))), dimensions: report, ...extra, unexplained };
+const summary = { mode, legacyDigest: digest(read(mode === 'eval' ? legacyPath : path.join(legacyPath, 'summary.json'))), dimensions: report, ...(onlyScanners ? { scanners: onlyScanners } : {}), ...extra, unexplained };
 console.log(`unexplained differences: ${unexplained}`);
 if (jsonOut) writeFileSync(jsonOut, JSON.stringify(summary, null, 2) + '\n');
 process.exitCode = unexplained ? 1 : 0;

@@ -27,7 +27,7 @@
 //
 // Usage (from the credential-eval repository root):
 //
-//   LEGACY=/path/to/redact-secret-benchmarks   # pinned at c403475476647bc98cc5864bccd7265eddebeb91
+//   LEGACY=/path/to/redact-secret-benchmarks   # pinned at 1020d2b5905e8973098235e57c4cdca3359bba57
 //   "$LEGACY/node_modules/.bin/tsx" tools/legacy-export/export.mts "$LEGACY" <out-dir>
 //
 // The output is deterministic (no timestamps, no host paths) and refuses any
@@ -40,7 +40,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const PINNED = 'c403475476647bc98cc5864bccd7265eddebeb91';
+const PINNED = '1020d2b5905e8973098235e57c4cdca3359bba57';
 const [legacyRoot, outDir] = process.argv.slice(2);
 if (!legacyRoot || !outDir) throw new Error('usage: export.mts <legacy-root> <out-dir>');
 const commit = execFileSync('git', ['-C', legacyRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();

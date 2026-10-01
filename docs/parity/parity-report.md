@@ -1,7 +1,13 @@
 # Dual-run parity report (issue #5)
 
+> **Current pin: `1020d2b5905e8973098235e57c4cdca3359bba57`** (issue #20).
+> The full dual-run below was recorded at `c403475`. The move to `1020d2b5`
+> was re-proven minimally; see
+> [Re-pin to 1020d2b5](#re-pin-to-1020d2b5-issue-20) for exactly what was
+> and was not re-run.
+
 This report compares the legacy TypeScript engine of
-`redact-secret/redact-secret-benchmarks` at the pinned oracle commit
+`redact-secret/redact-secret-benchmarks` at the then-pinned oracle commit
 `c403475476647bc98cc5864bccd7265eddebeb91` with `credential-eval` on the
 same corpus, the same scanner versions and the same accounting parameters. It
 covers both legacy pipelines, each with its own comparison rule
@@ -79,10 +85,161 @@ either repository re-pins to another legacy revision, the alignment must be
 proven again: by a new path diff that comes out clean in the same way, or,
 if any parity input changed, by re-running parity at the new pin.
 
+## Re-pin to 1020d2b5 (issue #20)
+
+The legacy pin moved from `c403475476647bc98cc5864bccd7265eddebeb91` to
+`1020d2b5905e8973098235e57c4cdca3359bba57`. That is the
+`redact-secret-benchmarks` production revision that re-pinned to the
+published `@redact-secret/core` 0.1.0-beta.12
+(redact-secret-benchmarks#600, #601). credential-evidence re-pins to the
+same revision (credential-evidence#20). The maintainer decided on a
+**minimal re-proof**: a path diff, then `bench` parity on the changed
+inputs only. This is not a full re-run.
+
+### Path diff
+
+In the pinned legacy clone, over the same paths as the issue #14 alignment
+plus `qualification/`:
+
+```bash
+git diff --name-status c403475 1020d2b5 -- benchmarks/ scanners/ fixtures/ corpora/ schemas/ \
+  baselines/ qualification/ package.json package-lock.json scripts/generate-fixtures.mjs
+```
+
+57 files change across 71 commits. Grouped by what reads them:
+
+- **Engine and adapter code: unchanged.** `benchmarks/run.ts`,
+  `benchmarks/evaluate.ts`, `benchmarks/engine/`, every existing module in
+  `benchmarks/lib/` (scoring, lattice, accounting, reporting, run summary),
+  `scanners/*.mjs` (adapters, `families.mjs`, pins),
+  `scanners/peer-checksums.json` and `scripts/generate-fixtures.mjs` have no
+  diff.
+- **New or changed files that nothing on the parity path reads:**
+  `benchmarks/lib/peer-rule-families.ts`, `scanners/peer-rule-families.json`,
+  `scanners/peer-registry.json`,
+  `benchmarks/evaluation/domains/pii/runtime-comparison.ts` and
+  `peer-runtime-throughput.ts`, `benchmarks/evaluation/release-record*.ts`,
+  `qualification/runtime-comparison-v2.json`, `baselines/0.1.0-beta.12.json`.
+  None of these files is imported by `run.ts`, `evaluate.ts`, the
+  `benchmarks/lib` engine paths, `scanners/*.mjs`, `tools/legacy-export/` or
+  `tools/parity/`.
+- **Changed inputs.** The runs below re-prove these:
+  - `fixtures/generated/detector-coverage.mjs` adds 25 Stripe `sk_org_`
+    fixtures (`stripe-token-policy-org-*`: 15 policy/T3 positives and 10
+    controls). `benchmarks/generated-corpora.json` goes from 1,309 to 1,334
+    fixtures, and `benchmarks/fixture-detectors.json` and
+    `benchmarks/fixture-index.json` gain entries for them.
+  - `benchmarks/evaluation/domains/credential/assessment.ts` adds
+    classification rules for the `sk_org_` support-policy floor (field
+    claims, one `classifyFixture` rule and one control rule). The rule also
+    moves 3 existing fixtures, `stripe-token-shape-5-{bare,quoted,unicode-crlf}`,
+    from `pending` to `policy`/T3. The contract table is unchanged: the
+    exported `evidence.json` is byte-identical to the `c403475` export.
+  - `@redact-secret/core` goes from 0.1.0-beta.11 to 0.1.0-beta.12 in
+    `package.json`, `package-lock.json` and `qualification/suite-v1.json`.
+- **Data that does not reach either engine's semantics:** provider
+  dossiers, `feature-claims.json`, `detector-inventory.json`,
+  `detectors.json` (source revision only), `pin-manifest.json`,
+  `performance-criteria.json`, `review-ledger.json`,
+  `accepted-regressions.json` and `support/taxonomy.json` (one note). Also
+  `benchmarks/evaluation/domains/credential/evidence.ts` and
+  `benchmarks/validate-evidence.ts`, where qualification-evidence validation
+  now takes an optional frozen suite. That code is on neither the `bench`
+  nor the `eval` path.
+
+### What was re-run
+
+In credential-eval, `adapters/node` pins `@redact-secret/core`
+0.1.0-beta.12. All 12 lockfile entries match legacy's `package-lock.json`
+at `1020d2b5` in version, `resolved` and `integrity`. The adapter version
+stays `3`. [adapters.md](../adapters.md) bumps it only when invocation,
+parsing, offset conversion or family mapping changes, and none of them did:
+legacy `adapterVersion` is still 3, and `shim.mjs` and the configuration
+hash are unchanged. The new pin is recorded in `ScannerIdentity`: version
+0.1.0-beta.12, lockfile digest, package integrity and tree digest.
+
+Inputs were validated first. The exporter passed at `1020d2b5` (5,950
+cases from 67 categories, with fresh generated corpora and assessments).
+Every adapter resolved its pinned version. A 26-case smoke over the new
+fixtures completed for all five scanners. Then each run below ran once, in
+sequence, with `--jobs 4`, TruffleHog 3.97.4 and Gitleaks 8.30.1 first on
+`PATH`, and both engines in published mode:
+
+| Run | Input | Scanners | Rows compared | Unexplained | Legacy | credential-eval |
+|---|---|---|---|---|---|---|
+| (a) `bench` | `detector-coverage` category, 1,334 fixtures: the 25 new `sk_org_` fixtures, the 3 reclassified shape-5 fixtures and the rest of that category | all five | 6,670 | 0 | 16 s | 9 s |
+| (b) `bench` | full projection, 5,950 cases, 67 categories | `redact-secret` 0.1.0-beta.12 only | 5,950 | 0 | 31 s | 8 s |
+
+Every dimension matched in both runs: corpus identity, scanner status and
+version, row sets, row metadata, expected spans, byte ranges, normalized
+findings, outcome lattice, group accounting, `accountingDelta`, and
+`summary.json` overall and byDetector (5/5 and 550/550 in run (a), 1/1 and
+110/110 in run (b)). No known-nondeterminism case occurred, and every
+legacy row was a fresh observation.
+
+Notes on scope:
+
+- Legacy `bench` can only restrict by category (`--category=`). A category
+  is also the smallest unit with its own corpus hash, group accounting and
+  summary. Run (a) therefore covers the whole `detector-coverage` category
+  rather than a filtered fixture list. credential-eval ran the same
+  category: the full export, filtered by `grouping.group`, with the corpus
+  digest recomputed and the legacy index filtered to that category.
+- Legacy `bench` always runs every registered scanner. In run (b) it ran
+  redact-secret live and reused its committed peer snapshots for the other
+  scanners. Those peer rows were not compared:
+  `compare.mjs bench --scanners redact-secret` limits the comparison to the
+  scanner that was re-run.
+
+### What was not re-run
+
+- The `eval` pipeline, in either engine. Its engine code is unchanged and
+  its evidence file is byte-identical. Its changed inputs are the same 25
+  new fixtures, the 3 reclassified fixtures and beta.12.
+- `bench` for Gitleaks, TruffleHog, flare-redact and OpenRedaction outside
+  `detector-coverage`. Their binaries, packages, adapters and those
+  fixtures are unchanged.
+- A second run of each pipeline to check determinism digests, and any
+  performance measurement.
+
+### Commands
+
+```sh
+# Legacy clone at 1020d2b5, npm ci (which generates the fixtures); PEER_BIN first on PATH.
+"$LEGACY/node_modules/.bin/tsx" tools/legacy-export/export.mts "$LEGACY" "$OUT/export"
+# (a) detector-coverage subset of the export: cases with grouping.group ==
+#     detector-coverage, corpus digest recomputed, index filtered -> $OUT/dc
+(cd "$LEGACY" && npm run bench -- --category=detector-coverage --live-peers)
+credential-eval run --corpus "$OUT/dc/snapshot.json" --config tools/parity/run-config.json \
+  --node-dir adapters/node --jobs 4 --out a/bench-artifact.json --observations-out a/bench-observations.json
+credential-eval compat legacy-bench --artifact a/bench-artifact.json --index "$OUT/dc/legacy-index.json" --out-dir a/bench-legacy
+node tools/parity/compare.mjs bench "$LEGACY/public/results" a/bench-legacy --observations a/bench-observations.json
+# (b) full corpus, redact-secret only
+(cd "$LEGACY" && npm run bench)
+credential-eval run --corpus "$OUT/export/snapshot.json" --config tools/parity/run-config.json \
+  --scanner redact-secret --node-dir adapters/node --jobs 4 --out b/bench-artifact.json --observations-out b/bench-observations.json
+credential-eval compat legacy-bench --artifact b/bench-artifact.json --index "$OUT/export/legacy-index.json" --out-dir b/bench-legacy
+node tools/parity/compare.mjs bench "$LEGACY/public/results" b/bench-legacy --observations b/bench-observations.json --scanners redact-secret
+```
+
+### Identities
+
+| Input | Identity |
+|---|---|
+| Parity projection | source `redact-secret-benchmarks@1020d2b (legacy parity projection)`, 5,950 cases, 67 categories, corpus digest `sha256:ff4b89214dbf1a84145c0ec666c4f1bce7790b753ed673df874e2f8e5a80981a` |
+| `detector-coverage` subset (a) | 1,334 cases, corpus digest `sha256:fe9a02e1c0a99b0e4b06f92b5684c7123d1da415baef7d352373bd7deb08f62f` |
+| `@redact-secret/core` | 0.1.0-beta.12, `sha512-fDVwt2U7VFSK…` (full values in the summary) |
+| Config hash | (a) `sha256:79e8e4c4…` (the same as at `c403475`), (b) `sha256:d019847c…` (`--scanner redact-secret`) |
+| Semantic digest | (a) `sha256:49e97800f70519a59733f90efcc4f29c897f2a4a16e80a8131973f2308a59c33`, (b) `sha256:e1110a7b6485e51c8423e5bd5a06b5ffdc2595d8b53383bc731ff54328b25a2f` |
+
+The sanitized record is `repin_1020d2b5` in
+[parity-summary.json](parity-summary.json). It holds counts, case ids and
+digests only. The rest of that file records the `c403475` full run.
+
 ## Reproduction
 
 ```sh
-LEGACY=/path/to/redact-secret-benchmarks   # clean clone at c403475…, npm ci, npm run fixtures
+LEGACY=/path/to/redact-secret-benchmarks   # clean clone at 1020d2b5…, npm ci, npm run fixtures
 PEER_BIN=/path/to/peer-bin                 # node $LEGACY/scripts/provision-peers.mjs output
 OUT=/path/to/parity-out                    # never committed
 sh tools/parity/run.sh all                 # or: export | legacy | ours | compare

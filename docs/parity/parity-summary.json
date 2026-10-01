@@ -1709,5 +1709,435 @@
       }
     },
     "unexplained": 0
+  },
+  "repin_1020d2b5": {
+    "issue": "redact-secret/credential-eval#20",
+    "method": "Minimal re-proof: path diff c403475..1020d2b5 plus bench-pipeline parity on the changed inputs only. The eval pipeline was not re-run.",
+    "legacy": {
+      "repository": "redact-secret/redact-secret-benchmarks",
+      "commit": "1020d2b5905e8973098235e57c4cdca3359bba57",
+      "previous_commit": "c403475476647bc98cc5864bccd7265eddebeb91",
+      "node": "v22.16.0"
+    },
+    "corpus": {
+      "snapshot_identity": {
+        "source": "redact-secret-benchmarks@1020d2b (legacy parity projection)",
+        "revision": "1020d2b5905e8973098235e57c4cdca3359bba57",
+        "evidence_schema": "legacy-fixtures/v2 (parity projection)",
+        "corpus_digest": "sha256:ff4b89214dbf1a84145c0ec666c4f1bce7790b753ed673df874e2f8e5a80981a"
+      },
+      "cases": 5950,
+      "categories": 67,
+      "new_cases": [
+        "detector-coverage--stripe-token-policy-org-bare-19-control",
+        "detector-coverage--stripe-token-policy-org-bare-floor-bare",
+        "detector-coverage--stripe-token-policy-org-bare-floor-quoted",
+        "detector-coverage--stripe-token-policy-org-bare-floor-unicode-crlf",
+        "detector-coverage--stripe-token-policy-org-live-19-control",
+        "detector-coverage--stripe-token-policy-org-live-above-bare",
+        "detector-coverage--stripe-token-policy-org-live-above-quoted",
+        "detector-coverage--stripe-token-policy-org-live-above-unicode-crlf",
+        "detector-coverage--stripe-token-policy-org-live-embedded-control",
+        "detector-coverage--stripe-token-policy-org-live-floor-bare",
+        "detector-coverage--stripe-token-policy-org-live-floor-quoted",
+        "detector-coverage--stripe-token-policy-org-live-floor-unicode-crlf",
+        "detector-coverage--stripe-token-policy-org-live-no-body-control",
+        "detector-coverage--stripe-token-policy-org-live-underscore-control",
+        "detector-coverage--stripe-token-policy-org-rk-bare-control",
+        "detector-coverage--stripe-token-policy-org-rk-live-control",
+        "detector-coverage--stripe-token-policy-org-test-19-control",
+        "detector-coverage--stripe-token-policy-org-test-above-bare",
+        "detector-coverage--stripe-token-policy-org-test-above-quoted",
+        "detector-coverage--stripe-token-policy-org-test-above-unicode-crlf",
+        "detector-coverage--stripe-token-policy-org-test-floor-bare",
+        "detector-coverage--stripe-token-policy-org-test-floor-quoted",
+        "detector-coverage--stripe-token-policy-org-test-floor-unicode-crlf",
+        "detector-coverage--stripe-token-policy-org-test-hyphen-control",
+        "detector-coverage--stripe-token-policy-org-test-no-body-control"
+      ],
+      "reclassified_cases": [
+        "detector-coverage--stripe-token-shape-5-bare",
+        "detector-coverage--stripe-token-shape-5-quoted",
+        "detector-coverage--stripe-token-shape-5-unicode-crlf"
+      ],
+      "export_sha256": {
+        "snapshot.json": "e8889ce885fedc52f323bd400d87d48a183677e6523fb2843e8fb71cd405d4ab",
+        "evidence.json": "915412b54dcd5ee9b79ccb5f302841c165c606065998b9ed4eb9a7ffafa17364",
+        "legacy-index.json": "11aab15eec572e12bdba97fae71d4d57805253221537bbdb926787d4eab6b50a"
+      }
+    },
+    "scanners": [
+      {
+        "id": "flare-redact",
+        "version": "1.6.1",
+        "adapter": {
+          "id": "flare-redact",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:f111f4606c9185205f16555c97493f82a9165e19afe05c38a9d4a4b399b36300",
+        "components": [
+          {
+            "kind": "runtime",
+            "name": "node",
+            "version": "v22.16.0",
+            "sha256": "sha256:a45751fbfe88440bebff63cd44814e4ed6deb642bc3e3c4a14c4f8ae0ed9e019",
+            "integrity": null
+          },
+          {
+            "kind": "shim",
+            "name": "shim.mjs",
+            "version": null,
+            "sha256": "sha256:195d02ca580c7652bafdfc82659566da61b19bba83dfcbf4a88d72f6dce1ed20",
+            "integrity": null
+          },
+          {
+            "kind": "lockfile",
+            "name": "package-lock.json",
+            "version": "3",
+            "sha256": "sha256:96d58d878d0c0ce57a36bf2dda2247a5d3a03a26fba25535963f827619091ec2",
+            "integrity": null
+          },
+          {
+            "kind": "npm-package",
+            "name": "flare-redact",
+            "version": "1.6.1",
+            "sha256": "sha256:0664dc9088fc61369ba53d735653b00c2f3aff3aadf4f08d2cbc7b78281f628d",
+            "integrity": "sha512-13Htu6VPk2ttxcoVOP909pXao6orrIBAMS/qWdhQn3/BS5AxSB5fpyqaPZnRGJhfBAM2M9T+RE662hxEpv6nGQ=="
+          }
+        ]
+      },
+      {
+        "id": "gitleaks",
+        "version": "8.30.1",
+        "adapter": {
+          "id": "gitleaks",
+          "version": "2"
+        },
+        "configuration_hash": "sha256:345a2161fd1fbfc563bd41fc39ee552bc4518c43e179c4b734f8e66f6afbeb39",
+        "components": [
+          {
+            "kind": "executable",
+            "name": "gitleaks",
+            "version": "8.30.1",
+            "sha256": "sha256:ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f",
+            "integrity": null
+          }
+        ]
+      },
+      {
+        "id": "openredaction",
+        "version": "1.1.5",
+        "adapter": {
+          "id": "openredaction",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:b1db3e9c340b201725f947ea0cffd597ba64a20a5674f3dd57e50bef38e29974",
+        "components": [
+          {
+            "kind": "runtime",
+            "name": "node",
+            "version": "v22.16.0",
+            "sha256": "sha256:a45751fbfe88440bebff63cd44814e4ed6deb642bc3e3c4a14c4f8ae0ed9e019",
+            "integrity": null
+          },
+          {
+            "kind": "shim",
+            "name": "shim.mjs",
+            "version": null,
+            "sha256": "sha256:195d02ca580c7652bafdfc82659566da61b19bba83dfcbf4a88d72f6dce1ed20",
+            "integrity": null
+          },
+          {
+            "kind": "lockfile",
+            "name": "package-lock.json",
+            "version": "3",
+            "sha256": "sha256:96d58d878d0c0ce57a36bf2dda2247a5d3a03a26fba25535963f827619091ec2",
+            "integrity": null
+          },
+          {
+            "kind": "npm-package",
+            "name": "@openredaction/core",
+            "version": "1.1.5",
+            "sha256": "sha256:5bbb5867c3327cc5beb6352c9beea033e39baa4d5cf8e829f3fed36668ab71c3",
+            "integrity": "sha512-SpQTBhVV4p3rmge818NH6iJiL/fvwFlDvhGaejoL0wbzY7jRHIhU5vEf3KzNARsIZmpCJV1eHdiavIjQyN1hXQ=="
+          }
+        ]
+      },
+      {
+        "id": "redact-secret",
+        "version": "0.1.0-beta.12",
+        "adapter": {
+          "id": "redact-secret",
+          "version": "3"
+        },
+        "configuration_hash": "sha256:e8d78f1359d1d918a77664b56e8a54a0838a8d6e3509ce0ab60e18e9c76a8ea2",
+        "components": [
+          {
+            "kind": "runtime",
+            "name": "node",
+            "version": "v22.16.0",
+            "sha256": "sha256:a45751fbfe88440bebff63cd44814e4ed6deb642bc3e3c4a14c4f8ae0ed9e019",
+            "integrity": null
+          },
+          {
+            "kind": "shim",
+            "name": "shim.mjs",
+            "version": null,
+            "sha256": "sha256:195d02ca580c7652bafdfc82659566da61b19bba83dfcbf4a88d72f6dce1ed20",
+            "integrity": null
+          },
+          {
+            "kind": "lockfile",
+            "name": "package-lock.json",
+            "version": "3",
+            "sha256": "sha256:96d58d878d0c0ce57a36bf2dda2247a5d3a03a26fba25535963f827619091ec2",
+            "integrity": null
+          },
+          {
+            "kind": "npm-package",
+            "name": "@redact-secret/core",
+            "version": "0.1.0-beta.12",
+            "sha256": "sha256:b39f4244f48b6e29b36af7d5e9148f4822d5c7650683af7cda3232a729e18617",
+            "integrity": "sha512-fDVwt2U7VFSKb/0ixSuU5e+TOGVaUnyR1sIYwgS4S6gMndFnaq0M7ikaqac8wnTMYfYO/LS12JayXXeKbhE4aw=="
+          },
+          {
+            "kind": "npm-package",
+            "name": "@redact-secret/node-darwin-arm64",
+            "version": "0.1.0-beta.12",
+            "sha256": null,
+            "integrity": "sha512-xAA09sFA0bX1+4Ab7fT8Irgf3eLL0+SWB0hvVZ61xuR5WOGhKxpSFOgU1Gteyp/EmvX2RksqYEySijXYiRd+PA=="
+          },
+          {
+            "kind": "npm-package",
+            "name": "@redact-secret/wasm",
+            "version": "0.1.0-beta.12",
+            "sha256": null,
+            "integrity": "sha512-i9XV+P0j92z+00jujDe9MQdnniYGirSf3VJkqWe9iUwcn8T4e0++euDqxthIWXRQykIYPoHduM7AVyeUwo6iKg=="
+          }
+        ]
+      },
+      {
+        "id": "trufflehog",
+        "version": "3.97.4",
+        "adapter": {
+          "id": "trufflehog",
+          "version": "2"
+        },
+        "configuration_hash": "sha256:676ffe13805b6a1b278ef549e090c4d2f39eab5648565b8d9d5c2980159c230f",
+        "components": [
+          {
+            "kind": "executable",
+            "name": "trufflehog",
+            "version": "3.97.4",
+            "sha256": "sha256:8c7af13e84f217bffd10aec09780fb7bbe59892187c99006291cef9c6f001beb",
+            "integrity": null
+          }
+        ]
+      }
+    ],
+    "runs": {
+      "bench_detector_coverage_all_scanners": {
+        "scope": "detector-coverage category (1,334 fixtures): the 25 new sk_org_ fixtures, the 3 reclassified shape-5 fixtures and every other row of that category, all five scanners",
+        "legacy_command": "npm run bench -- --category=detector-coverage --live-peers",
+        "credential_eval_command": "credential-eval run --corpus <detector-coverage subset> --config tools/parity/run-config.json --node-dir adapters/node --jobs 4",
+        "scanners": [
+          "flare-redact",
+          "gitleaks",
+          "openredaction",
+          "redact-secret",
+          "trufflehog"
+        ],
+        "corpus_digest": "sha256:fe9a02e1c0a99b0e4b06f92b5684c7123d1da415baef7d352373bd7deb08f62f",
+        "cases": 1334,
+        "config_hash": "sha256:79e8e4c440567d9b176d7dc53f38a3d61a75bf2f580397c671a3b519573ebc0f",
+        "semantic_digest": "sha256:49e97800f70519a59733f90efcc4f29c897f2a4a16e80a8131973f2308a59c33",
+        "legacy_summary_digest": "sha256:e947f04e4f89ea24d9269c07ccad0772a9dcf077b9ddf93fdc3214a2683478aa",
+        "rows": 6670,
+        "known_nondeterministic_ranges": [],
+        "dimensions": {
+          "bench.accounting-delta": {
+            "compared": 5,
+            "matched": 5,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.byte-ranges": {
+            "compared": 6670,
+            "matched": 6670,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.categories": {
+            "compared": 1,
+            "matched": 1,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.corpus-identity": {
+            "compared": 1,
+            "matched": 1,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.expected": {
+            "compared": 6670,
+            "matched": 6670,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.findings": {
+            "compared": 6670,
+            "matched": 6670,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.group-accounting": {
+            "compared": 5,
+            "matched": 5,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.outcome-lattice": {
+            "compared": 6670,
+            "matched": 6670,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.row-metadata": {
+            "compared": 6670,
+            "matched": 6670,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.row-set": {
+            "compared": 5,
+            "matched": 5,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.scanner-status": {
+            "compared": 5,
+            "matched": 5,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.summary-by-detector": {
+            "compared": 550,
+            "matched": 550,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.summary-overall": {
+            "compared": 5,
+            "matched": 5,
+            "explained": {},
+            "unexplained": 0
+          }
+        },
+        "unexplained": 0
+      },
+      "bench_full_corpus_redact_secret": {
+        "scope": "full parity projection (5,950 cases, 67 categories), redact-secret 0.1.0-beta.12 only",
+        "legacy_command": "npm run bench (redact-secret live; peers reused from committed snapshots and not compared)",
+        "credential_eval_command": "credential-eval run --corpus snapshot.json --config tools/parity/run-config.json --scanner redact-secret --node-dir adapters/node --jobs 4",
+        "scanners": [
+          "redact-secret"
+        ],
+        "corpus_digest": "sha256:ff4b89214dbf1a84145c0ec666c4f1bce7790b753ed673df874e2f8e5a80981a",
+        "cases": 5950,
+        "config_hash": "sha256:d019847cbe7a703295aa783cf2a63be83d1408556e780de5dd30c320e905cf1d",
+        "semantic_digest": "sha256:e1110a7b6485e51c8423e5bd5a06b5ffdc2595d8b53383bc731ff54328b25a2f",
+        "legacy_summary_digest": "sha256:36c06715cfdda0db38dc12675197aaf09a49d795731b10c62e614c64d6e197b9",
+        "rows": 5950,
+        "known_nondeterministic_ranges": [],
+        "dimensions": {
+          "bench.accounting-delta": {
+            "compared": 67,
+            "matched": 67,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.byte-ranges": {
+            "compared": 5950,
+            "matched": 5950,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.categories": {
+            "compared": 67,
+            "matched": 67,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.corpus-identity": {
+            "compared": 67,
+            "matched": 67,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.expected": {
+            "compared": 5950,
+            "matched": 5950,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.findings": {
+            "compared": 5950,
+            "matched": 5950,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.group-accounting": {
+            "compared": 67,
+            "matched": 67,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.outcome-lattice": {
+            "compared": 5950,
+            "matched": 5950,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.row-metadata": {
+            "compared": 5950,
+            "matched": 5950,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.row-set": {
+            "compared": 67,
+            "matched": 67,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.scanner-status": {
+            "compared": 67,
+            "matched": 67,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.summary-by-detector": {
+            "compared": 110,
+            "matched": 110,
+            "explained": {},
+            "unexplained": 0
+          },
+          "bench.summary-overall": {
+            "compared": 1,
+            "matched": 1,
+            "explained": {},
+            "unexplained": 0
+          }
+        },
+        "unexplained": 0
+      }
+    },
+    "not_rerun": [
+      "eval pipeline",
+      "bench pipeline for gitleaks, trufflehog, flare-redact and openredaction outside detector-coverage",
+      "second-run determinism replays"
+    ],
+    "unexplained": 0
   }
 }
