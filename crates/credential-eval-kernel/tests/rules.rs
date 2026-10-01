@@ -436,6 +436,7 @@ fn identity(id: &str, version: &str) -> ScannerIdentity {
         },
         configuration_hash: Sha256Digest::new(format!("sha256:{}", "0".repeat(64))).unwrap(),
         provenance: None,
+        build: None,
     }
 }
 

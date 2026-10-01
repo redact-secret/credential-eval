@@ -51,6 +51,24 @@ pub struct ScannerIdentity {
     /// replayed or canned observations that did not record it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<ScannerProvenance>,
+    /// Whether the scanner is a released or a candidate build, as its adapter
+    /// reports from the configuration (revision v1.1). Absent in observations
+    /// that did not record it; a reader treats absence as unknown, never as
+    /// `released`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<ScannerBuild>,
+}
+
+/// Release state of the scanner build that ran.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum ScannerBuild {
+    /// A published release (a released binary or a published package).
+    Released,
+    /// An unreleased candidate build (e.g. packages from a candidate root).
+    Candidate,
 }
 
 /// How a scanner was set up for a run. Every field is a reproduction

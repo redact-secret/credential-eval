@@ -246,6 +246,7 @@ fn identity(id: &str, version: Option<&str>, configuration: &Value) -> ScannerId
         },
         configuration_hash: sha256_canonical(configuration),
         provenance: None,
+        build: None,
     }
 }
 

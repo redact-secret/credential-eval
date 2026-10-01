@@ -42,8 +42,8 @@ use credential_eval_contracts::config::{
 };
 use credential_eval_contracts::ids::{ComponentId, ScannerId};
 pub use credential_eval_contracts::observation::{
-    NormalizedFinding, ObservationResult, ProvenanceComponent, ProvenanceKind, ScannerIdentity,
-    ScannerObservation, ScannerProvenance,
+    NormalizedFinding, ObservationResult, ProvenanceComponent, ProvenanceKind, ScannerBuild,
+    ScannerIdentity, ScannerObservation, ScannerProvenance,
 };
 use serde_json::Value;
 
@@ -138,6 +138,11 @@ pub trait Adapter: Send + Sync {
 
     /// The default scanner spec (legacy mode, configuration and limits).
     fn default_spec(&self) -> ScannerSpec;
+
+    /// Whether `spec` runs a released or a candidate build. Decides the
+    /// artifact's publication class, so an adapter that cannot tell reports
+    /// [`ScannerBuild::Candidate`].
+    fn build(&self, spec: &ScannerSpec) -> ScannerBuild;
 
     /// Validate the configuration, resolve executables/packages, record
     /// provenance and probe the version. Runs only bounded processes.
@@ -288,6 +293,7 @@ pub(crate) fn spec(
         configuration: map.into_iter().collect(),
         network: NetworkPolicy::Disabled,
         limits,
+        pin: None,
     }
 }
 

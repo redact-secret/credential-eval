@@ -44,6 +44,7 @@ Related documents:
 | `identity.revision` | The immutable revision (commit or tag) of the source. |
 | `identity.evidence_schema` | The format label of the source evidence. |
 | `identity.corpus_digest` | `sha256:` digest of the cases ([identity.md](identity.md)). |
+| `identity.release` | v1.1, optional. The verified evidence release `{tag, manifest_digest}`. Only the evaluator writes it, after verifying the snapshot file against the release manifest; a snapshot input that declares it is rejected ([../official-runs.md](../official-runs.md)). |
 | `cases[]` | The evaluation cases. Their order carries no meaning. |
 
 Each `Case` has these fields:
@@ -79,6 +80,9 @@ Scanner execution inputs:
   - `network` is `disabled` unless the run explicitly allows network access.
   - `limits` are explicit: `timeout_ms`, `max_stdout_bytes`,
     `max_stderr_bytes` and `concurrency`. Nothing is unbounded by default.
+  - `pin` (v1.1, optional): `{version, sha256?}`, the version and executable
+    digest an official run requires; enforced before any scan
+    ([../official-runs.md](../official-runs.md)).
 - `methods[]`: the evaluation methods to apply (sorted, unique). Empty for a
   plain corpus measurement.
 - `evaluation`: present exactly when `methods` is non-empty.
@@ -120,7 +124,7 @@ raw scanner output.
 
 | Field | Meaning |
 |---|---|
-| `manifest` | The reproduction identities: `engine {name, version}`, `protocol_version`, `evidence` (snapshot identity including the corpus digest), `config_hash`, `accounting`, `methods[]`, and `scanners[]` (identity, version, mode, adapter and configuration hash for each scanner, including failed ones). |
+| `manifest` | The reproduction identities: `engine {name, version}`, `protocol_version`, `evidence` (snapshot identity including the corpus digest, and the verified `release` when one was pinned), `config_hash`, `accounting`, `methods[]`, and `scanners[]` (identity, version, mode, adapter, configuration hash and `build` for each scanner, including failed ones). Since v1.1 also `run_class` and the derived `publication` ([../official-runs.md](../official-runs.md)); only `public` artifacts may be consumed outside product qualification. |
 | `scanners[]` | One entry per scanner. Each has `status`, a sanitized `detail`, `replays`, deduplicated `findings[]`, `cases[]` (one `CaseResult` per corpus case), `assertions[]` (method assertions) and `aggregates`. |
 | `variants[]` | Lineage of generated variants: method, operator, parameters, strategy, relation, content digest. |
 | `comparisons[]` | Differential observations between a reference scanner and each peer. |
@@ -206,6 +210,7 @@ the legacy engine are listed in
 | Revision | Change | Issue |
 |---|---|---|
 | v1.0 | Frozen baseline: the four schemas in `crates/credential-eval-contracts/tests/frozen-v1/`, including P1 (`CaseResult` grouping fields), P2 (`review_queue`) and P3 (`aggregates.by_target`, `aggregates.resolution_by_target`). | #2, #3, #13 |
+| v1.1 | Official-run inputs ([../official-runs.md](../official-runs.md)), all optional: `SnapshotIdentity.release {tag, manifest_digest}` (the verified evidence release, written only by the evaluator), `ScannerSpec.pin {version, sha256?}`, `ScannerIdentity.build` (`released` \| `candidate`), `RunManifest.run_class` (`official` \| `exploratory`) and `RunManifest.publication` (`public` \| `internal`). Absent `run_class`/`publication` read as `exploratory`/`internal`; absent `build` is never `released`. | #14 |
 
 A reader validates with the schema of the engine version that wrote the
 document, or with any later v1 schema. Every struct sets

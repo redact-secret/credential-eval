@@ -175,6 +175,11 @@ const ALLOWLIST: &[(&str, &[&str], &str)] = &[
         "run configuration: human-readable mode label",
     ),
     (
+        "ScannerPin.version",
+        CONFIG,
+        "run configuration: the version an official run requires (v1.1)",
+    ),
+    (
         "ScannerIdentity.mode",
         OBSERVATIONS_AND_ARTIFACT,
         "copied from run configuration ScannerSpec.mode",

@@ -819,6 +819,25 @@
         "bytes"
       ]
     },
+    "EvidenceRelease": {
+      "description": "Identity of a verified evidence release: the tag a consumer pinned and the\ndigest of the release manifest whose snapshot entry matched the snapshot\nfile byte for byte.",
+      "type": "object",
+      "properties": {
+        "manifest_digest": {
+          "description": "SHA-256 of the release manifest file's bytes.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "tag": {
+          "description": "Release tag (e.g. `snapshot-2026.10.01`).",
+          "$ref": "#/$defs/ReleaseTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tag",
+        "manifest_digest"
+      ]
+    },
     "EvidenceTier": {
       "description": "Evidence tier of a case's expectation. `T0` means the expectation is\npending review: the case is observed but never scored.",
       "oneOf": [
@@ -1495,6 +1514,21 @@
         }
       ]
     },
+    "Publication": {
+      "description": "Who may consume an artifact. Derived, never chosen: `public` only for an\n`official` run whose scanners are all released builds.",
+      "oneOf": [
+        {
+          "description": "Safe for any consumer: an official run of released scanner builds.",
+          "type": "string",
+          "const": "public"
+        },
+        {
+          "description": "Product qualification only: an exploratory run, or a run that includes\na candidate (unreleased) scanner build.",
+          "type": "string",
+          "const": "internal"
+        }
+      ]
+    },
     "Published": {
       "description": "A published figure: a rate with its pessimistic bound, or an explicit\nwithholding. Where a figure is nullable, `null` means a zero denominator.",
       "anyOf": [
@@ -1563,6 +1597,12 @@
           "const": "must-flip"
         }
       ]
+    },
+    "ReleaseTag": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
     },
     "Replays": {
       "description": "Stability replay record.",
@@ -1673,6 +1713,21 @@
       "type": "string",
       "const": "credential-eval/run-artifact/v1"
     },
+    "RunClass": {
+      "description": "How a run was invoked. Not a measurement: it records which inputs were\nverified, and never changes an outcome.",
+      "oneOf": [
+        {
+          "description": "Every scanner was pinned and matched its pin, and the evidence\nsnapshot was verified against a pinned evidence release.",
+          "type": "string",
+          "const": "official"
+        },
+        {
+          "description": "Inputs were not (all) verified. Local and development runs; never\npublishable.",
+          "type": "string",
+          "const": "exploratory"
+        }
+      ]
+    },
     "RunManifest": {
       "description": "Reproduction identities of a run.",
       "type": "object",
@@ -1705,6 +1760,28 @@
           "description": "Measurement protocol version (independent of the engine version).",
           "type": "string"
         },
+        "publication": {
+          "description": "Who may consume the artifact (revision v1.1), derived from\n`run_class` and the scanners' `build`. Absent in artifacts written\nbefore v1.1; a reader treats absence as `internal`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Publication"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "run_class": {
+          "description": "How the run was invoked (revision v1.1). Absent in artifacts written\nbefore v1.1; a reader treats absence as `exploratory`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunClass"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "scanners": {
           "description": "Scanner identities, sorted by id. Includes failed/unavailable scanners.",
           "type": "array",
@@ -1723,6 +1800,21 @@
         "scanners"
       ]
     },
+    "ScannerBuild": {
+      "description": "Release state of the scanner build that ran.",
+      "oneOf": [
+        {
+          "description": "A published release (a released binary or a published package).",
+          "type": "string",
+          "const": "released"
+        },
+        {
+          "description": "An unreleased candidate build (e.g. packages from a candidate root).",
+          "type": "string",
+          "const": "candidate"
+        }
+      ]
+    },
     "ScannerId": {
       "type": "string",
       "maxLength": 64,
@@ -1736,6 +1828,17 @@
         "adapter": {
           "description": "Adapter identity.",
           "$ref": "#/$defs/AdapterIdentity"
+        },
+        "build": {
+          "description": "Whether the scanner is a released or a candidate build, as its adapter\nreports from the configuration (revision v1.1). Absent in observations\nthat did not record it; a reader treats absence as unknown, never as\n`released`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerBuild"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "configuration_hash": {
           "description": "Canonical digest of the scanner configuration.",
@@ -1967,6 +2070,17 @@
         "evidence_schema": {
           "description": "Schema/revision label of the source evidence format.",
           "type": "string"
+        },
+        "release": {
+          "description": "The pinned evidence release the snapshot file was verified against\n(revision v1.1). The evaluator writes it into a run manifest only after\nit has checked the snapshot bytes against the release manifest; a\nsnapshot input must not declare it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvidenceRelease"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "revision": {
           "description": "Immutable revision of the source (commit SHA or release tag).",

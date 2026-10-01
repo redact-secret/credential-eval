@@ -5,6 +5,7 @@
 #![forbid(unsafe_code)]
 
 pub mod evidence;
+pub mod official;
 pub mod orchestrate;
 pub mod time;
 

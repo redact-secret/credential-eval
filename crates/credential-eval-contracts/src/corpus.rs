@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ContractError;
 use crate::canonical::sha256_canonical;
-use crate::ids::{CaseId, FixturePath, Sha256Digest};
+use crate::ids::{CaseId, FixturePath, ReleaseTag, Sha256Digest};
 use crate::range::{ByteRange, Envelope};
 use crate::schema::CorpusSnapshotSchema;
 
@@ -42,6 +42,24 @@ pub struct SnapshotIdentity {
     pub evidence_schema: String,
     /// Digest of the cases; see [`corpus_digest`].
     pub corpus_digest: Sha256Digest,
+    /// The pinned evidence release the snapshot file was verified against
+    /// (revision v1.1). The evaluator writes it into a run manifest only after
+    /// it has checked the snapshot bytes against the release manifest; a
+    /// snapshot input must not declare it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release: Option<EvidenceRelease>,
+}
+
+/// Identity of a verified evidence release: the tag a consumer pinned and the
+/// digest of the release manifest whose snapshot entry matched the snapshot
+/// file byte for byte.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EvidenceRelease {
+    /// Release tag (e.g. `snapshot-2026.10.01`).
+    pub tag: ReleaseTag,
+    /// SHA-256 of the release manifest file's bytes.
+    pub manifest_digest: Sha256Digest,
 }
 
 /// One evaluation case: a fixture file plus its authored expectations.
@@ -221,6 +239,7 @@ impl CorpusSnapshot {
                 revision,
                 evidence_schema,
                 corpus_digest,
+                release: None,
             },
             cases,
         }

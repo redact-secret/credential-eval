@@ -46,6 +46,8 @@ pub enum RunError {
     Io(String),
     /// The run was cancelled.
     Cancelled,
+    /// An official run refused its inputs (a scanner did not match its pin).
+    Refused(String),
 }
 
 impl std::fmt::Display for RunError {
@@ -55,6 +57,7 @@ impl std::fmt::Display for RunError {
             Self::Corpus(m) => write!(f, "invalid corpus snapshot: {m}"),
             Self::Io(m) => write!(f, "I/O error: {m}"),
             Self::Cancelled => write!(f, "run cancelled"),
+            Self::Refused(m) => write!(f, "official run refused: {m}"),
         }
     }
 }
@@ -73,6 +76,9 @@ pub struct RunRequest<'a> {
     pub work_dir: Option<&'a Path>,
     /// Cancellation.
     pub cancel: &'a CancelToken,
+    /// Official run: refuse to scan unless every scanner resolved to its
+    /// `pin` ([`crate::official::check_pin`]). Exploratory runs ignore pins.
+    pub enforce_pins: bool,
 }
 
 /// Result of a run.
@@ -320,6 +326,18 @@ fn scan(
         processes += count;
         scanner_process += time;
         prepared.push(result);
+    }
+    if request.enforce_pins {
+        // Before any scan runs: an official run never measures an unpinned
+        // or mismatched scanner.
+        for (scanner, result) in scanners.iter().zip(&prepared) {
+            let (version, provenance) = match result {
+                Ok(p) => (p.version.as_deref(), &p.provenance),
+                Err(f) => (f.version.as_deref(), &f.provenance),
+            };
+            crate::official::check_pin(&scanner.spec, version, provenance)
+                .map_err(RunError::Refused)?;
+        }
     }
 
     // Fixed task list: scanners in id order, replays ascending.
@@ -619,6 +637,7 @@ fn observe(
         adapter: scanner.spec.adapter.clone(),
         configuration_hash: scanner.spec.configuration_hash(),
         provenance: Some(provenance),
+        build: Some(scanner.adapter.build(&scanner.spec)),
     };
     let duration_ms = Some(millis(duration));
     let prepared = match prepared {

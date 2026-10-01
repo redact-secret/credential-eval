@@ -269,6 +269,31 @@
         "concurrency"
       ]
     },
+    "ScannerPin": {
+      "description": "The pinned identity of a scanner for an official run.",
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "description": "Required SHA-256 of the scanner executable (the provenance component\nof kind `executable`). Only for executable scanners; npm-package\nscanners are bound by their lockfile and package integrity in\nprovenance.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Required resolved scanner version (`ScannerIdentity.version`).",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version"
+      ]
+    },
     "ScannerSpec": {
       "description": "How one scanner is to be executed.",
       "type": "object",
@@ -298,6 +323,17 @@
         "network": {
           "description": "Whether the scanner may use the network. Verification calls are off\nunless a run explicitly authorizes them.",
           "$ref": "#/$defs/NetworkPolicy"
+        },
+        "pin": {
+          "description": "What the scanner must resolve to (revision v1.1). An official run\nrequires a pin on every scanner and refuses to scan when one does not\nmatch; an exploratory run ignores pins.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerPin"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
