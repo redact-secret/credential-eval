@@ -21,8 +21,8 @@ use crate::locate::{
 };
 use crate::process::CancelToken;
 use crate::{
-    Adapter, AdapterEnv, Invocation, NormalizedFinding, PrepareFailure, Prepared, adapter_identity,
-    default_limits, spec,
+    Adapter, AdapterEnv, Invocation, NormalizedFinding, PrepareFailure, Prepared, ScannerBuild,
+    adapter_identity, default_limits, spec,
 };
 
 /// Adapter id.
@@ -48,6 +48,12 @@ pub struct Trufflehog;
 impl Adapter for Trufflehog {
     fn identity(&self) -> AdapterIdentity {
         adapter_identity(ID, VERSION)
+    }
+
+    fn build(&self, _spec: &ScannerSpec) -> ScannerBuild {
+        // A standalone executable resolved from the configured program. Its
+        // exact bytes are bound by a `pin.sha256` in an official run.
+        ScannerBuild::Released
     }
 
     fn default_spec(&self) -> ScannerSpec {

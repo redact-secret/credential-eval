@@ -84,6 +84,7 @@ pub fn run_with(corpus: &CorpusSnapshot, config: &RunConfig, env: &AdapterEnv) -
         env,
         work_dir: None,
         cancel: &CancelToken::new(),
+        enforce_pins: false,
     })
     .expect("run")
 }

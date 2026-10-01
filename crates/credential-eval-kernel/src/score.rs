@@ -215,6 +215,8 @@ pub fn build_artifact(
                 .iter()
                 .map(|o| o.scanner.clone())
                 .collect(),
+            run_class: None,
+            publication: None,
         },
         scanners,
         variants: Vec::new(),

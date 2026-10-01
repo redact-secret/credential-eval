@@ -69,6 +69,44 @@ pub struct RunManifest {
     pub methods: Vec<MethodIdentity>,
     /// Scanner identities, sorted by id. Includes failed/unavailable scanners.
     pub scanners: Vec<ScannerIdentity>,
+    /// How the run was invoked (revision v1.1). Absent in artifacts written
+    /// before v1.1; a reader treats absence as `exploratory`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_class: Option<RunClass>,
+    /// Who may consume the artifact (revision v1.1), derived from
+    /// `run_class` and the scanners' `build`. Absent in artifacts written
+    /// before v1.1; a reader treats absence as `internal`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publication: Option<Publication>,
+}
+
+/// How a run was invoked. Not a measurement: it records which inputs were
+/// verified, and never changes an outcome.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum RunClass {
+    /// Every scanner was pinned and matched its pin, and the evidence
+    /// snapshot was verified against a pinned evidence release.
+    Official,
+    /// Inputs were not (all) verified. Local and development runs; never
+    /// publishable.
+    Exploratory,
+}
+
+/// Who may consume an artifact. Derived, never chosen: `public` only for an
+/// `official` run whose scanners are all released builds.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum Publication {
+    /// Safe for any consumer: an official run of released scanner builds.
+    Public,
+    /// Product qualification only: an exploratory run, or a run that includes
+    /// a candidate (unreleased) scanner build.
+    Internal,
 }
 
 /// Engine identity.

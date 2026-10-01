@@ -31,8 +31,9 @@ use crate::locate::{Fixtures, MapError, Utf16Offsets};
 use crate::process::{self, CancelToken, ProcessRequest};
 use crate::provenance::{self, PackageProblem};
 use crate::{
-    Adapter, AdapterEnv, Invocation, NormalizedFinding, PrepareFailure, Prepared, adapter_identity,
-    check_configuration, classify_probe, config_str, default_limits, fail, invalid_config, spec,
+    Adapter, AdapterEnv, Invocation, NormalizedFinding, PrepareFailure, Prepared, ScannerBuild,
+    adapter_identity, check_configuration, classify_probe, config_str, default_limits, fail,
+    invalid_config, spec,
 };
 
 /// Shim exit code for "package not installed".
@@ -128,6 +129,19 @@ impl Adapter for NodeAdapter {
             Value::Object(configuration),
             default_limits(16 * 1024 * 1024),
         )
+    }
+
+    fn build(&self, spec: &ScannerSpec) -> ScannerBuild {
+        // Only the published packages pinned by the shim lockfile are
+        // released builds; a candidate root (or anything else) is not.
+        match spec
+            .configuration
+            .get("package_source")
+            .and_then(Value::as_str)
+        {
+            Some("published") => ScannerBuild::Released,
+            _ => ScannerBuild::Candidate,
+        }
     }
 
     fn prepare(

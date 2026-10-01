@@ -465,6 +465,7 @@ fn invalid_configurations_fail_before_running() {
             env: &env,
             work_dir: None,
             cancel: &credential_eval_adapters::process::CancelToken::new(),
+            enforce_pins: false,
         })
         .err()
         .expect("run must fail")

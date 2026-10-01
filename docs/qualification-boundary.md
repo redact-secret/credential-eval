@@ -170,7 +170,10 @@ What the engine provides: a candidate build is **just another scanner
 identity**. The Redact Secret adapter (#4) is configured with the candidate
 artifact digests; the digests enter the adapter `configuration` and so
 `manifest.scanners[].configuration_hash`, and the scanner's `version` and
-`mode` name the build. The engine does not know the build is a candidate.
+`mode` name the build. The measurement kernel does not know the build is a
+candidate. Since v1.1 the adapter reports `manifest.scanners[].build =
+"candidate"`, which only makes the artifact's publication class `internal`
+([official-runs.md](official-runs.md)); it changes no measurement.
 
 Credential-eval inputs it needs:
 
@@ -367,6 +370,14 @@ Consumer obligations:
    a withheld figure means for it; it must not substitute a point estimate.
 7. **Never sum across groups or scanners** into a single score. Legacy
    release records enforce the same rule (`release-record.ts:33-44`).
+8. **Respect the publication class.** Only an artifact with
+   `manifest.publication = "public"` (an official run of released scanner
+   builds) may be consumed outside product qualification, for example by a
+   scanner-observation view on `credential-evidence-site`. An `internal`
+   artifact is every exploratory run and every run that includes a
+   candidate build, and it stays within Redact Secret qualification. A
+   missing `publication` (a pre-v1.1 artifact) means `internal`
+   ([official-runs.md](official-runs.md)).
 
 ### 4.1 Family view (schema-level projection)
 

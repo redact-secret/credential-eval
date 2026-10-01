@@ -14,8 +14,8 @@ use crate::families::{FAMILY_MAPPING_VERSION, LabelTable, finding_family};
 use crate::locate::{Claims, Fixtures, Line, Located, MapError, locate, utf16_prefix_bytes};
 use crate::process::CancelToken;
 use crate::{
-    Adapter, AdapterEnv, Invocation, NormalizedFinding, PrepareFailure, Prepared, adapter_identity,
-    default_limits, spec,
+    Adapter, AdapterEnv, Invocation, NormalizedFinding, PrepareFailure, Prepared, ScannerBuild,
+    adapter_identity, default_limits, spec,
 };
 
 /// Adapter id.
@@ -45,6 +45,12 @@ pub struct Gitleaks;
 impl Adapter for Gitleaks {
     fn identity(&self) -> AdapterIdentity {
         adapter_identity(ID, VERSION)
+    }
+
+    fn build(&self, _spec: &ScannerSpec) -> ScannerBuild {
+        // A standalone executable resolved from the configured program. Its
+        // exact bytes are bound by a `pin.sha256` in an official run.
+        ScannerBuild::Released
     }
 
     fn default_spec(&self) -> ScannerSpec {

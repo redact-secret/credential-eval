@@ -46,8 +46,11 @@ ObservationSet v1 (peer snapshots, replays)
 The Redact Secret package is one scanner behind the `redact-secret` adapter
 (#4). A candidate build is the same adapter with a different configuration
 (candidate artifact digests), so it gets a different `configuration_hash`,
-`version` and `mode`. Peers stay pinned exactly as today (`gitleaks 8.30.1`,
-`trufflehog 3.97.4`; `qualification/suite-v1.json:12-16`).
+`version` and `mode`, and the adapter reports it as a `candidate` build, so
+the artifact is `internal`. Peers stay pinned exactly as today (`gitleaks 8.30.1`,
+`trufflehog 3.97.4`; `qualification/suite-v1.json:12-16`), now as `pin`
+entries in the run configuration of an `official` run, which refuses any
+other version or executable digest ([../official-runs.md](../official-runs.md)).
 
 ## 3. Entry points
 

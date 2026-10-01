@@ -30,3 +30,7 @@ public/results/.*.json
 /web/storybook-static/
 /web/next-env.d.ts
 /web/*.tsbuildinfo
+
+# Local run artifacts are temporary and never committed or published
+# (docs/official-runs.md).
+/results/local/

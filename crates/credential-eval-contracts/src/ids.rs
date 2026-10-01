@@ -111,6 +111,14 @@ fn fixture_path(value: &str) -> bool {
             .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
 }
 
+fn release_tag(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes[0].is_ascii_alphanumeric()
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
 fn sha256(value: &str) -> bool {
     value.strip_prefix("sha256:").is_some_and(|hex| {
         hex.len() == 64
@@ -148,6 +156,12 @@ validated_string!(
     Sha256Digest, kind = "digest", pattern = "^sha256:[0-9a-f]{64}$", max = 71, check = sha256
 );
 
+validated_string!(
+    /// A release tag of an evidence source (e.g. `snapshot-2026.10.01`):
+    /// ASCII letters, digits, `.`, `_` and `-`, starting with a letter or digit.
+    ReleaseTag, kind = "release tag", pattern = "^[A-Za-z0-9][A-Za-z0-9._-]*$", max = 128, check = release_tag
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,6 +180,15 @@ mod tests {
         assert!(FixturePath::new("smoke/positive-01.txt").is_ok());
         for bad in ["/abs", "a//b", "a/../b", "./a", "a/.", "a b", "a/"] {
             assert!(FixturePath::new(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn release_tags() {
+        assert!(ReleaseTag::new("snapshot-2026.10.01").is_ok());
+        assert!(ReleaseTag::new("v1.2.3_rc1").is_ok());
+        for bad in ["", "-x", ".x", "a b", "a/b", "tag:1"] {
+            assert!(ReleaseTag::new(bad).is_err(), "{bad}");
         }
     }
 

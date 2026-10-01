@@ -535,6 +535,8 @@ impl EvaluationReport {
                     .iter()
                     .map(|o| o.scanner.clone())
                     .collect(),
+                run_class: None,
+                publication: None,
             },
             scanners,
             variants: parts.variants,

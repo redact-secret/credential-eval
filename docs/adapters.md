@@ -24,6 +24,7 @@ CorpusSnapshot ──► materialize (temp dir) ──► adapter.scan_invocatio
 |---|---|
 | `identity()` | Adapter id and implementation version (`AdapterIdentity`). Bump the version whenever the invocation, parsing, offset conversion or family mapping changes. |
 | `default_spec()` | The default `ScannerSpec`: mode, `configuration` (recorded and hashed), `network: disabled`, and explicit `limits`. |
+| `build(spec)` | Whether the spec runs a `released` or a `candidate` build (`ScannerIdentity.build`). It decides the artifact's publication class ([official-runs.md](official-runs.md)), so an adapter that cannot tell reports `candidate`. |
 | `prepare(spec, env, cancel)` | Validate the configuration, resolve the executable or package, record provenance, probe the version (a bounded process). Returns `Prepared`, or a `PrepareFailure` that carries an explicit `ObservationResult`. |
 | `scan_invocation(prepared, root, paths)` | One `Invocation`: a program path, an argument vector and optional stdin bytes. There is never a shell. |
 | `normalize(prepared, stdout, fixtures)` | Map raw stdout to `NormalizedFinding`s in a deterministic order, or fail closed with a fixed `MapError` message. |
@@ -243,6 +244,8 @@ to other adapters.
    - `identity()`: a new adapter id and version `1`.
    - `default_spec()`: the mode string, configuration and explicit limits,
      with `network: disabled`.
+   - `build()`: `released` only for builds that are published releases;
+     anything else (candidate roots, local builds) is `candidate`.
    - `prepare()`: reuse `binary::prepare` for a standalone executable (it
      gives you configuration validation, `PATH` resolution, the version
      probe, `required_version` and executable provenance). Follow
