@@ -172,7 +172,9 @@ fill `assertions`, `aggregates.resolution*`, `variants`, `comparisons` and
 ### What a consumer needs
 
 A consumer needs the artifact and `schemas/run-artifact-v1.schema.json`. It
-does not need fixture bytes, the kernel or product code. The test
+does not need fixture bytes, the kernel or product code. One artifact covers
+one corpus; a consumer that combines artifacts of several corpora follows
+[../multi-corpus-qualification.md](../multi-corpus-qualification.md). The test
 `crates/credential-eval-kernel/tests/contracts_smoke.rs` shows this: it
 validates the committed smoke artifact with only the schema, then interprets
 it from plain JSON.

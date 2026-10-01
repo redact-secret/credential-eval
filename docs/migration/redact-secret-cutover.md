@@ -29,10 +29,10 @@ source of every published number. Parity differences are explained, never
 ## 2. Target shape
 
 ```text
-credential-evidence snapshot (or the legacy corpus exported to CorpusSnapshot v1)
-        │
+credential-evidence snapshot, a product-owned corpus, or the legacy corpus exported to CorpusSnapshot v1
+        │   (one run per corpus)
         ▼
-credential-eval run  ──▶  RunArtifact v1 (canonical, schema-validated)
+credential-eval run  ──▶  RunArtifact v1 (canonical, schema-validated; one per corpus)
         │                        │
         │                        ├──▶ compatibility writer (in credential-eval, isolated)
         │                        │        └─▶ legacy result files for the site and baselines
@@ -51,6 +51,32 @@ the artifact is `internal`. Peers stay pinned exactly as today (`gitleaks 8.30.1
 `trufflehog 3.97.4`; `qualification/suite-v1.json:12-16`), now as `pin`
 entries in the run configuration of an `official` run, which refuses any
 other version or executable digest ([../official-runs.md](../official-runs.md)).
+
+### 2.1 Product-owned corpora
+
+The cutover does not make the public `credential-evidence` snapshot the whole
+of Redact Secret qualification. Fixtures the legacy repository holds that are
+not public evidence (product regression cases, the T3 policy fixtures,
+candidate-specific cases, the protected holdout) stay with the product and
+become their own `CorpusSnapshot` populations, each measured in its own run.
+They are not merged into the public snapshot or into each other.
+
+The cutover implementation therefore needs, on the product side:
+
+- a population registry that pins each corpus's expected
+  `manifest.evidence` (and release tag and manifest digest for official runs)
+  and whether it may be published;
+- one `credential-eval run` per population, official for anything that feeds a
+  status or release decision; a product corpus is pinned by a release manifest
+  in the shape [../official-runs.md](../official-runs.md#evidence-input)
+  verifies;
+- `eval:classify` reading every artifact, keyed by population, with counts per
+  population and any cross-population figure defined in the policy.
+
+The rules and a worked example are in
+[../multi-corpus-qualification.md](../multi-corpus-qualification.md). A
+public evidence reclassification (for example, to `project-policy`) never
+changes a product status by itself; it is reviewed in policy (§4 there).
 
 ## 3. Entry points
 
@@ -155,6 +181,8 @@ Every product record derived from a run replaces its legacy engine provenance
 the artifact identities: `schema`, `manifest.engine`,
 `manifest.protocol_version`, `manifest.evidence` (including
 `corpus_digest`), `manifest.config_hash` and `manifest.scanners[]`, plus the
-digest of the artifact bytes it read. A record that compares two runs
-refuses different `protocol_version` or `corpus_digest` values unless its own
-policy says otherwise (boundary §4).
+digest of the artifact bytes it read, and the population label from its own
+registry. A record that cites several artifacts records each identity set. A
+record that compares two runs refuses different `protocol_version` or
+`corpus_digest` values unless its own policy says otherwise (boundary §4,
+[../multi-corpus-qualification.md](../multi-corpus-qualification.md) §6).

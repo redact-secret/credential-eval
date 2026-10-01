@@ -4,27 +4,32 @@
 
 `credential-eval` is the generic measurement engine in the credential evidence ecosystem.
 
-It consumes scanner-neutral cases from `credential-evidence`, executes one or more scanners, normalizes their findings, and produces reproducible measurement artifacts.
+It consumes scanner-neutral cases from `credential-evidence`, or from any other versioned corpus snapshot, executes one or more scanners, normalizes their findings, and produces reproducible measurement artifacts.
 
-It does not own credential truth and it does not own product qualification.
+It does not own credential truth, it does not decide which corpora a product qualifies against, and it does not own product qualification.
 
 ## Architectural boundary
 
 ```text
-credential-evidence
-        │
-        ▼
-credential-eval
-        │
-        ├─ scanner adapters
-        │
-        ▼
-measurement artifacts
-        │
-        ├──────────▶ credential-evidence-site
-        │
-        └──────────▶ product-specific qualification
+credential-evidence snapshot      product-owned corpora (regression, policy, protected)
+        │                                   │
+        └──────────────┬────────────────────┘
+                       ▼  (one run per corpus)
+                credential-eval
+                       │
+                       ├─ scanner adapters
+                       │
+                       ▼
+     measurement artifacts (one per corpus, each with its own corpus identity)
+                       │
+                       ├──────────▶ credential-evidence-site (public artifacts of public evidence only)
+                       │
+                       └──────────▶ product-specific qualification (combines and counts)
 ```
+
+Corpora are measured separately and never concatenated into one run. The
+consumer keys every result by the population it came from and owns any
+combination. See [docs/multi-corpus-qualification.md](docs/multi-corpus-qualification.md).
 
 The evaluator must not require Redact Secret internals.
 
@@ -85,7 +90,7 @@ A run artifact should identify:
 
 - engine version;
 - measurement protocol version;
-- credential-evidence revision/schema;
+- evidence snapshot identity (source, revision, schema; `credential-evidence` or another corpus author);
 - scanner identity/version/mode;
 - scanner adapter version;
 - corpus digest;
@@ -249,6 +254,11 @@ The Redact Secret product qualification layer currently remains with the Redact 
 The inventory of that policy, the artifact fields it consumes, and the consumer
 API (the schema-validated run artifact only) are in
 [docs/qualification-boundary.md](docs/qualification-boundary.md).
+
+Qualification over several corpora (public evidence, product regression,
+policy and protected corpora), the separation of evidence class, scanner
+behavior and support status, and the consumer contract for combining
+artifacts are in [docs/multi-corpus-qualification.md](docs/multi-corpus-qualification.md).
 
 No new `redact-secret-qualification` repository is required by this architecture.
 

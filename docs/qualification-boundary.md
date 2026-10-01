@@ -14,10 +14,17 @@ are relative to the legacy repository root unless they start with `crates/`,
 ## 1. The rule
 
 ```text
-credential-evidence snapshot ──▶ credential-eval ──▶ run artifact (v1 JSON + schema)
-                                                          │
-             product evidence, thresholds, ledgers ──▶ product qualification ──▶ status / matrix / release decision
+credential-evidence snapshot ──▶ credential-eval ──▶ run artifact A (v1 JSON + schema)
+product-owned corpus (each)  ──▶ credential-eval ──▶ run artifact B, C, ... ──┐
+                                                          │                    │
+             product evidence, thresholds, ledgers ──▶ product qualification ◀─┘──▶ status / matrix / release decision
 ```
+
+The public `credential-evidence` snapshot is one input to qualification, not
+the only one. A product may measure any number of corpora it owns, each in
+its own run and artifact, and combine them only in its own policy. That case,
+and the consumer contract for it, is
+[multi-corpus-qualification.md](multi-corpus-qualification.md).
 
 - The engine runs every scanner, Redact Secret included, through the same
   adapter protocol and the same measurement protocol. It never reads a support
@@ -41,7 +48,8 @@ are downstream words. Nothing in this repository emits them.
 |---|---|---|
 | Span lattice, per-case measurement, accounting, Wilson bounds, withholding floors | credential-eval (`crates/credential-eval-kernel`) | — (protocol) |
 | Accounting parameters (`min_denominator`, floors, `replays`, `interval_z`, `interval_precision`) | credential-eval run config, recorded in `manifest.accounting` | — they withhold figures; they are not support thresholds (legacy-map §2.7) |
-| Case facts, expected spans, tiers, twin lineage, taxonomy axes | `credential-evidence` | evidence, not measurement |
+| Case facts, expected spans, tiers, twin lineage, taxonomy axes, evidence class | `credential-evidence` (public snapshot) or the product (its own corpora) | evidence, not measurement |
+| Which corpora qualify a product, and how their artifacts are combined and counted | Redact Secret qualification | product policy ([multi-corpus-qualification.md](multi-corpus-qualification.md)) |
 | Support-status thresholds and routes | Redact Secret qualification | product policy (§3.1) |
 | Support matrix and release drift | Redact Secret qualification / release workflow | product publication and release gating (§3.2) |
 | Candidate-build acceptance | Redact Secret qualification | product release process (§3.3) |
@@ -377,7 +385,16 @@ Consumer obligations:
    artifact is every exploratory run and every run that includes a
    candidate build, and it stays within Redact Secret qualification. A
    missing `publication` (a pre-v1.1 artifact) means `internal`
-   ([official-runs.md](official-runs.md)).
+   ([official-runs.md](official-runs.md)). `public` is necessary but not
+   sufficient: an artifact over a protected population stays inside
+   qualification whatever its publication class
+   ([multi-corpus-qualification.md](multi-corpus-qualification.md) §5).
+
+These obligations apply to each artifact. A consumer that combines artifacts
+of several corpora also follows the consumer contract in
+[multi-corpus-qualification.md](multi-corpus-qualification.md) §6: bind each
+artifact to its population, key cases by `(population, case_id)`, and keep
+counts per population unless its policy defines a combination explicitly.
 
 ### 4.1 Family view (schema-level projection)
 
@@ -455,6 +472,10 @@ with a per-adapter allowlist of keys.
 Not proposed, on purpose: a `confidence` field, a support-status field, any
 product action expectation in the corpus snapshot, or a per-family
 qualification summary emitted by the engine.
+
+Further proposals for multi-corpus consumption (P5 population label, P6
+composed-corpus partitions, P7 corpus publishability) are listed, unscheduled,
+in [multi-corpus-qualification.md](multi-corpus-qualification.md) §8.
 
 ## 6. Reference consumer
 
