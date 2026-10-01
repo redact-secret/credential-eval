@@ -35,3 +35,4 @@ public/results/.*.json
 # (docs/official-runs.md).
 /results/local/
 .claude/worktrees
+.claude/helpers
