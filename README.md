@@ -13,7 +13,7 @@ The goal is:
 ## Core idea
 
 ```text
-credential-evidence snapshot
+corpus snapshot (a credential-evidence release, or any other versioned corpus)
           +
 scanner adapters
           ↓
@@ -21,8 +21,14 @@ scanner adapters
           ↓
 normalized observations
           ↓
-measurement artifacts
+measurement artifacts (one per corpus)
 ```
+
+The public `credential-evidence` snapshot is one input, not the only one. A
+product may measure several separately identified corpora (the public
+snapshot, its own regression, policy or protected corpora), each into its own
+artifact, and combine them in its own policy. See
+[docs/multi-corpus-qualification.md](docs/multi-corpus-qualification.md).
 
 The engine does not decide whether a product is `stable`, `provisional`, `pending`, “better,” or release-ready.
 
@@ -48,7 +54,10 @@ It measures.
 
 ## What it does not own
 
-- canonical credential facts and expectations — `credential-evidence`;
+- canonical credential facts and expectations — `credential-evidence` for
+  the public snapshot, the corpus author for any other corpus;
+- which corpora a product qualifies against, and how their results are
+  combined or counted;
 - Redact Secret support policy;
 - product release blockers;
 - public site content;
@@ -197,18 +206,24 @@ Redact Secret is one scanner that can be evaluated by this engine.
 Product-specific qualification remains outside the generic evaluator.
 
 ```text
-credential-eval result
+credential-eval run artifacts (public evidence, product regression, policy, protected ...)
         ↓
-Redact Secret qualification policy
+Redact Secret qualification policy (combines and counts per population)
         ↓
 support matrix / release decision
 ```
 
 That interpretation currently remains in the Redact Secret benchmark/product qualification layer.
+Evidence class, scanner behavior and support status are separate axes: the
+engine copies a case's evidence class as a label, measures every case with
+the same protocol, and never emits a support status.
 
 [docs/qualification-boundary.md](docs/qualification-boundary.md) lists the
 policy that stays outside this repository and defines the consumer API: the
 schema-validated run artifact, nothing else.
+[docs/multi-corpus-qualification.md](docs/multi-corpus-qualification.md)
+defines qualification over several corpora and the consumer contract for
+combining their artifacts.
 [docs/migration/redact-secret-cutover.md](docs/migration/redact-secret-cutover.md)
 is the plan for the Redact Secret tooling to consume it.
 `examples/qualification-consumer/` is a dependency-free reference consumer
@@ -257,6 +272,7 @@ docs/contracts/                    contract, range, identity, outcome and determ
 docs/decisions/                    architecture decision records (ADR 0001: v1 contract freeze)
 docs/adapters.md                   adapter protocol, built-in adapters, adding a scanner
 docs/official-runs.md              official vs exploratory runs, evidence release, pins, publication class
+docs/multi-corpus-qualification.md one artifact per corpus; consumer contract for combining artifacts
 docs/migration/legacy-map.md       inventory of the legacy TypeScript engine
 docs/migration/redact-secret-cutover.md  handoff plan for Redact Secret tooling
 docs/parity/                       dual-run parity report and sanitized summary (#5)

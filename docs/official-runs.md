@@ -64,7 +64,10 @@ A snapshot whose own `identity.release` is set is rejected (exit 1). Only the
 evaluator writes that field, after verification.
 
 The verifier reads only `tag` and `files[] {path, sha256}` from the manifest
-and ignores everything else. The release format belongs to
+and ignores everything else. It does not check who published the release, so
+a product-owned corpus is pinned the same way when its owner publishes a
+manifest in this shape
+([multi-corpus-qualification.md](multi-corpus-qualification.md) §2). The release format belongs to
 `credential-evidence` (redact-secret/credential-evidence#17) and is not
 defined there yet. If #17 settles on different field names, the verifier
 follows it. That is a CLI change, not a contract change.
@@ -121,6 +124,12 @@ process. `internal` artifacts, which are every exploratory run and every run
 with a candidate build, are for Redact Secret product qualification only.
 An artifact written before v1.1 has neither field, and readers must treat it
 as `exploratory` and `internal`.
+
+The publication class does not look at the corpus. An official run of
+released scanners over a protected or holdout corpus is `public` by this
+derivation. Its consumer still keeps it inside qualification unless the
+corpus owner allows publication
+([multi-corpus-qualification.md](multi-corpus-qualification.md) §5).
 
 ## Local runs
 
