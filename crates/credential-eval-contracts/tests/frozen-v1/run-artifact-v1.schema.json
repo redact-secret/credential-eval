@@ -1,0 +1,2173 @@
+{
+  "$id": "https://github.com/redact-secret/credential-eval/schemas/run-artifact-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunArtifact",
+  "description": "The complete result of one evaluation run.",
+  "type": "object",
+  "properties": {
+    "comparisons": {
+      "description": "Cross-scanner differential observations, sorted by\n`(case_id, variant, reference, peer)`.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DifferentialComparison"
+      }
+    },
+    "manifest": {
+      "description": "Every identity needed to reproduce the run.",
+      "$ref": "#/$defs/RunManifest"
+    },
+    "non_semantic": {
+      "description": "Timestamps and host diagnostics. Excluded from the semantic digest.",
+      "$ref": "#/$defs/NonSemantic"
+    },
+    "review_queue": {
+      "description": "Occurrences that need an authored decision (differential\ndisagreements and variants whose expectation could not be derived),\nsorted by `id`. Never a verdict on any scanner.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ReviewOccurrence"
+      }
+    },
+    "scanners": {
+      "description": "Per-scanner results, sorted by scanner id.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ScannerRun"
+      }
+    },
+    "schema": {
+      "description": "Document tag: `credential-eval/run-artifact/v1`.",
+      "$ref": "#/$defs/RunArtifactSchema"
+    },
+    "variants": {
+      "description": "Generated variants (mutation/metamorphic/twin methods), sorted by\n`(case_id, variant)`. Empty when no generating method ran.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/VariantRecord"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "manifest",
+    "scanners",
+    "non_semantic"
+  ],
+  "$defs": {
+    "AccountedCounts": {
+      "description": "Resolution counts for a stratum of assertions.",
+      "type": "object",
+      "properties": {
+        "fail": {
+          "description": "Failed assertions.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "not-measured": {
+          "description": "Assertions never observed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "pass": {
+          "description": "Passed assertions.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "resolved": {
+          "description": "pass + fail.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "resolved_rate": {
+          "description": "resolved / total, lower bound.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Published"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "review-required": {
+          "description": "Assertions awaiting review.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "total": {
+          "description": "All assertions.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "unresolved": {
+          "description": "total - resolved.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pass",
+        "fail",
+        "review-required",
+        "not-measured",
+        "total",
+        "resolved",
+        "unresolved"
+      ]
+    },
+    "AccountingConfig": {
+      "description": "Engine v1.1 accounting parameters (legacy `AccountingConfig`,\n`benchmarks/types.ts:55-58`, values in `qualification/suite-v1.json`).\nFloors withhold rates as `insufficient-evidence`/`insufficient-coverage`;\nthey are measurement rules, not support thresholds.",
+      "type": "object",
+      "properties": {
+        "interval_precision": {
+          "description": "Decimal places of published points and bounds (1..=12).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "interval_z": {
+          "description": "z value of the Wilson interval.",
+          "type": "number",
+          "format": "double"
+        },
+        "measurable_share_floor": {
+          "description": "Minimum measurable (non-T0) share per kind.",
+          "$ref": "#/$defs/Floor"
+        },
+        "min_denominator": {
+          "description": "Smallest denominator for which a rate is published.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "replays": {
+          "description": "Stability replays per scanner (>= 2).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "resolved_rate_floor": {
+          "description": "Minimum resolved share per method stratum.",
+          "$ref": "#/$defs/Floor"
+        },
+        "twin_coverage_floor": {
+          "description": "Minimum twin coverage (pairs / positives) per kind.",
+          "$ref": "#/$defs/Floor"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "min_denominator",
+        "resolved_rate_floor",
+        "measurable_share_floor",
+        "twin_coverage_floor",
+        "replays",
+        "interval_z",
+        "interval_precision"
+      ]
+    },
+    "AdapterIdentity": {
+      "description": "Identity of a scanner adapter.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Adapter id (e.g. `gitleaks`).",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "version": {
+          "description": "Adapter implementation version. Changes whenever parsing or offset\nconversion changes.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "Aggregates": {
+      "description": "Aggregates for one scanner.",
+      "type": "object",
+      "properties": {
+        "by_target": {
+          "description": "Per-target groups: for each target family, the `<kind>/<tier>` groups\nof the cases that target it, accounted over the corpus groups that\nhold them (a selected positive's twin and the selection's `T0` cases\ntravel with the group; legacy `selectionGroups`).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/GroupAggregate"
+            }
+          },
+          "default": {}
+        },
+        "groups": {
+          "description": "Case groups keyed `<kind>/<tier>` (e.g. `must-redact/T1`), with all\n`T0` cases in `pending/T0`. No cross-group totals.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/GroupAggregate"
+          }
+        },
+        "resolution": {
+          "description": "Assertion resolution per stratum key `<method>/<kind>:<tier>/<assertion>`.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AccountedCounts"
+          },
+          "default": {}
+        },
+        "resolution_by_target": {
+          "description": "Per-target assertion resolution, keyed like `resolution`\n(cases without targets count under `unassigned`).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/AccountedCounts"
+            }
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "groups"
+      ]
+    },
+    "Assertion": {
+      "description": "A method assertion for one scanner.",
+      "type": "object",
+      "properties": {
+        "assertion": {
+          "description": "Assertion kind.",
+          "$ref": "#/$defs/AssertionType"
+        },
+        "baseline": {
+          "description": "Baseline variant, for relation assertions.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate": {
+          "description": "Candidate variant, for relation assertions.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "case_id": {
+          "description": "Case the assertion belongs to.",
+          "$ref": "#/$defs/CaseId"
+        },
+        "method": {
+          "description": "Method that produced it.",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "reason": {
+          "description": "Sanitized reason.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "Result.",
+          "$ref": "#/$defs/AssertionStatus"
+        },
+        "variant": {
+          "description": "Variant, for absolute assertions.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "method",
+        "assertion",
+        "status"
+      ]
+    },
+    "AssertionStatus": {
+      "description": "Status of a method assertion.",
+      "oneOf": [
+        {
+          "description": "Assertion held.",
+          "type": "string",
+          "const": "pass"
+        },
+        {
+          "description": "Assertion failed.",
+          "type": "string",
+          "const": "fail"
+        },
+        {
+          "description": "Expectation pending an authored decision.",
+          "type": "string",
+          "const": "review-required"
+        },
+        {
+          "description": "The scanner never observed the variant; consumes denominator.",
+          "type": "string",
+          "const": "not-measured"
+        }
+      ]
+    },
+    "AssertionType": {
+      "description": "Kind of a method assertion.",
+      "oneOf": [
+        {
+          "description": "Placeholder type for review-required / not-measured absolute assertions.",
+          "type": "string",
+          "const": "absolute"
+        },
+        {
+          "description": "Positive: every span EXACT/COVERED and zero collateral bytes.",
+          "type": "string",
+          "const": "present-within-envelope"
+        },
+        {
+          "description": "Control: not flagged.",
+          "type": "string",
+          "const": "absent"
+        },
+        {
+          "description": "Relation: baseline and candidate both pass with identical readings.",
+          "type": "string",
+          "const": "same-detection"
+        },
+        {
+          "description": "Relation: positive baseline passes and secret-free candidate passes.",
+          "type": "string",
+          "const": "must-flip"
+        }
+      ]
+    },
+    "BoundDirection": {
+      "description": "Side of a Wilson bound.",
+      "oneOf": [
+        {
+          "description": "Upper bound (lower is better).",
+          "type": "string",
+          "const": "upper"
+        },
+        {
+          "description": "Lower bound (higher is better).",
+          "type": "string",
+          "const": "lower"
+        }
+      ]
+    },
+    "ByteRange": {
+      "description": "Half-open UTF-8 byte range `[start, end)`.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "description": "Exclusive end byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "start": {
+          "description": "Inclusive start byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "CaseId": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "CaseKind": {
+      "description": "Measurement population of a case.",
+      "oneOf": [
+        {
+          "description": "Contains secret spans that must be covered.",
+          "type": "string",
+          "const": "must-redact"
+        },
+        {
+          "description": "A control: any (scoped) finding is a false alarm.",
+          "type": "string",
+          "const": "must-not-flag"
+        },
+        {
+          "description": "Contains spans whose handling is a policy matter; scored like\n`must-redact` but grouped separately.",
+          "type": "string",
+          "const": "policy"
+        }
+      ]
+    },
+    "CaseMeasurement": {
+      "description": "Per-case measurement. The variant is decided by the case, not the scanner:\ncases with a secret span are positives, cases without are controls, `T0`\ncases are pending, and a non-complete scanner yields `not-measured`.",
+      "oneOf": [
+        {
+          "description": "A case with at least one secret span.",
+          "type": "object",
+          "properties": {
+            "collateral_bytes": {
+              "description": "Finding bytes outside every acceptable range (spans or envelopes).",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "leaked_bytes": {
+              "description": "Secret bytes not covered by any finding, summed over leaked spans.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "span_outcomes": {
+              "description": "One outcome per secret span, in span order.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Outcome"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "positive"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "span_outcomes",
+            "leaked_bytes",
+            "collateral_bytes"
+          ]
+        },
+        {
+          "description": "A case without secret spans (benign control or twin).",
+          "type": "object",
+          "properties": {
+            "action_counts": {
+              "description": "Tally of scanner-reported actions on the case's findings.",
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "co_detected": {
+              "description": "Twin only: a finding attributed to a different, known family fired.",
+              "type": "boolean"
+            },
+            "findings": {
+              "description": "Number of deduplicated findings on the case.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "flagged": {
+              "description": "Whether the case counts as flagged (scoped to the twin's family\nfor twins; any finding for other controls).",
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "control"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "flagged",
+            "findings",
+            "co_detected"
+          ]
+        },
+        {
+          "description": "`T0`: expectation pending review; observed but never scored.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "pending"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "The scanner produced no usable observation. Never a `MISS`.",
+          "type": "object",
+          "properties": {
+            "status": {
+              "description": "The scanner status that prevented measurement.",
+              "$ref": "#/$defs/ScannerStatus"
+            },
+            "type": {
+              "type": "string",
+              "const": "not-measured"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "status"
+          ]
+        }
+      ]
+    },
+    "CaseResult": {
+      "description": "The outcome of one case for one scanner. Self-verifying: `expected` and\n`actual` suffice to recompute `measurement` under the protocol.",
+      "type": "object",
+      "properties": {
+        "actual": {
+          "description": "Findings on this case's path, sorted by `(start, end)`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservedRange"
+          }
+        },
+        "case_id": {
+          "description": "Case id.",
+          "$ref": "#/$defs/CaseId"
+        },
+        "evidence_class": {
+          "description": "Evidence class label (`Case.grouping.evidence_class`), if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expected": {
+          "description": "Authored spans (envelope reasons omitted).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScoredSpan"
+          }
+        },
+        "family": {
+          "description": "Family (format contract) of the case, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "description": "Corpus group / category of the case (`Case.grouping.group`).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Measurement population.",
+          "$ref": "#/$defs/CaseKind"
+        },
+        "measurement": {
+          "description": "The measurement.",
+          "$ref": "#/$defs/CaseMeasurement"
+        },
+        "path": {
+          "description": "Fixture path.",
+          "$ref": "#/$defs/FixturePath"
+        },
+        "targets": {
+          "description": "Families the case targets (`Case.grouping.targets`; reporting strata\nonly). Sorted, unique; omitted when empty.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "taxonomy": {
+          "description": "Benign-control taxonomy axis (`Case.grouping.taxonomy`), if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier": {
+          "description": "Evidence tier.",
+          "$ref": "#/$defs/EvidenceTier"
+        },
+        "twin_mutation_kind": {
+          "description": "Mutated property of an authored twin (`Case.twin.mutation_kind`), if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "twin_of": {
+          "description": "Positive case this control is a twin of, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CaseId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "path",
+        "kind",
+        "tier",
+        "group",
+        "expected",
+        "actual",
+        "measurement"
+      ]
+    },
+    "ComparisonStatus": {
+      "description": "Status of one differential comparison.",
+      "oneOf": [
+        {
+          "description": "Both scanners observed the variant.",
+          "type": "string",
+          "const": "complete"
+        },
+        {
+          "description": "At least one scanner did not complete.",
+          "type": "string",
+          "const": "incomplete"
+        },
+        {
+          "description": "At least one scanner is unsupported.",
+          "type": "string",
+          "const": "unsupported"
+        }
+      ]
+    },
+    "ComponentId": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "ControlDiagnostics": {
+      "description": "Exact-match diagnostics for controls.",
+      "type": "object",
+      "properties": {
+        "fp": {
+          "description": "Findings on controls.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tn": {
+          "description": "Controls not flagged.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "fp",
+        "tn"
+      ]
+    },
+    "DifferentialComparison": {
+      "description": "A differential observation between two scanners on one variant. Neither\nscanner is ground truth; a disagreement is an observation, not a failure.",
+      "type": "object",
+      "properties": {
+        "case_id": {
+          "description": "Case id.",
+          "$ref": "#/$defs/CaseId"
+        },
+        "classification_compared": {
+          "description": "Whether classifications were comparable (`true`) or not (`false`),\nwhen `status` is `complete`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "disagreement": {
+          "description": "Disagreement, when `status` is `complete`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Disagreement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "peer": {
+          "description": "Peer scanner.",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "reference": {
+          "description": "Reference scanner (run configuration choice, not a truth claim).",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "status": {
+          "description": "Comparison status.",
+          "$ref": "#/$defs/ComparisonStatus"
+        },
+        "variant": {
+          "description": "Variant id.",
+          "$ref": "#/$defs/ComponentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "variant",
+        "reference",
+        "peer",
+        "status"
+      ]
+    },
+    "Disagreement": {
+      "description": "Kind of disagreement between a reference scanner and a peer.",
+      "oneOf": [
+        {
+          "description": "Identical ranges (and classifications, where comparable).",
+          "type": "string",
+          "const": "none"
+        },
+        {
+          "description": "Only the reference scanner reported ranges.",
+          "type": "string",
+          "const": "reference-only"
+        },
+        {
+          "description": "Only the peer reported ranges.",
+          "type": "string",
+          "const": "peer-only"
+        },
+        {
+          "description": "Both reported ranges, and they differ.",
+          "type": "string",
+          "const": "range-disagreement"
+        },
+        {
+          "description": "Ranges agree; mapped families differ.",
+          "type": "string",
+          "const": "classification-disagreement"
+        }
+      ]
+    },
+    "EngineIdentity": {
+      "description": "Engine identity.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Engine name (`credential-eval`).",
+          "type": "string"
+        },
+        "version": {
+          "description": "Engine implementation version.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ]
+    },
+    "EnvelopeWidth": {
+      "description": "Envelope widening statistics.",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "description": "Sum of (envelope length - span length).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "spans": {
+          "description": "Secret spans carrying an envelope.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "spans",
+        "bytes"
+      ]
+    },
+    "EvidenceTier": {
+      "description": "Evidence tier of a case's expectation. `T0` means the expectation is\npending review: the case is observed but never scored.",
+      "oneOf": [
+        {
+          "description": "Pending review; unscored.",
+          "type": "string",
+          "const": "T0"
+        },
+        {
+          "description": "Tier 1 evidence.",
+          "type": "string",
+          "const": "T1"
+        },
+        {
+          "description": "Tier 2 evidence.",
+          "type": "string",
+          "const": "T2"
+        },
+        {
+          "description": "Tier 3 evidence.",
+          "type": "string",
+          "const": "T3"
+        }
+      ]
+    },
+    "ExecutionDiagnostics": {
+      "description": "Scheduling and timing diagnostics of a run. Never measurements.",
+      "type": "object",
+      "properties": {
+        "evaluator_ms": {
+          "description": "Evaluator-owned time, in milliseconds: corpus loading, materialization,\noutput normalization, scoring and serialization (summed over jobs).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "jobs": {
+          "description": "Effective global job bound the run was scheduled with.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "processes": {
+          "description": "Scanner process invocations that ran (version probes and scans).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "scanner_process_ms": {
+          "description": "Sum of scanner process wall-clock times, in milliseconds. With\nparallel jobs this can exceed `wall_ms`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "wall_ms": {
+          "description": "Wall-clock time of the whole run, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "jobs",
+        "processes",
+        "wall_ms",
+        "scanner_process_ms",
+        "evaluator_ms"
+      ]
+    },
+    "FixturePath": {
+      "type": "string",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*/$)(?!.*//)(?!(.*/)?\\.{1,2}(/|$))[A-Za-z0-9_./-]+$"
+    },
+    "Floor": {
+      "description": "A floor: one value, or a default plus per-key overrides.",
+      "anyOf": [
+        {
+          "description": "The same floor for every key.",
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "description": "A default with per-key overrides.",
+          "type": "object",
+          "properties": {
+            "default": {
+              "description": "Floor for keys without an override.",
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "additionalProperties": {
+            "type": "number",
+            "format": "double"
+          },
+          "required": [
+            "default"
+          ]
+        }
+      ]
+    },
+    "GroupAggregate": {
+      "description": "One aggregate group.",
+      "oneOf": [
+        {
+          "description": "`pending/T0`: counted, never scored.",
+          "type": "object",
+          "properties": {
+            "candidate_kinds": {
+              "description": "T0 cases by the kind their evidence proposes.",
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "files": {
+              "description": "Number of T0 cases.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "population": {
+              "type": "string",
+              "const": "pending"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "population",
+            "files",
+            "candidate_kinds"
+          ]
+        },
+        {
+          "description": "`must-not-flag/<tier>`: false-alarm measurement.",
+          "type": "object",
+          "properties": {
+            "diagnostics": {
+              "description": "Exact-match diagnostics.",
+              "$ref": "#/$defs/ControlDiagnostics"
+            },
+            "false_alarm_rate": {
+              "description": "flagged_files / files, upper Wilson bound.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Published"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "files": {
+              "description": "Control cases.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "findings": {
+              "description": "Findings on controls.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "flagged_files": {
+              "description": "Controls counted as flagged.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "mean_findings_per_flagged": {
+              "description": "findings / flagged_files (ratio; no bound).",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Published"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "population": {
+              "type": "string",
+              "const": "control"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "population",
+            "files",
+            "flagged_files",
+            "findings",
+            "diagnostics"
+          ]
+        },
+        {
+          "description": "`must-redact/<tier>` or `policy/<tier>`: span measurements.",
+          "type": "object",
+          "properties": {
+            "collateral_bytes": {
+              "description": "Collateral finding bytes.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "collateral_ratio": {
+              "description": "collateral_bytes / secret_bytes (ratio; no bound).",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Published"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "diagnostics": {
+              "description": "Exact-match diagnostics.",
+              "$ref": "#/$defs/PositiveDiagnostics"
+            },
+            "envelope_width": {
+              "description": "Authored envelope widening over secret spans.",
+              "$ref": "#/$defs/EnvelopeWidth"
+            },
+            "files": {
+              "description": "Scored cases in the group.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "leaked_byte_rate": {
+              "description": "leaked_bytes / secret_bytes, upper bound.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Published"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "leaked_bytes": {
+              "description": "Leaked secret bytes.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "leaked_span_rate": {
+              "description": "leaked_spans / spans, upper bound.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Published"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "leaked_spans": {
+              "description": "Spans with a leaking outcome (PARTIAL or MISS).",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "measurable_share": {
+              "description": "files / (files + pending_files), lower bound.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Published"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "outcomes": {
+              "description": "Span outcome counts.",
+              "$ref": "#/$defs/OutcomeCounts"
+            },
+            "pending_files": {
+              "description": "T0 cases whose proposed kind is this group's kind.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "population": {
+              "type": "string",
+              "const": "positive"
+            },
+            "secret_bytes": {
+              "description": "Secret bytes.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "spans": {
+              "description": "Secret spans.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "twins": {
+              "description": "Twin discrimination.",
+              "$ref": "#/$defs/TwinMeasurement"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "population",
+            "files",
+            "spans",
+            "secret_bytes",
+            "outcomes",
+            "pending_files",
+            "envelope_width",
+            "leaked_spans",
+            "leaked_bytes",
+            "collateral_bytes",
+            "twins",
+            "diagnostics"
+          ]
+        }
+      ]
+    },
+    "MethodIdentity": {
+      "description": "An evaluation method and its version.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Method id (e.g. `twin`).",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "version": {
+          "description": "Method version.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "NetworkPolicy": {
+      "description": "Network permission for a scanner.",
+      "oneOf": [
+        {
+          "description": "No network access is expected or permitted (default posture).",
+          "type": "string",
+          "const": "disabled"
+        },
+        {
+          "description": "The run explicitly authorizes network access (e.g. verification).",
+          "type": "string",
+          "const": "allowed"
+        }
+      ]
+    },
+    "NonSemantic": {
+      "description": "Non-semantic run metadata. Two runs of identical inputs may differ here\nand nowhere else.",
+      "type": "object",
+      "properties": {
+        "durations_ms": {
+          "description": "Scanner wall-clock durations in milliseconds, by scanner id.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "execution": {
+          "description": "How the run was scheduled and where its time went.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionDiagnostics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finished_at": {
+          "description": "RFC 3339 finish time.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host": {
+          "description": "Host diagnostics (OS/arch); never paths or usernames.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_id": {
+          "description": "Run identifier.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "started_at": {
+          "description": "RFC 3339 start time.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "NormalizedFinding": {
+      "description": "A normalized finding: a file and a UTF-8 byte range, plus optional\nscanner-reported classification. Never the matched value.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "Disposition the scanner itself reported for the finding (e.g. a\nredaction action), when it reports one. Observation only.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "end": {
+          "description": "Exclusive end byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "family": {
+          "description": "Credential family the adapter mapped the scanner's rule to, when the\nmapping is known. Unmapped rules carry no family (never guessed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Fixture path the finding is in.",
+          "$ref": "#/$defs/FixturePath"
+        },
+        "start": {
+          "description": "Inclusive start byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "start",
+        "end"
+      ]
+    },
+    "ObservedRange": {
+      "description": "A finding range on one case.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "Scanner-reported action, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "end": {
+          "description": "Exclusive end byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "family": {
+          "description": "Mapped family, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start": {
+          "description": "Inclusive start byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "Outcome": {
+      "description": "Span-level outcome lattice (protocol semantics; see `docs/contracts/outcomes.md`).",
+      "oneOf": [
+        {
+          "description": "A finding equals the span exactly.",
+          "type": "string",
+          "const": "EXACT"
+        },
+        {
+          "description": "A finding contains the span and lies within the acceptable envelope.",
+          "type": "string",
+          "const": "COVERED"
+        },
+        {
+          "description": "Findings contain the span but every containing finding exceeds the envelope.",
+          "type": "string",
+          "const": "OVERBROAD"
+        },
+        {
+          "description": "Findings overlap the span without containing it. Leaks.",
+          "type": "string",
+          "const": "PARTIAL"
+        },
+        {
+          "description": "No finding overlaps the span. Leaks.",
+          "type": "string",
+          "const": "MISS"
+        }
+      ]
+    },
+    "OutcomeCounts": {
+      "description": "Span outcome counts, keyed by outcome name.",
+      "type": "object",
+      "properties": {
+        "COVERED": {
+          "description": "COVERED spans.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "EXACT": {
+          "description": "EXACT spans.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "MISS": {
+          "description": "MISS spans.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "OVERBROAD": {
+          "description": "OVERBROAD spans.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "PARTIAL": {
+          "description": "PARTIAL spans.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "EXACT",
+        "COVERED",
+        "OVERBROAD",
+        "PARTIAL",
+        "MISS"
+      ]
+    },
+    "PositiveDiagnostics": {
+      "description": "Exact-match diagnostics for positives (not comparable across scanners).",
+      "type": "object",
+      "properties": {
+        "fn": {
+          "description": "Secret spans not EXACT.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fp": {
+          "description": "Findings not exactly equal to any secret span.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tp": {
+          "description": "EXACT spans.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tp",
+        "fp",
+        "fn"
+      ]
+    },
+    "ProvenanceComponent": {
+      "description": "One executable, runtime or package that took part in a scan.",
+      "type": "object",
+      "properties": {
+        "integrity": {
+          "description": "npm Subresource Integrity string from the lockfile, for packages.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Component kind.",
+          "$ref": "#/$defs/ProvenanceKind"
+        },
+        "name": {
+          "description": "Name: the configured program name, or the npm package name.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of the component's bytes (an executable file, a lockfile, or a\npackage tree digest).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Version, when the component reports or declares one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name"
+      ]
+    },
+    "ProvenanceKind": {
+      "description": "Kind of a [`ProvenanceComponent`].",
+      "oneOf": [
+        {
+          "description": "A scanner executable resolved from the configured program.",
+          "type": "string",
+          "const": "executable"
+        },
+        {
+          "description": "A language runtime that hosts a shim (e.g. `node`).",
+          "type": "string",
+          "const": "runtime"
+        },
+        {
+          "description": "A shim script the adapter runs.",
+          "type": "string",
+          "const": "shim"
+        },
+        {
+          "description": "A lockfile pinning the packages.",
+          "type": "string",
+          "const": "lockfile"
+        },
+        {
+          "description": "An installed npm package.",
+          "type": "string",
+          "const": "npm-package"
+        }
+      ]
+    },
+    "Published": {
+      "description": "A published figure: a rate with its pessimistic bound, or an explicit\nwithholding. Where a figure is nullable, `null` means a zero denominator.",
+      "anyOf": [
+        {
+          "description": "A computed figure.",
+          "$ref": "#/$defs/Rate"
+        },
+        {
+          "description": "A withheld figure.",
+          "$ref": "#/$defs/Withheld"
+        }
+      ]
+    },
+    "Rate": {
+      "description": "A computed proportion or ratio.",
+      "type": "object",
+      "properties": {
+        "bound": {
+          "description": "Pessimistic Wilson endpoint; `null` for unbounded ratios.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "direction": {
+          "description": "Which side is pessimistic; `null` for ratios.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "n": {
+          "description": "Sample size the bound was computed with.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "point": {
+          "description": "Point estimate, rounded to `interval_precision`.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "point",
+        "n"
+      ]
+    },
+    "Relation": {
+      "description": "Expected relation between a variant and its canonical baseline.",
+      "oneOf": [
+        {
+          "description": "Detection must be unchanged.",
+          "type": "string",
+          "const": "same-detection"
+        },
+        {
+          "description": "Detection must disappear.",
+          "type": "string",
+          "const": "must-flip"
+        }
+      ]
+    },
+    "Replays": {
+      "description": "Stability replay record.",
+      "type": "object",
+      "properties": {
+        "agreed": {
+          "description": "Whether all replays produced identical normalized findings.",
+          "type": "boolean"
+        },
+        "count": {
+          "description": "Number of scans over identical input.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "agreed"
+      ]
+    },
+    "ReviewOccurrence": {
+      "description": "One entry of the review queue: an occurrence that needs an authored\ndecision. Neither scanner of a disagreement is ground truth.",
+      "type": "object",
+      "properties": {
+        "baseline": {
+          "description": "Baseline variant, for relation occurrences.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate": {
+          "description": "Candidate variant, for relation occurrences.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "case_id": {
+          "description": "Evaluation case id.",
+          "$ref": "#/$defs/CaseId"
+        },
+        "disagreement": {
+          "description": "Disagreement kind, for differential disagreements.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Disagreement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "description": "Stable canonical id. It binds the case, its source digest and the\nobservation, and excludes every part of the reference scanner's\nidentity except its id, so reference releases do not re-key reviews.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "method": {
+          "description": "Method that queued the occurrence.",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "peer": {
+          "description": "Peer scanner, for differential disagreements.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "description": "Reference scanner, for differential disagreements.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "variant": {
+          "description": "Variant the occurrence is about.",
+          "$ref": "#/$defs/ComponentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "case_id",
+        "method",
+        "variant"
+      ]
+    },
+    "RunArtifactSchema": {
+      "type": "string",
+      "const": "credential-eval/run-artifact/v1"
+    },
+    "RunManifest": {
+      "description": "Reproduction identities of a run.",
+      "type": "object",
+      "properties": {
+        "accounting": {
+          "description": "Accounting parameters the aggregates were computed with.",
+          "$ref": "#/$defs/AccountingConfig"
+        },
+        "config_hash": {
+          "description": "Canonical digest of the run configuration.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "engine": {
+          "description": "Engine name and implementation version.",
+          "$ref": "#/$defs/EngineIdentity"
+        },
+        "evidence": {
+          "description": "Identity of the evidence snapshot, including its corpus digest.",
+          "$ref": "#/$defs/SnapshotIdentity"
+        },
+        "methods": {
+          "description": "Evaluation methods applied, sorted by id.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MethodIdentity"
+          }
+        },
+        "protocol_version": {
+          "description": "Measurement protocol version (independent of the engine version).",
+          "type": "string"
+        },
+        "scanners": {
+          "description": "Scanner identities, sorted by id. Includes failed/unavailable scanners.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScannerIdentity"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "protocol_version",
+        "evidence",
+        "config_hash",
+        "accounting",
+        "scanners"
+      ]
+    },
+    "ScannerId": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "ScannerIdentity": {
+      "description": "Recorded identity of an executed scanner.",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "description": "Adapter identity.",
+          "$ref": "#/$defs/AdapterIdentity"
+        },
+        "configuration_hash": {
+          "description": "Canonical digest of the scanner configuration.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "id": {
+          "description": "Scanner id.",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "mode": {
+          "description": "Scanner mode as configured.",
+          "type": "string"
+        },
+        "provenance": {
+          "description": "Setup provenance recorded by the adapter: the network posture and the\ndigests of the executables and packages that actually ran. Absent in\nreplayed or canned observations that did not record it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Reported scanner version; `null` when it could not be determined\n(e.g. the scanner is unavailable).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "mode",
+        "adapter",
+        "configuration_hash"
+      ]
+    },
+    "ScannerProvenance": {
+      "description": "How a scanner was set up for a run. Every field is a reproduction\nidentity: it names bytes (by digest) and versions, never host paths.",
+      "type": "object",
+      "properties": {
+        "components": {
+          "description": "Executables, runtimes and packages that ran, sorted by `(kind, name)`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProvenanceComponent"
+          }
+        },
+        "network": {
+          "description": "Network posture the adapter ran the scanner under.",
+          "$ref": "#/$defs/NetworkPolicy"
+        },
+        "network_controls": {
+          "description": "What the adapter did to keep the posture, e.g.\n`[\"--no-verification\", \"--no-update\"]`. Sorted, unique.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "network",
+        "components"
+      ]
+    },
+    "ScannerRun": {
+      "description": "One scanner's results.",
+      "type": "object",
+      "properties": {
+        "aggregates": {
+          "description": "Aggregates over `cases` and `assertions`.",
+          "$ref": "#/$defs/Aggregates"
+        },
+        "assertions": {
+          "description": "Method assertions, sorted by `(case_id, method, variant, baseline, candidate, assertion)`.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          }
+        },
+        "cases": {
+          "description": "One result per corpus case, sorted by case id.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CaseResult"
+          }
+        },
+        "detail": {
+          "description": "Sanitized status detail for non-complete scanners.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "findings": {
+          "description": "Deduplicated normalized findings, sorted by `(path, start, end)`.\nEmpty unless `status` is `complete`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NormalizedFinding"
+          }
+        },
+        "replays": {
+          "description": "Replay record, when replays ran.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Replays"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scanner": {
+          "description": "Scanner id (identity is in the manifest).",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "status": {
+          "description": "Execution status. Anything but `complete` means not measured.",
+          "$ref": "#/$defs/ScannerStatus"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scanner",
+        "status",
+        "findings",
+        "cases",
+        "aggregates"
+      ]
+    },
+    "ScannerStatus": {
+      "description": "Status of a scanner within a run.",
+      "oneOf": [
+        {
+          "description": "Observed; findings are scored.",
+          "type": "string",
+          "const": "complete"
+        },
+        {
+          "description": "Replays disagreed; not measured.",
+          "type": "string",
+          "const": "unstable"
+        },
+        {
+          "description": "Adapter cannot produce ranges; not measured.",
+          "type": "string",
+          "const": "unsupported"
+        },
+        {
+          "description": "Scanner not available; not measured.",
+          "type": "string",
+          "const": "unavailable"
+        },
+        {
+          "description": "Timed out; not measured.",
+          "type": "string",
+          "const": "timeout"
+        },
+        {
+          "description": "Output unparseable or over limits; not measured.",
+          "type": "string",
+          "const": "malformed"
+        },
+        {
+          "description": "Other failure; not measured.",
+          "type": "string",
+          "const": "error"
+        }
+      ]
+    },
+    "ScoredSpan": {
+      "description": "An expected span as embedded in results.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "description": "Exclusive end byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "envelope": {
+          "description": "Acceptable envelope, if authored.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "description": "Span role.",
+          "$ref": "#/$defs/SpanRole"
+        },
+        "start": {
+          "description": "Inclusive start byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "role"
+      ]
+    },
+    "Sha256Digest": {
+      "type": "string",
+      "maxLength": 71,
+      "minLength": 1,
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "SnapshotIdentity": {
+      "description": "Identity of the evidence a snapshot was taken from.",
+      "type": "object",
+      "properties": {
+        "corpus_digest": {
+          "description": "Digest of the cases; see [`corpus_digest`].",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "evidence_schema": {
+          "description": "Schema/revision label of the source evidence format.",
+          "type": "string"
+        },
+        "revision": {
+          "description": "Immutable revision of the source (commit SHA or release tag).",
+          "type": "string"
+        },
+        "source": {
+          "description": "Evidence source, e.g. `credential-evidence` or\n`legacy:redact-secret-benchmarks` during migration.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "revision",
+        "evidence_schema",
+        "corpus_digest"
+      ]
+    },
+    "SpanRole": {
+      "description": "Role of an expected span.",
+      "oneOf": [
+        {
+          "description": "Credential bytes that must be covered. Scored by the lattice.",
+          "type": "string",
+          "const": "secret"
+        },
+        {
+          "description": "Bytes that may be covered without collateral (e.g. a paired key id).\nNot scored as a span; counts as acceptable coverage.",
+          "type": "string",
+          "const": "companion"
+        }
+      ]
+    },
+    "TwinMeasurement": {
+      "description": "Twin discrimination measurement for a positive group.",
+      "type": "object",
+      "properties": {
+        "co_detected": {
+          "description": "Pairs whose twin was co-detected by a different known family.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "coverage": {
+          "description": "pairs / positives, lower bound.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Published"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "discriminated": {
+          "description": "Pairs where every positive span is EXACT/COVERED and the twin is not flagged.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "pairs": {
+          "description": "Scored (positive, twin) pairs.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "positives": {
+          "description": "Scored positives in the group (the twin denominator population).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "rate": {
+          "description": "discriminated / pairs, lower bound; withheld when unmeasurable or under-covered.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Published"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "positives",
+        "pairs",
+        "discriminated",
+        "co_detected"
+      ]
+    },
+    "VariantRecord": {
+      "description": "Lineage and identity of one generated variant.",
+      "type": "object",
+      "properties": {
+        "case_id": {
+          "description": "Case the variant was generated from.",
+          "$ref": "#/$defs/CaseId"
+        },
+        "content_digest": {
+          "description": "Digest of the variant's content bytes.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "method": {
+          "description": "Method and version.",
+          "$ref": "#/$defs/MethodIdentity"
+        },
+        "operator": {
+          "description": "Operator id (`identity` for the canonical variant).",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "operator_version": {
+          "description": "Operator version.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "parameters": {
+          "description": "Replay-safe scalar operator parameters.",
+          "type": "object",
+          "additionalProperties": true,
+          "default": {}
+        },
+        "path": {
+          "description": "Materialized path of the variant.",
+          "$ref": "#/$defs/FixturePath"
+        },
+        "property": {
+          "description": "Property the operator changes (e.g. `length`, `context`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "relation": {
+          "description": "Expected relation to the canonical variant, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Relation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strategy": {
+          "description": "Expectation strategy.",
+          "$ref": "#/$defs/VariantStrategy"
+        },
+        "variant": {
+          "description": "Variant id within the case (`canonical` or the operator id).",
+          "$ref": "#/$defs/ComponentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "variant",
+        "path",
+        "method",
+        "operator",
+        "operator_version",
+        "strategy",
+        "content_digest"
+      ]
+    },
+    "VariantStrategy": {
+      "description": "How a generated variant's expectation was obtained.",
+      "oneOf": [
+        {
+          "description": "Authored in the evidence (e.g. an authored twin).",
+          "type": "string",
+          "const": "authored"
+        },
+        {
+          "description": "Derived by a semantics-preserving operator.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Expectation cannot be derived; the variant is `T0`.",
+          "type": "string",
+          "const": "review-required"
+        }
+      ]
+    },
+    "Withheld": {
+      "description": "Why a figure is withheld.",
+      "oneOf": [
+        {
+          "description": "Denominator below `min_denominator`, or measurable share below its floor.",
+          "type": "string",
+          "const": "insufficient-evidence"
+        },
+        {
+          "description": "Twin coverage below its floor.",
+          "type": "string",
+          "const": "insufficient-coverage"
+        }
+      ]
+    }
+  }
+}

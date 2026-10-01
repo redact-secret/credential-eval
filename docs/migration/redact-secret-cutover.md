@@ -17,7 +17,7 @@ four conditions hold:
 
 | Condition | Delivered by | State at the time of writing |
 |---|---|---|
-| An explicit input/output contract exists | #2 | done: v1 schemas in `schemas/`, not yet frozen |
+| An explicit input/output contract exists | #2, #13 | done: v1 schemas in `schemas/`, frozen by [ADR 0001](../decisions/0001-freeze-v1-contracts.md) |
 | Current scanners run through the extracted engine | #4 (adapters), #7 (CLI) | in progress |
 | Result parity is demonstrated on a pinned corpus and toolchain | #5 | done for both pipelines: [../parity/parity-report.md](../parity/parity-report.md) |
 | Redact Secret qualification consumes generated artifacts without importing engine internals | #6 (this plan and the boundary document), then the product-side switch | boundary and reference consumer done; product switch not started |
@@ -58,7 +58,7 @@ The Redact Secret package is one scanner behind the `redact-secret` adapter
 |---|---|---|---|
 | `npm run bench` → `benchmarks/run.ts` (`package.json:19`; CI `validate.yml:130,191`, `publish-site.yml:199,213`) | corpus loading, scanner execution, replays, scoring, v1.0/v1.1 accounting, `accountingDelta` (`run.ts:124-187`) | candidate flag handling (`run.ts:35-75`), `reviewStatus`/`milestoneReview` stamping (`:197-200`), pinned-peer enforcement for claims | yes: `public/results/<category>.json` (schemaVersion 5), `summary.json`, `run.json` (legacy-map §4.1-4.2) |
 | `npm run eval` → `benchmarks/evaluate.ts` (`package.json:20`; `validate.yml:60`, `publish-site.yml:241`) | case construction, methods, operators, assertions, differential, resolution, review occurrences | nothing engine-side | yes: `results-output/evaluation.json` (schemaVersion 3) and its public projection (legacy-map §4.3) |
-| `npm run eval:classify` → `benchmarks/classify-support.ts` (`validate.yml:187`, `publish-site.yml:297-303`) | the in-process `runEvaluation` call (`classify-support.ts:116-125`) becomes "read a RunArtifact" | all classification: `support/status.ts`, `status-criteria.json`, `support/evidence.ts`, profiles, policy-qualified, empirical, taxonomy | no; it reads the canonical artifact (plus P1-P3 or a snapshot join, boundary §5) |
+| `npm run eval:classify` → `benchmarks/classify-support.ts` (`validate.yml:187`, `publish-site.yml:297-303`) | the in-process `runEvaluation` call (`classify-support.ts:116-125`) becomes "read a RunArtifact" | all classification: `support/status.ts`, `status-criteria.json`, `support/evidence.ts`, profiles, policy-qualified, empirical, taxonomy | no; it reads the canonical artifact, including the P1-P3 fields (boundary §5) |
 | `npm run eval:matrix`, `eval:publish:matrix`, `eval:matrix:drift` | none | everything; inputs are `support-status.json` and saved matrices | no; provenance fields switch to artifact identities (boundary §3.2) |
 | `npm run eval:candidate` → `benchmarks/candidate.ts` (`publish-site.yml:274`) | scanning and scoring of the candidate (`candidate.ts:120-133`) | tarball provenance (`scripts/qualified-candidate.mjs`), baseline comparison, candidate evidence record | a rendering of per-case outcomes in the legacy `encodeOutcome` form (`lib/lattice.ts:185-190`) to compare with `baselines/*.json` |
 | `npm run eval:qualify` → `benchmarks/qualify.ts` (`publish-site.yml:244`) | development-method execution (`qualify.ts:43-44`) | milestone gate, holdout lifecycle, completeness verdict (`:26-31, :45-68`) | no |
@@ -118,7 +118,7 @@ The writer is deleted when nothing reads the legacy schemas any more.
 2. **Engine and adapters (#3, #4, #7).** The kernel fills aggregates,
    assertions, variants and comparisons; adapters run all five scanners with
    the pinned versions. The additive contract proposals P1-P3 from the
-   boundary document are scheduled here.
+   boundary document landed here (#3), and v1 was then frozen (#13).
 3. **Shadow dual-run (#5).** Export the pinned legacy corpus to a
    `CorpusSnapshot` (record the legacy commit and corpus digest), run both
    engines on the same peer observations (legacy peer snapshots become

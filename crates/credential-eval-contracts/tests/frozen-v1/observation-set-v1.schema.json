@@ -1,0 +1,491 @@
+{
+  "$id": "https://github.com/redact-secret/credential-eval/schemas/observation-set-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ObservationSet",
+  "description": "Observations of one or more scanners over one corpus.",
+  "type": "object",
+  "properties": {
+    "corpus_digest": {
+      "description": "Digest of the corpus the scanners observed.",
+      "$ref": "#/$defs/Sha256Digest"
+    },
+    "observations": {
+      "description": "One entry per scanner, unique by `scanner.id`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ScannerObservation"
+      }
+    },
+    "schema": {
+      "description": "Document tag: `credential-eval/observation-set/v1`.",
+      "$ref": "#/$defs/ObservationSetSchema"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "corpus_digest",
+    "observations"
+  ],
+  "$defs": {
+    "AdapterIdentity": {
+      "description": "Identity of a scanner adapter.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Adapter id (e.g. `gitleaks`).",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "version": {
+          "description": "Adapter implementation version. Changes whenever parsing or offset\nconversion changes.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "ComponentId": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "FixturePath": {
+      "type": "string",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*/$)(?!.*//)(?!(.*/)?\\.{1,2}(/|$))[A-Za-z0-9_./-]+$"
+    },
+    "NetworkPolicy": {
+      "description": "Network permission for a scanner.",
+      "oneOf": [
+        {
+          "description": "No network access is expected or permitted (default posture).",
+          "type": "string",
+          "const": "disabled"
+        },
+        {
+          "description": "The run explicitly authorizes network access (e.g. verification).",
+          "type": "string",
+          "const": "allowed"
+        }
+      ]
+    },
+    "NormalizedFinding": {
+      "description": "A normalized finding: a file and a UTF-8 byte range, plus optional\nscanner-reported classification. Never the matched value.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "description": "Disposition the scanner itself reported for the finding (e.g. a\nredaction action), when it reports one. Observation only.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "end": {
+          "description": "Exclusive end byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "family": {
+          "description": "Credential family the adapter mapped the scanner's rule to, when the\nmapping is known. Unmapped rules carry no family (never guessed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Fixture path the finding is in.",
+          "$ref": "#/$defs/FixturePath"
+        },
+        "start": {
+          "description": "Inclusive start byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "start",
+        "end"
+      ]
+    },
+    "ObservationResult": {
+      "description": "Result of executing a scanner. Every non-`complete` state is explicit and\nis never scored as `MISS`.",
+      "oneOf": [
+        {
+          "description": "The scanner ran, replays agreed, and output was normalized.",
+          "type": "object",
+          "properties": {
+            "findings": {
+              "description": "Normalized findings (any order; the kernel deduplicates and sorts).",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NormalizedFinding"
+              }
+            },
+            "replays": {
+              "description": "Stability replay record.",
+              "$ref": "#/$defs/Replays"
+            },
+            "status": {
+              "type": "string",
+              "const": "complete"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "findings",
+            "replays"
+          ]
+        },
+        {
+          "description": "Replays over identical input disagreed; findings are discarded.",
+          "type": "object",
+          "properties": {
+            "divergent_paths": {
+              "description": "Paths whose findings differed between replays. Sorted.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FixturePath"
+              }
+            },
+            "replays": {
+              "description": "Stability replay record (`agreed` is false).",
+              "$ref": "#/$defs/Replays"
+            },
+            "status": {
+              "type": "string",
+              "const": "unstable"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "replays",
+            "divergent_paths"
+          ]
+        },
+        {
+          "description": "The adapter cannot produce source byte ranges for this scanner/mode.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "description": "Fixed, sanitized reason.",
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "const": "unsupported"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason"
+          ]
+        },
+        {
+          "description": "The scanner binary/package is not installed or not runnable.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "description": "Fixed, sanitized reason.",
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "const": "unavailable"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason"
+          ]
+        },
+        {
+          "description": "The scanner exceeded its wall-clock limit.",
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "timeout"
+            },
+            "timeout_ms": {
+              "description": "The limit that was exceeded, in milliseconds.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "timeout_ms"
+          ]
+        },
+        {
+          "description": "The scanner ran but its output could not be parsed or mapped to ranges\n(including output-size limit overflow).",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "description": "Fixed, sanitized reason. Never raw output.",
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "const": "malformed"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason"
+          ]
+        },
+        {
+          "description": "Any other execution failure.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "description": "Fixed, sanitized reason. Never raw output.",
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "const": "error"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "reason"
+          ]
+        }
+      ]
+    },
+    "ObservationSetSchema": {
+      "type": "string",
+      "const": "credential-eval/observation-set/v1"
+    },
+    "ProvenanceComponent": {
+      "description": "One executable, runtime or package that took part in a scan.",
+      "type": "object",
+      "properties": {
+        "integrity": {
+          "description": "npm Subresource Integrity string from the lockfile, for packages.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Component kind.",
+          "$ref": "#/$defs/ProvenanceKind"
+        },
+        "name": {
+          "description": "Name: the configured program name, or the npm package name.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of the component's bytes (an executable file, a lockfile, or a\npackage tree digest).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Version, when the component reports or declares one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name"
+      ]
+    },
+    "ProvenanceKind": {
+      "description": "Kind of a [`ProvenanceComponent`].",
+      "oneOf": [
+        {
+          "description": "A scanner executable resolved from the configured program.",
+          "type": "string",
+          "const": "executable"
+        },
+        {
+          "description": "A language runtime that hosts a shim (e.g. `node`).",
+          "type": "string",
+          "const": "runtime"
+        },
+        {
+          "description": "A shim script the adapter runs.",
+          "type": "string",
+          "const": "shim"
+        },
+        {
+          "description": "A lockfile pinning the packages.",
+          "type": "string",
+          "const": "lockfile"
+        },
+        {
+          "description": "An installed npm package.",
+          "type": "string",
+          "const": "npm-package"
+        }
+      ]
+    },
+    "Replays": {
+      "description": "Stability replay record.",
+      "type": "object",
+      "properties": {
+        "agreed": {
+          "description": "Whether all replays produced identical normalized findings.",
+          "type": "boolean"
+        },
+        "count": {
+          "description": "Number of scans over identical input.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "agreed"
+      ]
+    },
+    "ScannerId": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "ScannerIdentity": {
+      "description": "Recorded identity of an executed scanner.",
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "description": "Adapter identity.",
+          "$ref": "#/$defs/AdapterIdentity"
+        },
+        "configuration_hash": {
+          "description": "Canonical digest of the scanner configuration.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "id": {
+          "description": "Scanner id.",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "mode": {
+          "description": "Scanner mode as configured.",
+          "type": "string"
+        },
+        "provenance": {
+          "description": "Setup provenance recorded by the adapter: the network posture and the\ndigests of the executables and packages that actually ran. Absent in\nreplayed or canned observations that did not record it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScannerProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Reported scanner version; `null` when it could not be determined\n(e.g. the scanner is unavailable).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "mode",
+        "adapter",
+        "configuration_hash"
+      ]
+    },
+    "ScannerObservation": {
+      "description": "One scanner's observation.",
+      "type": "object",
+      "properties": {
+        "duration_ms": {
+          "description": "Wall-clock scanner time in milliseconds. Non-semantic diagnostics.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "result": {
+          "description": "Outcome of executing the scanner.",
+          "$ref": "#/$defs/ObservationResult"
+        },
+        "scanner": {
+          "description": "Scanner identity.",
+          "$ref": "#/$defs/ScannerIdentity"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scanner",
+        "result"
+      ]
+    },
+    "ScannerProvenance": {
+      "description": "How a scanner was set up for a run. Every field is a reproduction\nidentity: it names bytes (by digest) and versions, never host paths.",
+      "type": "object",
+      "properties": {
+        "components": {
+          "description": "Executables, runtimes and packages that ran, sorted by `(kind, name)`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProvenanceComponent"
+          }
+        },
+        "network": {
+          "description": "Network posture the adapter ran the scanner under.",
+          "$ref": "#/$defs/NetworkPolicy"
+        },
+        "network_controls": {
+          "description": "What the adapter did to keep the posture, e.g.\n`[\"--no-verification\", \"--no-update\"]`. Sorted, unique.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "network",
+        "components"
+      ]
+    },
+    "Sha256Digest": {
+      "type": "string",
+      "maxLength": 71,
+      "minLength": 1,
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

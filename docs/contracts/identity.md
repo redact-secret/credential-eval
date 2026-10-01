@@ -90,3 +90,12 @@ invalid range. So scanner results are never applied to changed fixture bytes.
 
 Together these identify a run for reproduction. Two runs with equal
 identities must produce equal semantic digests ([determinism.md](determinism.md)).
+
+Every identity above is a required property of the run artifact schema.
+`manifest.scanners[].version` is always written; it is `null` only when the
+version could not be determined (for example, an unavailable scanner). The
+test `run_artifact_requires_every_reproduction_identity` in
+`crates/credential-eval-contracts/tests/schema_guarantees.rs` fails if any of
+them stops being required. `methods` defaults to an empty list for a plain
+corpus run, and `provenance` is absent only in replayed or canned
+observations that did not record it.

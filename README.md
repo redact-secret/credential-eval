@@ -101,7 +101,7 @@ same semantics
 
 ## CLI direction
 
-The interface is not frozen. Today:
+The command-line interface is not frozen (the v1 documents it reads and writes are). Today:
 
 ```bash
 # Corpus measurement (per-case lattice, v1.1 group accounting)
@@ -212,7 +212,7 @@ The repository is private and in its migration and architecture phase.
 What exists today:
 
 - The v1 input/output contracts (#2), with their Rust types and generated
-  JSON Schemas.
+  JSON Schemas, frozen by ADR 0001 (#13).
 - The measurement kernel (#3): lattice, v1.1 accounting, twin, benign,
   mutation, metamorphic and differential methods, and the review queue.
 - Scanner adapters (#4) for Gitleaks, TruffleHog, Redact Secret,
@@ -226,7 +226,11 @@ What exists today:
   migration-only and removable (`tools/legacy-export/`, `tools/parity/`,
   `crates/credential-eval-compat/`).
 
-The v1 schemas are not frozen, so do not depend on internal APIs yet.
+The v1 schemas are frozen
+([ADR 0001](docs/decisions/0001-freeze-v1-contracts.md)): v1 never changes
+incompatibly, new optional fields are minor revisions, and a breaking change
+is v2. Build on the documents and their schemas, not on the internal crate
+APIs, which are not a contract.
 
 ## Layout
 
@@ -241,6 +245,7 @@ crates/
 adapters/node/                     Node shim + pinned npm scanner packages (npm ci --ignore-scripts)
 schemas/                           generated JSON Schemas (*-v1.schema.json)
 docs/contracts/                    contract, range, identity, outcome and determinism rules
+docs/decisions/                    architecture decision records (ADR 0001: v1 contract freeze)
 docs/adapters.md                   adapter protocol, built-in adapters, adding a scanner
 docs/migration/legacy-map.md       inventory of the legacy TypeScript engine
 docs/migration/redact-secret-cutover.md  handoff plan for Redact Secret tooling
@@ -260,8 +265,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-`cargo test` also checks that `schemas/` still matches the contract types. It
-also checks the golden artifact in `tests/fixtures/contracts-smoke/`. After an
+`cargo test` also checks that `schemas/` still matches the contract types,
+that the schemas stay compatible with the frozen v1 baselines in
+`crates/credential-eval-contracts/tests/frozen-v1/` (ADR 0001), and that no
+schema property can carry matched values or raw scanner output. It also
+checks the golden artifact in `tests/fixtures/contracts-smoke/`. After an
 intentional contract change, regenerate both and review the diff:
 
 ```bash
