@@ -17,9 +17,15 @@ Each document has a top-level `schema` tag, such as
 `credential-eval/run-artifact/v1`, and a reader rejects any other tag. The
 schema versions, the measurement protocol version
 (`PROTOCOL_VERSION = "credential-eval-protocol/1"`) and the crate/engine
-versions are separate and change independently. The v1 schemas are not
-frozen yet: issues #3 to #5 may still add fields. Freezing them is an
-explicit, reviewed step.
+versions are separate and change independently.
+
+**The v1 schemas are frozen** ([ADR 0001](../decisions/0001-freeze-v1-contracts.md)).
+v1 never changes incompatibly: every document valid under a v1 schema stays
+valid, with the same meaning, under every later v1 schema. New optional
+fields are minor revisions, listed under [Revisions](#revisions). A breaking
+change is v2, with new schema tags and files. The frozen baselines are in
+`crates/credential-eval-contracts/tests/frozen-v1/`, and
+`tests/frozen_v1.rs` fails on an incompatible edit.
 
 Related documents:
 
@@ -194,3 +200,43 @@ and, for evaluation methods, `assertions`, `aggregates.resolution*`,
 (`evaluation::EvaluationReport::artifact_parts`). Intentional differences from
 the legacy engine are listed in
 [../migration/kernel-deltas.md](../migration/kernel-deltas.md).
+
+## Revisions
+
+| Revision | Change | Issue |
+|---|---|---|
+| v1.0 | Frozen baseline: the four schemas in `crates/credential-eval-contracts/tests/frozen-v1/`, including P1 (`CaseResult` grouping fields), P2 (`review_queue`) and P3 (`aggregates.by_target`, `aggregates.resolution_by_target`). | #2, #3, #13 |
+
+A reader validates with the schema of the engine version that wrote the
+document, or with any later v1 schema. Every struct sets
+`additionalProperties: false`, so an older schema rejects a newer optional
+field (ADR 0001, "Reader guidance").
+
+## No plaintext or raw output
+
+No v1 document has a field for a matched value or for raw scanner output.
+`crates/credential-eval-contracts/tests/schema_guarantees.rs` enforces this
+on the schemas. It walks every property of the four schemas and fails on:
+
+- a property whose name contains a token such as `value`, `match`, `secret`,
+  `raw`, `stdout`, `stderr`, `line`, `text`, `content`, `output` or `token`;
+- a property that admits a free-form string or free-form JSON (no `pattern`,
+  `enum`, `const` or `$ref` to a constrained id type).
+
+The one exception is a property listed, per schema file, in the test's
+`ALLOWLIST` with the reason it cannot carry either. A new property in either
+category fails until it is reviewed and listed. The allowlisted properties
+fall into five groups:
+
+| Source | Properties | Why they are safe |
+|---|---|---|
+| Evidence input (corpus snapshot only) | `Case.content`, `Envelope.reason`, `TwinLineage.mutation`, `TwinLineage.mutation_kind`, `Grouping.{group, family, targets, taxonomy, evidence_class}`, `SnapshotIdentity.{source, revision, evidence_schema}` | Synthetic or documented public-test evidence owned by `credential-evidence`. Fixture text (`content`) and authored reasons never reach observations or artifacts; a test checks that no `content` property exists outside the input schemas. |
+| Evidence labels copied into the artifact | `CaseResult.{group, family, targets, taxonomy, evidence_class, twin_mutation_kind}` (P1) | Copies of the grouping labels above. |
+| Run configuration | `ScannerSpec.{configuration, mode}`, `ScannerIdentity.mode`, `AdapterIdentity.version`, `ScannerLimits.{max_stdout_bytes, max_stderr_bytes}` | Operator input. A configuration must not contain credentials, and only its digest reaches observations and artifacts. The two limits are byte counts. |
+| Engine and adapter code | `EngineIdentity.{name, version}`, `RunManifest.protocol_version`, `ObservationResult.reason`, `ScannerRun.detail`, `Assertion.reason`, `VariantRecord.{property, parameters}`, `ScannerProvenance.network_controls`, `ProvenanceComponent.{name, version, integrity}`, `ScannerIdentity.version`, `NonSemantic.{run_id, started_at, finished_at, host}`, `GroupAggregate.secret_bytes`, `VariantRecord.content_digest` | Fixed sanitized strings, identifiers, versions, timestamps, digests and counts. Operator parameters keep boolean and number values only. A scanner version is the first semantic-version match of the version probe, never the probe output. |
+| Scanner-reported labels on findings | `NormalizedFinding.{family, action}`, `ObservedRange.{family, action}` | `family` comes only from an adapter's fixed mapping tables. `action` is the disposition label a scanner reports (`redact`, `warn`, `block`), passed through by the adapter. |
+
+Residual risk: `action` is the one value a scanner, rather than this
+repository, chooses. The schema bounds its position (a label on a range), but
+not its text. An adapter for a scanner whose action labels are not a fixed
+vocabulary must map them to one, or drop them.

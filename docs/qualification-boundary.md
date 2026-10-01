@@ -95,13 +95,13 @@ Credential-eval inputs it needs:
 
 | Legacy evidence field (`evidence.ts`) | Artifact source | v1 status |
 |---|---|---|
-| `twinPairs`, `twinFailures` (`:80, :105-106`: twin method, `must-flip` assertions, pass/fail) | `S.assertions[]` with `method = "twin"`, `assertion = "must-flip"`, `status` | present; **family attribution needs P1** |
+| `twinPairs`, `twinFailures` (`:80, :105-106`: twin method, `must-flip` assertions, pass/fail) | `S.assertions[]` with `method = "twin"`, `assertion = "must-flip"`, `status`; family attribution through the case's `C.targets`, or `S.aggregates.resolution_by_target` | present (P1, P3) |
 | `benignCases`, `benignFalseAlarms` (`:81, :107-108`) | `S.assertions[]` `method = "benign"`; or per case `C.measurement` (`type = control`, `flagged`) with `C.twin_of` absent | present (per-case route works today via `C.family`) |
-| `metamorphicCriticalFailures`, `mutationUnresolvedCritical` (`:82-83, :111-114`) | `S.assertions[]` `method ∈ {metamorphic, mutation}`, `status = fail`; plus unresolved review occurrences | assertions present; **review occurrences need P2** |
-| `differentialUnresolvedContractDisagreements` (`:115`) | review occurrences of the differential method, joined with the ledger | `comparisons[]` present, but **stable occurrence ids need P2** |
-| `benignAxes`, `benignAxisIds`, `controlAxes` (`:84, :101, :109-110`: `axesByDetector`) | benign-control taxonomy per case | **gap: P1 (`taxonomy`)** |
-| `positiveCases`, `positiveAxes`, `totalFixtures`, `contextTwinPairs`, `confusionAxes` (`:51-74`) | per case: kind, twin lineage, group, targets, twin `mutation_kind` | kind, `twin_of` present; **group, targets, mutation kind need P1** |
-| Per-family selection by `targets` (`byDetector` keys, `:78`; `profiles.ts:75`) | the families a case targets | **gap: P1 (`targets`)**; `C.family` alone is the case's own contract |
+| `metamorphicCriticalFailures`, `mutationUnresolvedCritical` (`:82-83, :111-114`) | `S.assertions[]` `method ∈ {metamorphic, mutation}`, `status = fail`; plus unresolved review occurrences in `review_queue[]` | present (P2) |
+| `differentialUnresolvedContractDisagreements` (`:115`) | review occurrences of the differential method (`review_queue[]` with `method = "differential"`), joined with the ledger on `id` | present (P2) |
+| `benignAxes`, `benignAxisIds`, `controlAxes` (`:84, :101, :109-110`: `axesByDetector`) | benign-control taxonomy per case: `C.taxonomy` | present (P1) |
+| `positiveCases`, `positiveAxes`, `totalFixtures`, `contextTwinPairs`, `confusionAxes` (`:51-74`) | per case: `C.kind`, `C.twin_of`, `C.group`, `C.targets`, `C.twin_mutation_kind` | present (P1) |
+| Per-family selection by `targets` (`byDetector` keys, `:78`; `profiles.ts:75`) | the families a case targets: `C.targets`; per-target accounting in `S.aggregates.by_target` | present (P1, P3); `C.family` alone is the case's own contract |
 | T3 span outcomes, collateral, actions (`policy-qualified.ts:63-88`) | `C.actual[]` (`family`, `action`), `C.measurement.span_outcomes`, `collateral_bytes` | present |
 | Scanner completeness / identity for the report (`classify-support.ts:169-170`) | `manifest.scanners[]`, `S.status`, `S.replays` | present |
 | Unstable / not-measured distinction | `S.status`, `C.measurement.type = "not-measured"` | present |
@@ -180,7 +180,7 @@ Credential-eval inputs it needs:
 | Candidate identity | `manifest.scanners[]` `{id, version, mode, adapter, configuration_hash}` | present |
 | Same corpus as the baseline | `manifest.evidence.corpus_digest` | present |
 | Completeness (`status: complete/incomplete/failed`, `candidate.ts:144`) | `S.status`, number of `S.cases` vs corpus | present |
-| Filtering to one detector (`--filter`, `candidate.ts:112`, `fixture-detectors.json`) | the families a case targets | **gap: P1 (`targets`)** |
+| Filtering to one detector (`--filter`, `candidate.ts:112`, `fixture-detectors.json`) | the families a case targets: `C.targets` | present (P1) |
 
 Product input: tarballs and their provenance, the saved release baselines
 (`baselines/*.json`), product pins.
@@ -211,7 +211,7 @@ artifacts) with different `mode`/`configuration_hash` and equal
 | `ambiguous.twinDiscriminationRate`, `ambiguous.measurableShare` (`:181`) | `twins.rate`, `measurable_share`, **restricted to the scored specificities** | rates present; **the specificity stratum is product metadata** (see below) |
 | `corpus.leakedOnlyUnderCandidate`, `corpus.invariantSpecificityChangedOutcomes`, `corpus.deterministicPositivesRemoved` | per-case join of two scanner runs on `C.case_id`: `C.measurement.span_outcomes` | present |
 | `corpus.unstableCases` (`:308`) | `S.status = unstable` | present |
-| `corpus.unreviewedChangedOutcomes` (`:320`) | changed per-case outcomes joined with review occurrences and the ledger | **P2** |
+| `corpus.unreviewedChangedOutcomes` (`:320`) | changed per-case outcomes joined with `review_queue[]` and the ledger | present (P2) |
 
 Product input: specificity strata (`contextual`, `entropy`, …), calibration
 and confidence (`q1-*`), the #289 evasion aggregate (`q4-*`), model and
@@ -287,9 +287,8 @@ Split:
 
 Credential-eval inputs it needs: a list of review occurrences with a stable
 id, the case, the method, the variant, and (for differential) reference, peer
-and disagreement kind. **Gap: P2.** `S.assertions[]` with
-`status = review-required` and `comparisons[]` carry the facts but not a
-stable, ledger-joinable id.
+and disagreement kind. **Present (P2):** the top-level `review_queue[]`,
+sorted by its canonical `id`.
 
 ### 3.7 Engine qualification, milestones and release records
 
@@ -344,8 +343,10 @@ Consumer obligations:
 1. **Reject unknown documents.** Check the `schema` tag, then validate the
    whole document against the schema. `additionalProperties: false`
    everywhere means an unexpected field is an error, not something to ignore.
-   While v1 is unfrozen (contracts README), additive fields can appear; pin
-   the schema file you validate with to the engine version you run.
+   v1 is frozen ([ADR 0001](decisions/0001-freeze-v1-contracts.md)): it never
+   changes incompatibly, but minor revisions add optional fields. Validate
+   with the schema file of the engine version that wrote the artifact (or a
+   later v1 schema), never an older one.
 2. **Bind identities.** Record `manifest.engine`, `manifest.protocol_version`,
    `manifest.evidence` (with `corpus_digest`), `manifest.config_hash` and
    `manifest.scanners[]` in every derived record, and refuse to compare
@@ -406,25 +407,39 @@ Derivation rules:
   positive span is `EXACT` or `COVERED` and the twin is not flagged
   (legacy-map §2.7). The pair is attributed to the twin's `C.family`.
 - Rates are deliberately absent. A consumer that needs bounded rates reads
-  `S.aggregates` (per `kind/tier`), or, once P3 lands, the per-target
-  aggregates, which carry the protocol's Wilson bounds and withholding. A
-  consumer must not invent its own interval arithmetic for published claims.
-- With P1, the view can be keyed by `targets` instead of `family`, which is
+  `S.aggregates.groups` (per `kind/tier`) or the per-target aggregates
+  `S.aggregates.by_target` (P3), which carry the protocol's Wilson bounds and
+  withholding. A consumer must not invent its own interval arithmetic for
+  published claims.
+- The view can also be keyed by `C.targets` (P1) instead of `family`, which is
   what legacy `byDetector` does.
 
-## 5. Proposed additive contract changes
+## 5. Additive contract changes (P1-P4)
 
-These are proposals for the orchestrator to schedule. None is a protocol
-revision: each adds data the kernel already has, changes no outcome and no
-existing field, and is backwards compatible for a v1 reader that pins its
-schema. This change does not edit the contract crates.
+These were proposed here for the orchestrator to schedule. None is a protocol
+revision: each adds data the kernel already has and changes no outcome and
+no existing field. P1-P3 landed with the kernel (#3, PR #11) before the v1
+freeze, so they are part of the frozen v1.0 schemas
+([ADR 0001](decisions/0001-freeze-v1-contracts.md)). P4 was not taken.
 
-| Id | Proposal | Needed by | Notes |
+| Id | Decision | Contract fields | Tests |
 |---|---|---|---|
-| **P1** | Add grouping passthrough to `CaseResult`: `group: String`, `targets: Vec<String>` (omitted when empty), `taxonomy: Option<String>`, `evidence_class: Option<String>`, and `twin_mutation_kind: Option<String>` (from `Case.twin.mutation_kind`). | §3.1 axes, targets and profile cells; §3.3 `--filter`; §4.1 target-keyed view | Copies `Case.grouping` fields that `CaseResult` currently drops (`kind`, `tier` and `family` are already copied). Without it a consumer must also load the corpus snapshot and join on `case_id` + `corpus_digest`. That works (the snapshot is a public contract too) but breaks "the artifact is the only interface". |
-| **P2** | Add `review_queue: Vec<ReviewOccurrence>` per `ScannerRun` (or top level), each `{id: Sha256Digest, case_id, method, variant, baseline?, candidate?, reference?, peer?, disagreement?}`, sorted by `id`. The id excludes the configured reference scanner's version so that product releases do not re-key reviews. | §3.1 unresolved counts; §3.4 `unreviewedChangedOutcomes`; §3.6 ledger join; legacy `queue:check` | Legacy-map §2.11 and §4.3 already list review ids as a #3 parity target, so this may land with #3. The legacy id algorithm (`review.ts:4-10`, insertion-order `JSON.stringify`) belongs in the compatibility module; the canonical id should use the canonical digest (`docs/contracts/identity.md`). |
-| **P3** | Add per-target aggregates: `Aggregates.by_target: BTreeMap<family, BTreeMap<group key, GroupAggregate>>` using the legacy cross-suite selection rule (`run-summary.ts:39-50`, `selectionGroups`), and assertion resolution per target (`<method>/<kind:tier>/<assertion>` counts per target, the legacy `byDetector` summary). | §3.1 (legacy `byDetector` input), §3.4 bounded per-stratum rates | Legacy-map §4.2 lists `summary.json` `byDetector` as a parity target, so the kernel has to compute it anyway. Depends on P1 for target membership. |
-| P4 (optional) | Record the sanitized scanner `configuration` object next to `configuration_hash` in `manifest.scanners[]`. | §3.3 and §3.4 identity binding without re-deriving the canonical hash in another runtime | Only if adapter configurations are guaranteed free of paths and secrets; otherwise the product keeps its own copy of the configuration it passed in. |
+| **P1** grouping passthrough | **Landed** (#3) | `CaseResult.group` (required), `targets` (sorted, unique; omitted when empty), `taxonomy`, `evidence_class`, `twin_mutation_kind` (from `Case.twin.mutation_kind`) in `crates/credential-eval-contracts/src/artifact.rs` | `crates/credential-eval-kernel/tests/rules.rs::scanner_aggregates_fill_groups_and_targets_only_when_complete` (group and twin mutation kind per case); `crates/credential-eval-contracts/tests/output_contract.rs::every_variant_validates_and_round_trips`; the contracts-smoke golden artifact (`crates/credential-eval-kernel/tests/contracts_smoke.rs`) |
+| **P2** review queue | **Landed** (#3) | top-level `RunArtifact.review_queue: Vec<ReviewOccurrence>`, each `{id, case_id, method, variant, baseline?, candidate?, reference?, peer?, disagreement?}`, sorted by `id`. The `id` is a canonical digest that keeps only the reference scanner's id, so a new reference release does not re-key reviews. | `rules.rs::differential_reference_is_a_run_parameter` (ids unchanged by a reference version bump, changed by a peer version bump, no queue without a reference); `crates/credential-eval-kernel/tests/oracle.rs::evaluation_matches_legacy` (queue entries match the legacy engine); `crates/credential-eval-cli/tests/methods.rs::method_runs_are_deterministic_schema_valid_and_complete` |
+| **P3** per-target aggregates | **Landed** (#3) | `Aggregates.by_target: {family: {"<kind>/<tier>": GroupAggregate}}` under the legacy `selectionGroups` rule, and `Aggregates.resolution_by_target: {family: {"<method>/<kind>:<tier>/<assertion>": AccountedCounts}}` (cases without targets under `unassigned`) | `oracle.rs::selection_groups_match_legacy` (`by_target` equals legacy `byDetector`); `rules.rs::scanner_aggregates_fill_groups_and_targets_only_when_complete`; `rules.rs::assertions_follow_the_protocol` (`resolution_by_target`) |
+| P4 sanitized scanner `configuration` in `manifest.scanners[]` | **Rejected for v1.0 (deferred)** | none | none |
+
+Why P4 was not taken: nothing guarantees that an adapter configuration is
+free of host paths. The built-in binary adapters accept a `binary` path, and
+candidate package roots are host directories. Recording the object would
+need a sanitization rule per adapter. A field that is safe for one adapter
+and unsafe for another is the kind of field the v1 plaintext guarantee
+(`docs/contracts/README.md`, "No plaintext or raw output") exists to exclude.
+`configuration_hash` already binds the configuration: a product keeps its own
+copy of the configuration it passed in and checks it against the hash with
+the canonical encoding (`docs/contracts/identity.md`). If a consumer still
+needs the object, it can return as an optional field in a minor v1 revision,
+with a per-adapter allowlist of keys.
 
 Not proposed, on purpose: a `confidence` field, a support-status field, any
 product action expectation in the corpus snapshot, or a per-family
@@ -460,7 +475,6 @@ CI runs it in the `qualification-consumer` job of `.github/workflows/ci.yml`.
 | Redact Secret qualification can change without changing generic scoring semantics | §4 consumer API; the reference consumer's policy-change test |
 | The ownership boundary is documented | §2, §3 and [migration/redact-secret-cutover.md](migration/redact-secret-cutover.md) |
 
-The open items are the additive contract proposals P1-P3. Until they land, a
-Redact Secret consumer can still reproduce §3.1 and §3.3 by joining the
-artifact with the corpus snapshot it came from (identified by
-`manifest.evidence.corpus_digest`).
+The additive contract proposals P1-P3 have landed and v1 is frozen (§5,
+ADR 0001), so a Redact Secret consumer can reproduce §3.1 and §3.3 from the
+artifact alone, without joining the corpus snapshot.

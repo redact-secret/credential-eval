@@ -1,0 +1,334 @@
+{
+  "$id": "https://github.com/redact-secret/credential-eval/schemas/corpus-snapshot-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CorpusSnapshot",
+  "description": "A complete, immutable evaluation corpus.",
+  "type": "object",
+  "properties": {
+    "cases": {
+      "description": "Cases. Order is not semantic; consumers sort by `id`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Case"
+      }
+    },
+    "identity": {
+      "description": "Where the snapshot came from and the digest of its cases.",
+      "$ref": "#/$defs/SnapshotIdentity"
+    },
+    "schema": {
+      "description": "Document tag: `credential-eval/corpus-snapshot/v1`.",
+      "$ref": "#/$defs/CorpusSnapshotSchema"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "identity",
+    "cases"
+  ],
+  "$defs": {
+    "Case": {
+      "description": "One evaluation case: a fixture file plus its authored expectations.",
+      "type": "object",
+      "properties": {
+        "content": {
+          "description": "Exact fixture text. Ranges index its UTF-8 bytes.",
+          "type": "string"
+        },
+        "expected": {
+          "description": "Authored spans, sorted by `start` and pairwise disjoint (touching is allowed).\nEmpty for controls.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExpectedSpan"
+          }
+        },
+        "grouping": {
+          "description": "Grouping metadata (kind, tier, family, ...). Never changes an outcome.",
+          "$ref": "#/$defs/Grouping"
+        },
+        "id": {
+          "description": "Stable case id, unique within the snapshot.",
+          "$ref": "#/$defs/CaseId"
+        },
+        "path": {
+          "description": "Relative path the fixture is materialized at, unique within the snapshot.",
+          "$ref": "#/$defs/FixturePath"
+        },
+        "twin": {
+          "description": "Present when this case is an authored negative twin of a positive case.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TwinLineage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path",
+        "content",
+        "expected",
+        "grouping"
+      ]
+    },
+    "CaseId": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "CaseKind": {
+      "description": "Measurement population of a case.",
+      "oneOf": [
+        {
+          "description": "Contains secret spans that must be covered.",
+          "type": "string",
+          "const": "must-redact"
+        },
+        {
+          "description": "A control: any (scoped) finding is a false alarm.",
+          "type": "string",
+          "const": "must-not-flag"
+        },
+        {
+          "description": "Contains spans whose handling is a policy matter; scored like\n`must-redact` but grouped separately.",
+          "type": "string",
+          "const": "policy"
+        }
+      ]
+    },
+    "CorpusSnapshotSchema": {
+      "type": "string",
+      "const": "credential-eval/corpus-snapshot/v1"
+    },
+    "Envelope": {
+      "description": "An authored acceptable envelope around a span: a wider range a finding may\ncover without being `OVERBROAD`. The reason is authored evidence.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "description": "Exclusive end byte offset (`>=` the span end).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reason": {
+          "description": "Why the wider range is acceptable. Must be non-blank.",
+          "type": "string"
+        },
+        "start": {
+          "description": "Inclusive start byte offset (`<=` the span start).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "reason"
+      ]
+    },
+    "EvidenceTier": {
+      "description": "Evidence tier of a case's expectation. `T0` means the expectation is\npending review: the case is observed but never scored.",
+      "oneOf": [
+        {
+          "description": "Pending review; unscored.",
+          "type": "string",
+          "const": "T0"
+        },
+        {
+          "description": "Tier 1 evidence.",
+          "type": "string",
+          "const": "T1"
+        },
+        {
+          "description": "Tier 2 evidence.",
+          "type": "string",
+          "const": "T2"
+        },
+        {
+          "description": "Tier 3 evidence.",
+          "type": "string",
+          "const": "T3"
+        }
+      ]
+    },
+    "ExpectedSpan": {
+      "description": "An authored expected span.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "description": "Exclusive end byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "envelope": {
+          "description": "Optional wider acceptable range with an authored reason.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Envelope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "description": "Whether the span is the credential itself or an acceptable companion.",
+          "$ref": "#/$defs/SpanRole"
+        },
+        "start": {
+          "description": "Inclusive start byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "role"
+      ]
+    },
+    "FixturePath": {
+      "type": "string",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*/$)(?!.*//)(?!(.*/)?\\.{1,2}(/|$))[A-Za-z0-9_./-]+$"
+    },
+    "Grouping": {
+      "description": "Grouping metadata. Used to partition measurements, never to decide them.",
+      "type": "object",
+      "properties": {
+        "evidence_class": {
+          "description": "Evidence class label from the evidence source, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "family": {
+          "description": "Credential family (format contract) the case exercises, if any. A twin's\nfalse-alarm reading is scoped to this family.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "description": "Corpus group / category the case belongs to.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Measurement population.",
+          "$ref": "#/$defs/CaseKind"
+        },
+        "targets": {
+          "description": "Families the case targets (reporting strata only). Sorted, unique.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "taxonomy": {
+          "description": "Benign-control taxonomy axis, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier": {
+          "description": "Evidence tier.",
+          "$ref": "#/$defs/EvidenceTier"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "tier",
+        "group"
+      ]
+    },
+    "Sha256Digest": {
+      "type": "string",
+      "maxLength": 71,
+      "minLength": 1,
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "SnapshotIdentity": {
+      "description": "Identity of the evidence a snapshot was taken from.",
+      "type": "object",
+      "properties": {
+        "corpus_digest": {
+          "description": "Digest of the cases; see [`corpus_digest`].",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "evidence_schema": {
+          "description": "Schema/revision label of the source evidence format.",
+          "type": "string"
+        },
+        "revision": {
+          "description": "Immutable revision of the source (commit SHA or release tag).",
+          "type": "string"
+        },
+        "source": {
+          "description": "Evidence source, e.g. `credential-evidence` or\n`legacy:redact-secret-benchmarks` during migration.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "revision",
+        "evidence_schema",
+        "corpus_digest"
+      ]
+    },
+    "SpanRole": {
+      "description": "Role of an expected span.",
+      "oneOf": [
+        {
+          "description": "Credential bytes that must be covered. Scored by the lattice.",
+          "type": "string",
+          "const": "secret"
+        },
+        {
+          "description": "Bytes that may be covered without collateral (e.g. a paired key id).\nNot scored as a span; counts as acceptable coverage.",
+          "type": "string",
+          "const": "companion"
+        }
+      ]
+    },
+    "TwinLineage": {
+      "description": "Lineage of an authored negative twin.",
+      "type": "object",
+      "properties": {
+        "mutation": {
+          "description": "Authored description of the single semantic change. Non-blank.",
+          "type": "string"
+        },
+        "mutation_kind": {
+          "description": "Mutated property (e.g. `length`, `alphabet`, `prefix`, `context`).",
+          "type": "string"
+        },
+        "twin_of": {
+          "description": "The positive case this control is paired with.",
+          "$ref": "#/$defs/CaseId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "twin_of",
+        "mutation",
+        "mutation_kind"
+      ]
+    }
+  }
+}
