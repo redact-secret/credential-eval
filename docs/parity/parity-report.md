@@ -4,7 +4,8 @@
 > The full dual-run below was recorded at `c403475`. The move to `1020d2b5`
 > was re-proven minimally; see
 > [Re-pin to 1020d2b5](#re-pin-to-1020d2b5-issue-20) for exactly what was
-> and was not re-run.
+> and was not re-run, and [Coverage at 1020d2b5](#coverage-at-1020d2b5)
+> for what proves equivalence for each scanner at this pin.
 
 This report compares the legacy TypeScript engine of
 `redact-secret/redact-secret-benchmarks` at the then-pinned oracle commit
@@ -235,6 +236,50 @@ node tools/parity/compare.mjs bench "$LEGACY/public/results" b/bench-legacy --ob
 The sanitized record is `repin_1020d2b5` in
 [parity-summary.json](parity-summary.json). It holds counts, case ids and
 digests only. The rest of that file records the `c403475` full run.
+
+## Coverage at 1020d2b5
+
+This section answers one question: at the current pin, what proves that
+credential-eval measures each of the five scanners the way the legacy
+engine does over the full corpus? Three pieces of evidence exist. Each
+proves something different:
+
+- **(a) Legacy engine vs credential-eval, re-run at `1020d2b5`.** Runs (a)
+  and (b) [above](#what-was-re-run): the `detector-coverage` category
+  (1,334 fixtures, every fixture that changed) for all five scanners, and
+  the full 5,950-case projection for `redact-secret` 0.1.0-beta.12. Both
+  have 0 unexplained differences.
+- **(b) Path diff `c403475` → `1020d2b5`** ([above](#path-diff)). The legacy
+  engine and adapter code, the peer binaries and checksums, the npm packages
+  other than `@redact-secret/core`, and the fixtures of the other 66
+  categories have no diff. So the full `c403475` dual run
+  ([Results](#results), all five scanners, all 67 categories, 0 unexplained)
+  still holds for those inputs at `1020d2b5`.
+- **(c) credential-evidence's five-scanner dual run.** All 5,950 cases of the
+  canonical snapshot vs the legacy corpus at `1020d2b5`, both measured
+  through credential-eval `d5f2fb2` (this pin): identical findings and
+  identical per-case measurement on 5,950 of 5,950 cases for every scanner,
+  **0 unexplained**. The aggregate differences all come from documented
+  tier and kind moves
+  ([dual-run report](https://github.com/redact-secret/credential-evidence/blob/main/docs/migration/dual-run-report.md)).
+  This compares two corpora on one engine. It is not engine parity: it proves
+  that the canonical snapshot measures like the legacy corpus, which (a) and
+  (b) tie to the legacy engine.
+
+| Scanner (version) | (a) re-run at `1020d2b5` | (b) path diff carries `c403475` full parity | (c) dual run, 5,950 cases (findings) |
+|---|---|---|---|
+| `redact-secret` 0.1.0-beta.12 | full corpus (5,950) and `detector-coverage` | not needed: re-run on the full corpus | 0 unexplained (3,156) |
+| `gitleaks` 8.30.1 | `detector-coverage` (1,334) | the other 66 categories | 0 unexplained (2,410) |
+| `trufflehog` 3.97.4 | `detector-coverage` (1,334) | the other 66 categories | 0 unexplained (1,046) |
+| `flare-redact` 1.6.1 | `detector-coverage` (1,334) | the other 66 categories | 0 unexplained (1,111) |
+| `openredaction` 1.1.5 | `detector-coverage` (1,334) | the other 66 categories | 0 unexplained (27,253) |
+
+So all 67 categories are covered for every scanner at `1020d2b5`, through
+the corpus-measurement (`bench`) path that an official run uses (official
+configurations have no `methods`). For the four peer scanners, the re-run
+covers the changed category, and the path diff carries the other 66 over
+from `c403475` without a re-run. The `eval` pipeline was last compared at
+`c403475` ([What was not re-run](#what-was-not-re-run)).
 
 ## Reproduction
 

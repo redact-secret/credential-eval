@@ -137,6 +137,10 @@ configuration, and refuses to run (exit 4) on any mismatch. Runs are
 publication class, and only `public` artifacts may be consumed outside
 product qualification. Local runs go to the gitignored `results/local/` and
 are never published. See [docs/official-runs.md](docs/official-runs.md).
+The committed official configuration of the public credential population is
+`configs/official/credential-public-v1.json`, and
+[docs/consumers/benchmarks-quickstart.md](docs/consumers/benchmarks-quickstart.md)
+lists the exact steps `redact-secret-benchmarks` CI follows for an official run.
 
 ## Scanner adapters
 
@@ -268,10 +272,12 @@ crates/
   credential-eval-compat/          migration-only legacy validators and legacy result writers (removable)
 adapters/node/                     Node shim + pinned npm scanner packages (npm ci --ignore-scripts)
 schemas/                           generated JSON Schemas (*-v1.schema.json)
+configs/official/                  committed official run configurations (pinned scanners, per platform)
 docs/contracts/                    contract, range, identity, outcome and determinism rules
 docs/decisions/                    architecture decision records (ADR 0001: v1 contract freeze)
 docs/adapters.md                   adapter protocol, built-in adapters, adding a scanner
 docs/official-runs.md              official vs exploratory runs, evidence release, pins, publication class
+docs/consumers/benchmarks-quickstart.md  the official-run steps redact-secret-benchmarks CI follows
 docs/multi-corpus-qualification.md one artifact per corpus; consumer contract for combining artifacts
 docs/migration/legacy-map.md       inventory of the legacy TypeScript engine
 docs/migration/redact-secret-cutover.md  handoff plan for Redact Secret tooling
