@@ -1,0 +1,836 @@
+{
+  "$id": "https://github.com/redact-secret/credential-eval/schemas/performance-artifact-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PerformanceArtifact",
+  "description": "The sanitized result of one performance run.",
+  "type": "object",
+  "properties": {
+    "allocation": {
+      "description": "Allocation results, sorted by `(card, workload)`. Empty for latency.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AllocationResult"
+      }
+    },
+    "latency": {
+      "description": "Latency results, sorted by `(workload, shape)`. Empty for allocation.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LatencyResult"
+      }
+    },
+    "lost_paths": {
+      "description": "Reproduction paths recorded as lost, sorted.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LostPath"
+      }
+    },
+    "manifest": {
+      "description": "Every identity needed to reproduce the run.",
+      "$ref": "#/$defs/PerformanceManifest"
+    },
+    "non_semantic": {
+      "description": "Timestamps and host diagnostics.",
+      "$ref": "#/$defs/PerformanceNonSemantic"
+    },
+    "schema": {
+      "description": "Document tag: `credential-eval/performance-artifact/v1`.",
+      "$ref": "#/$defs/PerformanceArtifactSchema"
+    },
+    "workloads": {
+      "description": "The generated workloads, sorted by id.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorkloadIdentity"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "manifest",
+    "workloads",
+    "non_semantic"
+  ],
+  "$defs": {
+    "AllocationCounts": {
+      "description": "Allocation request counters of one build on one workload. Request counts\nand sizes only: no pointers, no contents.",
+      "type": "object",
+      "properties": {
+        "alloc_requests": {
+          "description": "`alloc` and `alloc_zeroed` requests.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "allocated_bytes": {
+          "description": "Bytes requested by `alloc` and `alloc_zeroed`, plus the growth of every\ngrowing `realloc` (not peak or live memory).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "finding_count": {
+          "description": "Number of findings the scan returned.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "findings_digest": {
+          "description": "SHA-256 of the findings' debug rendering, so two builds can be shown to\nreturn the same findings without recording any of them.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "realloc_net_bytes": {
+          "description": "Net bytes requested by `realloc` (new size minus old size, summed; can\nbe negative when buffers shrink).",
+          "type": "integer",
+          "format": "int64"
+        },
+        "realloc_requests": {
+          "description": "`realloc` requests.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "requests": {
+          "description": "`alloc_requests + realloc_requests`: the metric the perf cards use.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "alloc_requests",
+        "realloc_requests",
+        "requests",
+        "allocated_bytes",
+        "realloc_net_bytes",
+        "finding_count",
+        "findings_digest"
+      ]
+    },
+    "AllocationResult": {
+      "description": "Allocation comparison of a baseline and a candidate build on one workload.",
+      "type": "object",
+      "properties": {
+        "baseline": {
+          "description": "Baseline subject id.",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "baseline_counts": {
+          "description": "Baseline counters.",
+          "$ref": "#/$defs/AllocationCounts"
+        },
+        "candidate": {
+          "description": "Candidate subject id.",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "candidate_counts": {
+          "description": "Candidate counters.",
+          "$ref": "#/$defs/AllocationCounts"
+        },
+        "card": {
+          "description": "The perf card this comparison belongs to (an operator-chosen label).",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "findings_identical": {
+          "description": "Whether both builds returned identical findings.",
+          "type": "boolean"
+        },
+        "request_delta": {
+          "description": "`candidate.requests - baseline.requests`.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "workload": {
+          "description": "Workload.",
+          "$ref": "#/$defs/WorkloadId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "card",
+        "workload",
+        "baseline",
+        "candidate",
+        "baseline_counts",
+        "candidate_counts",
+        "request_delta",
+        "findings_identical"
+      ]
+    },
+    "ComponentId": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "Direction": {
+      "description": "Which way the candidate moved relative to the baseline.",
+      "oneOf": [
+        {
+          "description": "The candidate is faster by more than the A/A noise band, in both the\nmedian and the minimum.",
+          "type": "string",
+          "const": "faster"
+        },
+        {
+          "description": "The candidate is slower by more than the A/A noise band, in both the\nmedian and the minimum.",
+          "type": "string",
+          "const": "slower"
+        },
+        {
+          "description": "Within the A/A noise band, or the median and the minimum disagree.",
+          "type": "string",
+          "const": "indistinguishable"
+        }
+      ]
+    },
+    "EngineIdentity": {
+      "description": "Engine identity.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Engine name (`credential-eval`).",
+          "type": "string"
+        },
+        "version": {
+          "description": "Engine implementation version.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ]
+    },
+    "GenerationContract": {
+      "description": "The workload generator that produced the inputs.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Generator id.",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "version": {
+          "description": "Generator version ([`WORKLOAD_CONTRACT_VERSION`]).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "GitRevision": {
+      "type": "string",
+      "maxLength": 40,
+      "minLength": 1,
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "HostDiagnostics": {
+      "description": "Host diagnostics. Never paths, usernames or host names.",
+      "type": "object",
+      "properties": {
+        "arch": {
+          "description": "CPU architecture.",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "cpus": {
+          "description": "Logical CPUs available to the process.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "load_after": {
+          "description": "Load average after the last batch.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoadAverage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "load_before": {
+          "description": "Load average before the first batch.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoadAverage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "os": {
+          "description": "Operating system family.",
+          "$ref": "#/$defs/ComponentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "arch",
+        "cpus"
+      ]
+    },
+    "LatencyResult": {
+      "description": "Latency result of one workload in one shape.",
+      "type": "object",
+      "properties": {
+        "baseline": {
+          "description": "Baseline (arm A).",
+          "$ref": "#/$defs/TimingSummary"
+        },
+        "candidate": {
+          "description": "Candidate (arm B).",
+          "$ref": "#/$defs/TimingSummary"
+        },
+        "control": {
+          "description": "The baseline measured a second time in the same rounds (A/A control).",
+          "$ref": "#/$defs/TimingSummary"
+        },
+        "direction": {
+          "description": "The reported direction.",
+          "$ref": "#/$defs/Direction"
+        },
+        "failed_invocations": {
+          "description": "Invocations that did not exit successfully (any arm); a non-zero count\nmakes the timings unusable and `direction` is `indistinguishable`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "median_ratio": {
+          "description": "`candidate.median / baseline.median`.",
+          "type": "number",
+          "format": "double"
+        },
+        "min_ratio": {
+          "description": "`candidate.min / baseline.min`.",
+          "type": "number",
+          "format": "double"
+        },
+        "noise_band": {
+          "description": "Half-width of the noise band: the larger of the A/A control's median\nand minimum deviations from 1, and the engine's floor.",
+          "type": "number",
+          "format": "double"
+        },
+        "shape": {
+          "description": "Shape.",
+          "$ref": "#/$defs/ScanShape"
+        },
+        "workload": {
+          "description": "Workload.",
+          "$ref": "#/$defs/WorkloadId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "workload",
+        "shape",
+        "baseline",
+        "candidate",
+        "control",
+        "median_ratio",
+        "min_ratio",
+        "noise_band",
+        "direction",
+        "failed_invocations"
+      ]
+    },
+    "LoadAverage": {
+      "description": "A load average triple.",
+      "type": "object",
+      "properties": {
+        "fifteen": {
+          "description": "Fifteen minutes.",
+          "type": "number",
+          "format": "double"
+        },
+        "five": {
+          "description": "Five minutes.",
+          "type": "number",
+          "format": "double"
+        },
+        "one": {
+          "description": "One minute.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "one",
+        "five",
+        "fifteen"
+      ]
+    },
+    "LostPath": {
+      "description": "A reproduction path recorded as lost instead of widening the core API.",
+      "type": "object",
+      "properties": {
+        "card": {
+          "description": "The perf card.",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "helper": {
+          "description": "The helper or probe that is not reachable.",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "reason": {
+          "description": "Why.",
+          "$ref": "#/$defs/LostReason"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "card",
+        "helper",
+        "reason"
+      ]
+    },
+    "LostReason": {
+      "description": "Why a reproduction path could not be carried over.",
+      "oneOf": [
+        {
+          "description": "The card measured a crate-private helper that the public API does not\nexpose. The public-API workloads are end-to-end proxies, not a\nreproduction.",
+          "type": "string",
+          "const": "crate-private-helper"
+        }
+      ]
+    },
+    "MeasurementKind": {
+      "description": "Which measurement kind an artifact records.",
+      "oneOf": [
+        {
+          "description": "Latency of an external-process scanner.",
+          "type": "string",
+          "const": "latency"
+        },
+        {
+          "description": "Allocation requests of in-process scanner builds.",
+          "type": "string",
+          "const": "allocation"
+        }
+      ]
+    },
+    "PerformanceArtifactSchema": {
+      "type": "string",
+      "const": "credential-eval/performance-artifact/v1"
+    },
+    "PerformanceManifest": {
+      "description": "Reproduction identities of a performance run.",
+      "type": "object",
+      "properties": {
+        "config_hash": {
+          "description": "Canonical digest of the [`PerformanceConfig`] (latency runs).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engine": {
+          "description": "Engine name and implementation version.",
+          "$ref": "#/$defs/EngineIdentity"
+        },
+        "generation": {
+          "description": "The workload generator.",
+          "$ref": "#/$defs/GenerationContract"
+        },
+        "kind": {
+          "description": "Which kind of measurement this records.",
+          "$ref": "#/$defs/MeasurementKind"
+        },
+        "performance_protocol": {
+          "description": "[`PERFORMANCE_PROTOCOL_VERSION`].",
+          "type": "string"
+        },
+        "schedule": {
+          "description": "Latency runs: rounds, batch size and warm-up. Absent for allocation.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Schedule"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subjects": {
+          "description": "Subjects, sorted by id.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SubjectIdentity"
+          }
+        },
+        "toolchain": {
+          "description": "Toolchain the subjects and the harness were built with.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ToolchainEntry"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "performance_protocol",
+        "kind",
+        "generation",
+        "subjects",
+        "toolchain"
+      ]
+    },
+    "PerformanceNonSemantic": {
+      "description": "Non-semantic metadata: timings and host state vary between runs of the\nsame inputs.",
+      "type": "object",
+      "properties": {
+        "finished_at": {
+          "description": "RFC 3339 finish time.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host": {
+          "description": "Host diagnostics.",
+          "$ref": "#/$defs/HostDiagnostics"
+        },
+        "started_at": {
+          "description": "RFC 3339 start time.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "host"
+      ]
+    },
+    "ReleaseTag": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "ScanShape": {
+      "description": "Whether the scanner receives each workload whole or in chunks.",
+      "oneOf": [
+        {
+          "description": "One invocation over the whole input.",
+          "type": "string",
+          "const": "whole"
+        },
+        {
+          "description": "One invocation per chunk of at most `chunk_bytes`, split at line\nboundaries; a sample is the sum over the chunks.",
+          "type": "string",
+          "const": "chunked"
+        }
+      ]
+    },
+    "ScannerId": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "Schedule": {
+      "description": "The alternating-batch schedule of a latency run.",
+      "type": "object",
+      "properties": {
+        "batch_invocations": {
+          "description": "Invocations per batch.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "chunk_bytes": {
+          "description": "Chunk size for the `chunked` shape.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "rounds": {
+          "description": "Rounds.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "warmup_invocations": {
+          "description": "Untimed warm-up invocations per arm and workload.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rounds",
+        "batch_invocations",
+        "warmup_invocations",
+        "chunk_bytes"
+      ]
+    },
+    "Sha256Digest": {
+      "type": "string",
+      "maxLength": 71,
+      "minLength": 1,
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "SubjectIdentity": {
+      "description": "Identity of one subject (scanner build) in a run.",
+      "type": "object",
+      "properties": {
+        "executable_sha256": {
+          "description": "SHA-256 of the executable, for external-process subjects.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "description": "Subject id.",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "revision": {
+          "description": "Source revision, when built from a Git commit.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GitRevision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Version label.",
+          "$ref": "#/$defs/ReleaseTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "TimingSummary": {
+      "description": "Timing of one arm over all rounds, in nanoseconds per invocation (a chunked\nsample is the sum over the chunks of one pass).",
+      "type": "object",
+      "properties": {
+        "median_ns": {
+          "description": "Median sample (mean of the two middle samples for an even count).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "min_ns": {
+          "description": "Smallest sample.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "samples_ns": {
+          "description": "Every sample, in round order.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "min_ns",
+        "median_ns",
+        "samples_ns"
+      ]
+    },
+    "ToolchainEntry": {
+      "description": "A named toolchain component, recorded for reproduction.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Component (`rustc`, `cargo`, `llvm`, ...).",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "version": {
+          "description": "Its version.",
+          "$ref": "#/$defs/ReleaseTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ]
+    },
+    "WorkloadId": {
+      "description": "A generated synthetic workload. The generator for each id is deterministic\nand lives in `credential-eval-perf`; its output is identified by digest.",
+      "oneOf": [
+        {
+          "description": "Ordinary text with one non-ASCII character at the end.",
+          "type": "string",
+          "const": "sparse-unicode"
+        },
+        {
+          "description": "Non-ASCII text on every line.",
+          "type": "string",
+          "const": "dense-unicode"
+        },
+        {
+          "description": "Ordinary text with one invisible (zero-width) character.",
+          "type": "string",
+          "const": "sparse-invisible"
+        },
+        {
+          "description": "Invisible characters throughout.",
+          "type": "string",
+          "const": "dense-invisible"
+        },
+        {
+          "description": "Assignment lines whose value is also a standalone token shape, so more\nthan one detector claims the same range.",
+          "type": "string",
+          "const": "overlap-clusters"
+        },
+        {
+          "description": "Secret-bearing lines with invisible characters inside the value, so\nevery reported range crosses a normalization seam.",
+          "type": "string",
+          "const": "seam-heavy"
+        },
+        {
+          "description": "The same short log line, repeated.",
+          "type": "string",
+          "const": "repeated-short-log-lines"
+        },
+        {
+          "description": "A few very long single-line assignments.",
+          "type": "string",
+          "const": "long-single-line-assignments"
+        },
+        {
+          "description": "Assignment lines, densely, so a bounded scanner exhausts its budget\nearly in the input.",
+          "type": "string",
+          "const": "dense-early-exhaustion"
+        },
+        {
+          "description": "32-character alphanumeric values under one key.",
+          "type": "string",
+          "const": "assignments-ordinary"
+        },
+        {
+          "description": "Five keys and five value shapes.",
+          "type": "string",
+          "const": "assignments-diverse"
+        },
+        {
+          "description": "Cloud secret-manager references and placeholders.",
+          "type": "string",
+          "const": "assignments-references"
+        },
+        {
+          "description": "One `otpauth://` URI per line.",
+          "type": "string",
+          "const": "otp-dense"
+        },
+        {
+          "description": "One `otpauth://` URI inside about 74 KB of ordinary log text.",
+          "type": "string",
+          "const": "otp-sparse"
+        },
+        {
+          "description": "One synthetic storage connection string.",
+          "type": "string",
+          "const": "azure-single"
+        },
+        {
+          "description": "100 storage connection strings, one per line.",
+          "type": "string",
+          "const": "azure-repeated-records"
+        },
+        {
+          "description": "One segment that repeats the same account-key field 100 times.",
+          "type": "string",
+          "const": "azure-duplicate-keys"
+        },
+        {
+          "description": "Ordinary log lines with no connection string.",
+          "type": "string",
+          "const": "azure-benign"
+        },
+        {
+          "description": "Tokens on separate lines, none overlapping.",
+          "type": "string",
+          "const": "overlap-disjoint"
+        },
+        {
+          "description": "As `overlap-disjoint`, with one overlapping pair in the middle.",
+          "type": "string",
+          "const": "overlap-sparse"
+        },
+        {
+          "description": "Every token overlaps exactly one other.",
+          "type": "string",
+          "const": "overlap-pairs"
+        },
+        {
+          "description": "Every token overlaps its neighbours.",
+          "type": "string",
+          "const": "overlap-dense"
+        }
+      ]
+    },
+    "WorkloadIdentity": {
+      "description": "One generated workload, identified by digest.",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "description": "Size of the generated input in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "description": "SHA-256 of the generated input.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "id": {
+          "description": "Which generator.",
+          "$ref": "#/$defs/WorkloadId"
+        },
+        "units": {
+          "description": "Size in generator units.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "units",
+        "bytes",
+        "digest"
+      ]
+    }
+  }
+}

@@ -45,6 +45,52 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+  # Allocation request counts of pinned Redact Secret core builds (ADR 0002,
+  # kind 2). A separate package: it links the core, so it is outside the
+  # neutral workspace and has its own lockfile. The release test is the
+  # acceptance gate of the beta.13 baseline (18,451 -> 5,451, 18,459 -> 4,274,
+  # 12,155 -> 1,054 requests per 1,000 assignments).
+  allocation-counts:
+    name: allocation counts (redact-secret)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: measurements/redact-secret-alloc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: measurements/redact-secret-alloc
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      # Counting-semantics tests and the #1121 baseline gate; counts are
+      # defined for optimized builds.
+      - name: Test
+        run: cargo test --release --locked
+
+      - name: Count
+        run: |
+          cargo run --release --locked -- --out "$RUNNER_TEMP/allocation-counts.json" 2> "$RUNNER_TEMP/summary.txt"
+          { echo '```'; cat "$RUNNER_TEMP/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: allocation-counts
+          path: ${{ runner.temp }}/allocation-counts.json
+          if-no-files-found: error
+
   # Reference qualification consumer (#6): proves a downstream policy can read
   # the run artifact through its JSON Schema alone. No npm dependencies.
   qualification-consumer:

@@ -124,6 +124,16 @@ credential-eval run --corpus snapshot.json --out artifact.json \
   --reference redact-secret --evidence evidence.json [--strict]
 ```
 
+Performance is measured separately from outcomes
+([docs/performance-measurement.md](docs/performance-measurement.md), ADR 0002):
+
+```bash
+# Latency direction of two pinned scanner builds (A/B batches, A/A control)
+credential-eval perf run --config performance-config.json --out performance-artifact.json
+# Allocation request counts of pinned Redact Secret cores (own package)
+(cd measurements/redact-secret-alloc && cargo run --release -- --out allocation-counts.json)
+```
+
 A run is reproducible from explicit input identities: the snapshot's corpus
 digest, the config hash (scanners, limits, methods, reference, seed
 convention, evidence digest, accounting) and each scanner's identity and
@@ -270,11 +280,16 @@ crates/
   credential-eval-adapters/        scanner adapters: execution, provenance, normalization
   credential-eval-cli/             `credential-eval` binary and run orchestration
   credential-eval-compat/          migration-only legacy validators and legacy result writers (removable)
+  credential-eval-perf/            synthetic performance workloads, timing statistics, host diagnostics
+measurements/redact-secret-alloc/  allocation request counts of pinned Redact Secret cores (own workspace; no unsafe)
 adapters/node/                     Node shim + pinned npm scanner packages (npm ci --ignore-scripts)
 schemas/                           generated JSON Schemas (*-v1.schema.json)
 configs/official/                  committed official run configurations (pinned scanners, per platform)
+configs/performance/               latency measurement configuration template
+docs/performance-measurement.md    latency and allocation measurement modes, workloads, results
+docs/measurements/                 committed performance artifacts (allocation counts)
 docs/contracts/                    contract, range, identity, outcome and determinism rules
-docs/decisions/                    architecture decision records (ADR 0001: v1 contract freeze)
+docs/decisions/                    architecture decision records (ADR 0001: v1 contract freeze; ADR 0002: performance measurement kinds)
 docs/adapters.md                   adapter protocol, built-in adapters, adding a scanner
 docs/official-runs.md              official vs exploratory runs, evidence release, pins, publication class
 docs/consumers/benchmarks-quickstart.md  the official-run steps redact-secret-benchmarks CI follows
@@ -295,6 +310,7 @@ tests/fixtures/contracts-smoke/    synthetic end-to-end fixtures and golden run 
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+(cd measurements/redact-secret-alloc && cargo test --release)
 ```
 
 `cargo test` also checks that `schemas/` still matches the contract types,

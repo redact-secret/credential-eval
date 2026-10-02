@@ -119,6 +119,13 @@ fn release_tag(value: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
+fn git_revision(value: &str) -> bool {
+    value.len() == 40
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
 fn sha256(value: &str) -> bool {
     value.strip_prefix("sha256:").is_some_and(|hex| {
         hex.len() == 64
@@ -162,6 +169,11 @@ validated_string!(
     ReleaseTag, kind = "release tag", pattern = "^[A-Za-z0-9][A-Za-z0-9._-]*$", max = 128, check = release_tag
 );
 
+validated_string!(
+    /// A full Git commit id: 40 lowercase hex digits.
+    GitRevision, kind = "git revision", pattern = "^[0-9a-f]{40}$", max = 40, check = git_revision
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,6 +201,19 @@ mod tests {
         assert!(ReleaseTag::new("v1.2.3_rc1").is_ok());
         for bad in ["", "-x", ".x", "a b", "a/b", "tag:1"] {
             assert!(ReleaseTag::new(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn git_revisions() {
+        assert!(GitRevision::new("ad877c036825a926f93478c2104e675d9c301326").is_ok());
+        for bad in [
+            "",
+            "ad877c0",
+            "AD877C036825A926F93478C2104E675D9C301326",
+            "g".repeat(40).as_str(),
+        ] {
+            assert!(GitRevision::new(bad).is_err(), "{bad}");
         }
     }
 

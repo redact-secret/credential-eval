@@ -73,6 +73,15 @@ schema_tag!(
     RunArtifactSchema = "credential-eval/run-artifact/v1"
 );
 
+schema_tag!(
+    /// Tag of [`crate::performance::PerformanceConfig`] documents (ADR 0002).
+    PerformanceConfigSchema = "credential-eval/performance-config/v1"
+);
+schema_tag!(
+    /// Tag of [`crate::performance::PerformanceArtifact`] documents (ADR 0002).
+    PerformanceArtifactSchema = "credential-eval/performance-artifact/v1"
+);
+
 /// Base URI used for the `$id` of committed schemas.
 pub const SCHEMA_ID_BASE: &str = "https://github.com/redact-secret/credential-eval/schemas/";
 
@@ -110,6 +119,20 @@ pub fn all_schemas() -> Vec<(&'static str, Schema)> {
             schema_for::<crate::artifact::RunArtifact>(
                 "run-artifact-v1.schema.json",
                 "RunArtifact",
+            ),
+        ),
+        (
+            "performance-config-v1.schema.json",
+            schema_for::<crate::performance::PerformanceConfig>(
+                "performance-config-v1.schema.json",
+                "PerformanceConfig",
+            ),
+        ),
+        (
+            "performance-artifact-v1.schema.json",
+            schema_for::<crate::performance::PerformanceArtifact>(
+                "performance-artifact-v1.schema.json",
+                "PerformanceArtifact",
             ),
         ),
     ]

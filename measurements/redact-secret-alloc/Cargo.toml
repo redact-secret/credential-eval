@@ -1,0 +1,50 @@
+# Allocation request counting for Redact Secret (ADR 0002, kind 2).
+#
+# A separate package with its own workspace and lockfile, so the neutral
+# credential-eval workspace never links a scanner core. It contains no
+# `unsafe`: the counting allocator is `stats_alloc`, a pinned third-party
+# crate, so the workspace-wide `unsafe_code = "forbid"` holds here too.
+[workspace]
+
+[package]
+name = "redact-secret-alloc"
+description = "Allocation request counts of pinned Redact Secret core builds, reproducing the beta.13 perf-card baselines."
+version = "0.1.0-alpha.1"
+edition = "2024"
+rust-version = "1.88"
+license = "UNLICENSED"
+publish = false
+repository = "https://github.com/redact-secret/credential-eval"
+build = "build.rs"
+
+[dependencies]
+credential-eval-contracts = { path = "../../crates/credential-eval-contracts" }
+credential-eval-perf = { path = "../../crates/credential-eval-perf" }
+serde_json = "1"
+sha2 = "0.10"
+# The one counting allocator. Exact pin: a change is a reviewed dependency change.
+stats_alloc = "=0.1.10"
+
+# Pinned core builds, one renamed dependency per revision. The harness runs
+# them in one process on the same generated inputs, so every difference is
+# the code and not the host or the fixtures.
+#   before: 44382b3f  baseline of issue #1121 and of PR #1136
+#   mid:    be5fee95  PR #1136 merge (cards #1121-#1130)
+#   after:  ad877c03  PR #1150 merge (cards #1131-#1135)
+core_before = { package = "redact-secret", git = "https://github.com/redact-secret/redact-secret", rev = "44382b3f3006a3a34a2bab917711d00e2e53284a" }
+core_mid = { package = "redact-secret", git = "https://github.com/redact-secret/redact-secret", rev = "be5fee9597311ee01cb33bcdc5c064d5cbb667ff" }
+core_after = { package = "redact-secret", git = "https://github.com/redact-secret/redact-secret", rev = "ad877c036825a926f93478c2104e675d9c301326" }
+
+[[test]]
+name = "counting"
+harness = false
+
+[[test]]
+name = "baseline"
+harness = false
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

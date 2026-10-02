@@ -14,6 +14,8 @@
 //!                     [--require-complete] [--strict]
 //! credential-eval compat legacy-bench --artifact <artifact.json> --index <legacy-index.json>
 //!                     --out-dir <dir>
+//! credential-eval perf run --config <performance-config.json> --out <performance-artifact.json>
+//!                     [--work-dir <dir>]
 //! credential-eval default-config [--scanner <id>]... [--jobs N]
 //! credential-eval --version
 //! ```
@@ -51,11 +53,13 @@ use credential_eval_adapters::process::CancelToken;
 use credential_eval_cli::evidence;
 use credential_eval_cli::official;
 use credential_eval_cli::orchestrate::{self, MethodRequest, RunError, RunRequest};
+use credential_eval_cli::perf;
 use credential_eval_contracts::artifact::{RunArtifact, RunClass};
 use credential_eval_contracts::config::{EvaluationSettings, RunConfig, SeedConvention};
 use credential_eval_contracts::corpus::CorpusSnapshot;
 use credential_eval_contracts::ids::ScannerId;
 use credential_eval_contracts::observation::ScannerStatus;
+use credential_eval_contracts::performance::PerformanceConfig;
 use credential_eval_kernel::evaluation::{GenerationLimits, MethodId};
 
 const USAGE: &str = "\
@@ -73,6 +77,8 @@ usage:
                       [--require-complete] [--strict]
   credential-eval compat legacy-bench --artifact <artifact.json>
                       --index <legacy-index.json> --out-dir <dir>
+  credential-eval perf run --config <performance-config.json>
+                      --out <performance-artifact.json> [--work-dir <dir>]
   credential-eval default-config [--scanner <id>]... [--jobs N]
   credential-eval --version
 methods: twin, benign, metamorphic, mutation, differential";
@@ -577,6 +583,106 @@ fn run(args: &[OsString]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `perf` subcommands: measurements that are not detection outcomes (ADR 0002).
+fn perf_command(args: &[OsString]) -> ExitCode {
+    let Some("run") = args.first().and_then(|a| a.to_str()) else {
+        eprintln!("error: perf takes a subcommand: run\n{USAGE}");
+        return ExitCode::from(2);
+    };
+    let (mut config_path, mut out, mut work_dir) = (None, None, None);
+    let mut iter = args[1..].iter();
+    while let Some(flag) = iter.next() {
+        let slot = match flag.to_str() {
+            Some("--config") => &mut config_path,
+            Some("--out") => &mut out,
+            Some("--work-dir") => &mut work_dir,
+            _ => {
+                eprintln!("error: unknown argument {flag:?}\n{USAGE}");
+                return ExitCode::from(2);
+            }
+        };
+        let Some(value) = iter.next() else {
+            eprintln!("error: {flag:?} needs a value");
+            return ExitCode::from(2);
+        };
+        *slot = Some(PathBuf::from(value));
+    }
+    let (Some(config_path), Some(out)) = (config_path, out) else {
+        eprintln!("error: perf run needs --config and --out\n{USAGE}");
+        return ExitCode::from(2);
+    };
+    let config: PerformanceConfig =
+        match read_bounded(&config_path, 1 << 20, "--config").and_then(|bytes| {
+            serde_json::from_slice(&bytes).map_err(|e| format!("invalid --config: {e}"))
+        }) {
+            Ok(config) => config,
+            Err(message) => {
+                eprintln!("error: {message}");
+                return ExitCode::from(2);
+            }
+        };
+    let cancel = CancelToken::new();
+    let handler = cancel.clone();
+    if ctrlc::set_handler(move || handler.cancel()).is_err() {
+        eprintln!("warning: could not install the interrupt handler");
+    }
+    let scratch;
+    let work_dir = match work_dir {
+        Some(dir) => dir,
+        None => {
+            scratch = match tempfile::tempdir() {
+                Ok(dir) => dir,
+                Err(e) => {
+                    eprintln!("error: cannot create a work directory: {e}");
+                    return ExitCode::from(1);
+                }
+            };
+            scratch.path().to_path_buf()
+        }
+    };
+    let artifact = match perf::run_latency(&config, &work_dir, &cancel) {
+        Ok(artifact) => artifact,
+        Err(perf::PerfError::Cancelled) => {
+            eprintln!("run cancelled; no artifact written");
+            return ExitCode::from(130);
+        }
+        Err(error @ perf::PerfError::Config(_)) => {
+            eprintln!("error: {error}");
+            return ExitCode::from(2);
+        }
+        Err(error @ perf::PerfError::Subject(_)) => {
+            eprintln!("error: {error}; no artifact written");
+            return ExitCode::from(4);
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    if let Err(e) = write_atomic(&out, &pretty(&artifact)) {
+        eprintln!("error: cannot write --out: {e}");
+        return ExitCode::from(1);
+    }
+    for result in &artifact.latency {
+        eprintln!(
+            "{:?}/{:?}: {:?} (median x{:.3}, min x{:.3}, noise ±{:.1}%{})",
+            result.workload,
+            result.shape,
+            result.direction,
+            result.median_ratio,
+            result.min_ratio,
+            result.noise_band * 100.0,
+            if result.failed_invocations > 0 {
+                format!(", {} failed invocations", result.failed_invocations)
+            } else {
+                String::new()
+            }
+        );
+    }
+    eprintln!("semantic digest {}", artifact.semantic_digest());
+    ExitCode::SUCCESS
+}
+
 /// `compat` subcommands (migration-only; removed with `credential-eval-compat`).
 fn compat_command(args: &[OsString]) -> ExitCode {
     let Some("legacy-bench") = args.first().and_then(|a| a.to_str()) else {
@@ -679,6 +785,7 @@ fn main() -> ExitCode {
         }
         Some("run") => run(&args[1..]),
         Some("compat") => compat_command(&args[1..]),
+        Some("perf") => perf_command(&args[1..]),
         Some("default-config") => default_config_command(&args[1..]),
         Some("--help" | "-h" | "help") => {
             println!("{USAGE}");

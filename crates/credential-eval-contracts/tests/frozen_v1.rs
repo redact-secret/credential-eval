@@ -1,7 +1,9 @@
 //! Compatibility guard for the frozen v1 schemas
 //! (`docs/decisions/0001-freeze-v1-contracts.md`).
 //!
-//! `tests/frozen-v1/` holds the four schemas exactly as they were frozen. The
+//! `tests/frozen-v1/` holds the schemas exactly as they were frozen: the four
+//! documents of ADR 0001 and, from their first revision, the two performance
+//! documents of ADR 0002. The
 //! schemas generated from the current contract types must accept every
 //! document the frozen schemas accept. The checker below approximates that
 //! conservatively: it refuses a removed definition or property, a changed
@@ -23,7 +25,7 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 /// Frozen baseline files and the SHA-256 of their bytes.
-const FROZEN: [(&str, &str); 4] = [
+const FROZEN: [(&str, &str); 6] = [
     (
         "corpus-snapshot-v1.schema.json",
         "54e8bafff0b05df27f360913ebd97e220e3ed8d6b2ba81fd7c0a28d6be24e89b",
@@ -39,6 +41,15 @@ const FROZEN: [(&str, &str); 4] = [
     (
         "run-artifact-v1.schema.json",
         "5cfa0e4926500e18b9febb2f165fba78ad6a7308d627358b7b477cbf3d74c887",
+    ),
+    // ADR 0002: the performance documents are frozen at their first revision.
+    (
+        "performance-config-v1.schema.json",
+        "967d568fde7c4c2680f3e14253f6686f4667230af83bd1068b9bd3ed275940ad",
+    ),
+    (
+        "performance-artifact-v1.schema.json",
+        "7c2c59883d7fb3c574d890e4a8fc56d9eac45bd7ee0ad2467ebbd2434be0fdb0",
     ),
 ];
 

@@ -17,6 +17,7 @@ credential-eval-contracts.workspace = true
 credential-eval-kernel.workspace = true
 credential-eval-adapters.workspace = true
 credential-eval-compat.workspace = true
+credential-eval-perf.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
