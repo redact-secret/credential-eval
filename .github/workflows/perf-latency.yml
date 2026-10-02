@@ -50,9 +50,21 @@ jobs:
       - name: Build the engine
         run: cargo build --release --locked -p credential-eval-cli
 
-      # Each build is installed from its exact commit; the revision is the
-      # identity, and the executable's SHA-256 is recorded by the run.
+      # A scanner build is identified by its commit, which never changes, so
+      # the cache key is the commit (plus the toolchain it was built with): it
+      # cannot go stale, and a miss only rebuilds. The executable's SHA-256 is
+      # still recorded by the run.
+      - name: Restore scanner builds
+        id: scanners
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/scanner-${{ inputs.baseline_revision }}
+            ${{ runner.temp }}/scanner-${{ inputs.candidate_revision }}
+          key: scanners-${{ runner.os }}-${{ inputs.baseline_revision }}-${{ inputs.candidate_revision }}-${{ hashFiles('rust-toolchain.toml') }}
+
       - name: Build the scanners
+        if: steps.scanners.outputs.cache-hit != 'true'
         env:
           BASELINE: ${{ inputs.baseline_revision }}
           CANDIDATE: ${{ inputs.candidate_revision }}
@@ -60,8 +72,9 @@ jobs:
           set -euo pipefail
           for rev in "$BASELINE" "$CANDIDATE"; do
             [[ "$rev" =~ ^[0-9a-f]{40}$ ]] || { echo "not a full commit id: $rev"; exit 2; }
-            cargo install --locked --git https://github.com/redact-secret/redact-secret \
-              --rev "$rev" redact-secret-cli --root "$RUNNER_TEMP/scanner-$rev"
+            [ -x "$RUNNER_TEMP/scanner-$rev/bin/redact-secret" ] ||
+              cargo install --locked --git https://github.com/redact-secret/redact-secret \
+                --rev "$rev" redact-secret-cli --root "$RUNNER_TEMP/scanner-$rev"
           done
 
       - name: Fill the configuration
