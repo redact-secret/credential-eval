@@ -30,11 +30,12 @@ use std::time::Duration;
 use credential_eval_adapters::process::{self, CancelToken, ProcessOutcome, ProcessRequest};
 use credential_eval_adapters::provenance;
 use credential_eval_contracts::artifact::EngineIdentity;
-use credential_eval_contracts::ids::{ComponentId, Sha256Digest};
+use credential_eval_contracts::ids::{ComponentId, ReleaseTag, Sha256Digest};
 use credential_eval_contracts::performance::{
-    GenerationContract, InputDelivery, LatencyResult, MeasurementKind, PerfSubject,
-    PerformanceArtifact, PerformanceConfig, PerformanceManifest, PerformanceNonSemantic, ScanShape,
-    Schedule, SubjectIdentity, WORKLOAD_CONTRACT_VERSION, WorkloadIdentity, bounds,
+    GenerationContract, InputDelivery, InstructionResult, LatencyResult, MeasurementKind,
+    PerfSubject, PerformanceArtifact, PerformanceConfig, PerformanceManifest,
+    PerformanceNonSemantic, ScanShape, Schedule, SubjectIdentity, ToolchainEntry,
+    WORKLOAD_CONTRACT_VERSION, WorkloadIdentity, bounds,
 };
 use credential_eval_contracts::schema::PerformanceArtifactSchema;
 use credential_eval_contracts::{ENGINE_NAME, performance::PERFORMANCE_PROTOCOL_VERSION};
@@ -369,6 +370,303 @@ pub fn run_latency(
         workloads: identities,
         latency,
         allocation: vec![],
+        instructions: vec![],
+        lost_paths: vec![],
+        non_semantic: PerformanceNonSemantic {
+            started_at: Some(started_at),
+            finished_at: Some(time::now_rfc3339()),
+            host,
+        },
+    };
+    artifact.canonicalize();
+    Ok(artifact)
+}
+
+/// Largest callgrind output file header read, in bytes. The `summary:` line is
+/// in the first lines of the file; the rest (per-function data) is never read.
+const CALLGRIND_HEADER_BYTES: u64 = 64 * 1024;
+
+/// Parse the `summary:` line of a callgrind output header: the total of the
+/// first event (`Ir`, instructions executed).
+pub fn parse_summary(header: &str) -> Option<u64> {
+    header
+        .lines()
+        .find_map(|line| line.strip_prefix("summary:"))
+        .and_then(|rest| rest.split_whitespace().next())
+        .and_then(|n| n.parse().ok())
+}
+
+/// Read the instruction count from a callgrind output file, then delete it.
+fn read_summary(path: &Path) -> Option<u64> {
+    use std::io::Read;
+    let mut header = String::new();
+    let file = fs::File::open(path).ok()?;
+    let read = file
+        .take(CALLGRIND_HEADER_BYTES)
+        .read_to_string(&mut header);
+    let _ = fs::remove_file(path);
+    read.ok()?;
+    parse_summary(&header)
+}
+
+/// The scanner command under callgrind. `{input}` is substituted as for any
+/// other delivery.
+fn callgrind_request(
+    valgrind: &Path,
+    out_file: &Path,
+    subject: &PerfSubject,
+    resolved: &Resolved,
+    piece: &Piece,
+    cwd: &Path,
+    config: &PerformanceConfig,
+) -> ProcessRequest {
+    let inner = request(subject, resolved, piece, cwd, config);
+    let mut args: Vec<OsString> = vec![
+        "--tool=callgrind".into(),
+        format!("--callgrind-out-file={}", out_file.display()).into(),
+        "--quiet".into(),
+        "--".into(),
+        inner.program.clone().into_os_string(),
+    ];
+    args.extend(inner.args);
+    ProcessRequest {
+        program: valgrind.to_path_buf(),
+        args,
+        ..inner
+    }
+}
+
+/// Instructions of one invocation: `None` when it did not complete.
+#[allow(clippy::too_many_arguments)]
+fn instructions_once(
+    valgrind: &Path,
+    subject: &PerfSubject,
+    resolved: &Resolved,
+    piece: &Piece,
+    cwd: &Path,
+    config: &PerformanceConfig,
+    serial: u64,
+    cancel: &CancelToken,
+) -> Result<Option<u64>, PerfError> {
+    if cancel.is_cancelled() {
+        return Err(PerfError::Cancelled);
+    }
+    let out_file = cwd.join(format!("callgrind-{serial}.out"));
+    let run = process::run(
+        &callgrind_request(valgrind, &out_file, subject, resolved, piece, cwd, config),
+        cancel,
+    );
+    match run.outcome {
+        ProcessOutcome::Exited {
+            code: Some(code), ..
+        } if subject.ok_exit_codes.contains(&code) => Ok(read_summary(&out_file)),
+        ProcessOutcome::Cancelled => Err(PerfError::Cancelled),
+        _ => {
+            let _ = fs::remove_file(&out_file);
+            Ok(None)
+        }
+    }
+}
+
+/// `valgrind --version` as a toolchain entry (`valgrind-3.22.0` -> `3.22.0`).
+fn valgrind_entry(
+    valgrind: &Path,
+    config: &PerformanceConfig,
+    cwd: &Path,
+    cancel: &CancelToken,
+) -> Result<ToolchainEntry, PerfError> {
+    let run = process::run(
+        &ProcessRequest {
+            program: valgrind.to_path_buf(),
+            args: vec!["--version".into()],
+            cwd: cwd.to_path_buf(),
+            stdin: None,
+            timeout: Duration::from_millis(config.limits.timeout_ms),
+            max_stdout: 4096,
+            max_stderr: 4096,
+        },
+        cancel,
+    );
+    let ProcessOutcome::Exited { stdout, .. } = run.outcome else {
+        return Err(PerfError::Subject(
+            "valgrind did not report its version".into(),
+        ));
+    };
+    let text = String::from_utf8_lossy(&stdout);
+    let version = text.trim().strip_prefix("valgrind-").unwrap_or("");
+    Ok(ToolchainEntry {
+        name: ComponentId::new("valgrind").expect("constant id"),
+        version: ReleaseTag::new(version)
+            .map_err(|_| PerfError::Subject("unrecognized valgrind version".into()))?,
+    })
+}
+
+/// Run an instruction-count measurement (ADR 0002, kind 3).
+///
+/// Each subject runs under `valgrind --tool=callgrind` `rounds` times per
+/// workload, as the baseline, the candidate and the baseline again (control),
+/// plus `rounds` runs on an empty input per subject to measure process
+/// startup. Counts are exact on a deterministic build, so the spread is
+/// expected to be 0 and the direction is a function of the counts alone; no
+/// host timing is involved, which makes a single run a result. Whole-input
+/// only. `batch_invocations` and `warmup_invocations` are not used.
+pub fn run_instructions(
+    config: &PerformanceConfig,
+    valgrind: &Path,
+    work_dir: &Path,
+    cancel: &CancelToken,
+) -> Result<PerformanceArtifact, PerfError> {
+    config.validate().map_err(PerfError::Config)?;
+    if config.shapes != [ScanShape::Whole] {
+        return Err(PerfError::Config(
+            "instruction counts support the whole shape only".into(),
+        ));
+    }
+    let started_at = time::now_rfc3339();
+    let host = host::diagnostics();
+    let baseline = resolve(&config.baseline)?;
+    let candidate = resolve(&config.candidate)?;
+    let max_input = usize::try_from(config.limits.max_input_bytes).unwrap_or(usize::MAX);
+    let mut generated = Vec::new();
+    for spec in &config.workloads {
+        let text = workloads::generate(spec.id, spec.units, max_input)
+            .map_err(|e| PerfError::Workload(format!("{:?}: {e}", spec.id)))?;
+        generated.push((spec, text));
+    }
+    // 3 arms and 2 startup measurements, `rounds` runs each, per workload.
+    let planned = (generated.len() as u64)
+        .saturating_mul(5)
+        .saturating_mul(u64::from(config.rounds));
+    if planned > bounds::MAX_TOTAL_INVOCATIONS {
+        return Err(PerfError::TooManyInvocations { planned });
+    }
+    fs::create_dir_all(work_dir).map_err(|e| PerfError::Io(e.to_string()))?;
+    let valgrind_toolchain = valgrind_entry(valgrind, config, work_dir, cancel)?;
+
+    let rounds = config.rounds as usize;
+    let mut serial: u64 = 0;
+    let mut identities = Vec::new();
+    let mut results = Vec::new();
+    for (spec, text) in &generated {
+        identities.push(WorkloadIdentity {
+            id: spec.id,
+            units: spec.units,
+            bytes: text.len() as u64,
+            digest: workloads::digest(text.as_bytes()),
+        });
+        let chunk = config.chunk_bytes as usize;
+        let a = prepare(
+            ScanShape::Whole,
+            text,
+            config.baseline.delivery,
+            work_dir,
+            "a",
+            chunk,
+        )?;
+        let b = prepare(
+            ScanShape::Whole,
+            text,
+            config.candidate.delivery,
+            work_dir,
+            "b",
+            chunk,
+        )?;
+        let empty_a = prepare(
+            ScanShape::Whole,
+            "",
+            config.baseline.delivery,
+            work_dir,
+            "ea",
+            chunk,
+        )?;
+        let empty_b = prepare(
+            ScanShape::Whole,
+            "",
+            config.candidate.delivery,
+            work_dir,
+            "eb",
+            chunk,
+        )?;
+        let mut failed: u32 = 0;
+        let mut measure = |subject: &PerfSubject,
+                           resolved: &Resolved,
+                           pieces: &[Piece]|
+         -> Result<Vec<u64>, PerfError> {
+            let mut counts = Vec::new();
+            for _ in 0..rounds {
+                serial += 1;
+                match instructions_once(
+                    valgrind, subject, resolved, &pieces[0], work_dir, config, serial, cancel,
+                )? {
+                    Some(n) => counts.push(n),
+                    None => failed += 1,
+                }
+            }
+            Ok(counts)
+        };
+        let start_a = measure(&config.baseline, &baseline, &empty_a)?;
+        let start_b = measure(&config.candidate, &candidate, &empty_b)?;
+        let first = measure(&config.baseline, &baseline, &a)?;
+        let second = measure(&config.candidate, &candidate, &b)?;
+        let control = measure(&config.baseline, &baseline, &a)?;
+        let base_arm = stats::instruction_arm(first, &start_a);
+        let cand_arm = stats::instruction_arm(second, &start_b);
+        let control_arm = stats::instruction_arm(control, &start_a);
+        let verdict = stats::instruction_verdict(&base_arm, &cand_arm, &control_arm, failed);
+        results.push(InstructionResult {
+            workload: spec.id,
+            baseline: base_arm,
+            candidate: cand_arm,
+            control: control_arm,
+            ratio: verdict.ratio,
+            noise_band: verdict.noise_band,
+            direction: verdict.direction,
+            failed_invocations: failed,
+        });
+    }
+
+    let mut host = host;
+    host.load_after = host::load_average();
+    let identity = |subject: &PerfSubject, resolved: &Resolved| SubjectIdentity {
+        id: subject.id.clone(),
+        version: subject.version.clone(),
+        revision: subject.revision.clone(),
+        executable_sha256: Some(resolved.sha256.clone()),
+    };
+    let mut toolchain = config.toolchain.clone();
+    toolchain.push(valgrind_toolchain);
+    toolchain.sort();
+    toolchain.dedup_by(|a, b| a.name == b.name);
+    let mut artifact = PerformanceArtifact {
+        schema: PerformanceArtifactSchema,
+        manifest: PerformanceManifest {
+            engine: EngineIdentity {
+                name: ENGINE_NAME.to_string(),
+                version: credential_eval_kernel::score::ENGINE_VERSION.to_string(),
+            },
+            performance_protocol: PERFORMANCE_PROTOCOL_VERSION.to_string(),
+            kind: MeasurementKind::Instructions,
+            config_hash: Some(config.config_hash()),
+            generation: GenerationContract {
+                id: ComponentId::new(GENERATOR_ID).expect("constant id"),
+                version: WORKLOAD_CONTRACT_VERSION,
+            },
+            subjects: vec![
+                identity(&config.baseline, &baseline),
+                identity(&config.candidate, &candidate),
+            ],
+            toolchain,
+            schedule: Some(Schedule {
+                rounds: config.rounds,
+                batch_invocations: 1,
+                warmup_invocations: 0,
+                chunk_bytes: config.chunk_bytes,
+            }),
+        },
+        workloads: identities,
+        latency: vec![],
+        allocation: vec![],
+        instructions: results,
         lost_paths: vec![],
         non_semantic: PerformanceNonSemantic {
             started_at: Some(started_at),
@@ -558,5 +856,121 @@ mod tests {
             run_latency(&config("cat >/dev/null"), dir.path(), &cancel),
             Err(PerfError::Cancelled)
         ));
+    }
+
+    /// A stand-in for `valgrind --tool=callgrind`: runs the program after `--`
+    /// with the inherited stdin and writes a callgrind-style header whose
+    /// `summary:` is 1000 per byte the program prints plus 7 for "startup".
+    fn fake_valgrind(dir: &Path) -> PathBuf {
+        let path = dir.join("valgrind");
+        fs::write(
+            &path,
+            "#!/bin/sh\n\
+             if [ \"$1\" = --version ]; then echo valgrind-3.22.0; exit 0; fi\n\
+             out=\"\"\n\
+             for a in \"$@\"; do case \"$a\" in --callgrind-out-file=*) out=\"${a#--callgrind-out-file=}\";; esac; done\n\
+             while [ \"$1\" != -- ]; do shift; done; shift\n\
+             tmp=$(mktemp); \"$@\" > \"$tmp\"; rc=$?\n\
+             n=$(wc -c < \"$tmp\" | tr -d ' '); rm -f \"$tmp\"\n\
+             printf 'events: Ir\\nsummary: %s\\n' $((n * 1000 + 7)) > \"$out\"\n\
+             exit $rc\n",
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    fn instructions(config: &PerformanceConfig) -> Result<PerformanceArtifact, PerfError> {
+        let dir = tempfile::tempdir().unwrap();
+        let valgrind = fake_valgrind(dir.path());
+        let work = dir.path().join("work");
+        run_instructions(config, &valgrind, &work, &CancelToken::new())
+    }
+
+    fn instruction_config(candidate: &str) -> PerformanceConfig {
+        let mut config = config(candidate);
+        config.baseline.args = vec!["-c".into(), "cat".into()];
+        config.shapes = vec![ScanShape::Whole];
+        config
+    }
+
+    #[test]
+    fn summary_lines_parse() {
+        assert_eq!(
+            parse_summary("version: 1\nevents: Ir\nsummary: 12345\nfn=x\n"),
+            Some(12345)
+        );
+        assert_eq!(parse_summary("summary: 7 8"), Some(7));
+        assert_eq!(parse_summary("events: Ir\n"), None);
+        assert_eq!(parse_summary("summary: nope"), None);
+        // Only a line that starts with `summary:` counts.
+        assert_eq!(parse_summary("totals: 5\n  summary: 9"), None);
+    }
+
+    #[test]
+    fn instruction_counts_give_an_exact_direction_from_one_run() {
+        // `sed p` prints every line twice: twice the "instructions".
+        let artifact = instructions(&instruction_config("sed p")).unwrap();
+        assert_eq!(artifact.manifest.kind, MeasurementKind::Instructions);
+        assert!(artifact.latency.is_empty());
+        let result = &artifact.instructions[0];
+        assert_eq!(result.failed_invocations, 0);
+        // Whole workload bytes * 1000 net; startup is the empty-input run (7).
+        let bytes = artifact.workloads[0].bytes;
+        assert_eq!(result.baseline.net, bytes * 1000);
+        assert_eq!(result.candidate.net, 2 * bytes * 1000);
+        assert_eq!(result.baseline.spread, 0);
+        assert_eq!(result.control, result.baseline);
+        assert!((result.ratio - 2.0).abs() < 1e-9);
+        assert_eq!(result.direction, Direction::Slower);
+        assert_eq!(artifact.manifest.schedule.as_ref().unwrap().rounds, 3);
+        let valgrind = artifact
+            .manifest
+            .toolchain
+            .iter()
+            .find(|t| t.name.as_str() == "valgrind")
+            .unwrap();
+        assert_eq!(valgrind.version.as_str(), "3.22.0");
+    }
+
+    #[test]
+    fn identical_builds_report_no_direction_and_runs_are_reproducible() {
+        let a = instructions(&instruction_config("cat")).unwrap();
+        assert_eq!(a.instructions[0].direction, Direction::Indistinguishable);
+        assert_eq!(a.instructions[0].ratio, 1.0);
+        let b = instructions(&instruction_config("cat")).unwrap();
+        // Counts are exact: the whole result, not only a digest, repeats.
+        assert_eq!(a.instructions, b.instructions);
+        assert_eq!(a.semantic_digest(), b.semantic_digest());
+    }
+
+    #[test]
+    fn instruction_runs_refuse_what_they_do_not_support() {
+        let mut chunked = instruction_config("cat");
+        chunked.shapes = vec![ScanShape::Chunked];
+        assert!(matches!(instructions(&chunked), Err(PerfError::Config(_))));
+        let mut pinned = instruction_config("cat");
+        pinned.candidate.sha256 =
+            Some(Sha256Digest::new(format!("sha256:{}", "0".repeat(64))).unwrap());
+        assert!(matches!(instructions(&pinned), Err(PerfError::Subject(_))));
+        let dir = tempfile::tempdir().unwrap();
+        assert!(matches!(
+            run_instructions(
+                &instruction_config("cat"),
+                &dir.path().join("no-valgrind"),
+                dir.path(),
+                &CancelToken::new()
+            ),
+            Err(PerfError::Subject(_))
+        ));
+    }
+
+    #[test]
+    fn a_failing_scanner_voids_the_instruction_direction() {
+        let artifact = instructions(&instruction_config("cat; exit 3")).unwrap();
+        let result = &artifact.instructions[0];
+        assert!(result.failed_invocations > 0);
+        assert_eq!(result.direction, Direction::Indistinguishable);
     }
 }

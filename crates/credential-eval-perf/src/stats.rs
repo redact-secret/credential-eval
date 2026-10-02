@@ -1,6 +1,6 @@
 //! Timing summaries and the direction rule.
 
-use credential_eval_contracts::performance::{Direction, TimingSummary};
+use credential_eval_contracts::performance::{Direction, InstructionArm, TimingSummary};
 
 /// Smallest noise band ever applied (5%). Process-spawn timings on a shared
 /// host do not resolve smaller differences: the beta.13 perf cards saw 5-20%
@@ -117,6 +117,80 @@ pub fn verdict(
     }
 }
 
+/// Smallest relative change in instructions reported as a direction (0.1%).
+/// Instruction counts are exact, so any difference is real, but a change this
+/// small is below what a card would call a change.
+pub const INSTRUCTION_FLOOR: f64 = 0.001;
+
+/// Build an [`InstructionArm`] from the counts of the repeats and the counts
+/// of the same build on an empty input (process startup).
+pub fn instruction_arm(counts: Vec<u64>, startup_counts: &[u64]) -> InstructionArm {
+    let min = counts.iter().copied().min().unwrap_or(0);
+    let max = counts.iter().copied().max().unwrap_or(0);
+    let startup = startup_counts.iter().copied().min().unwrap_or(0);
+    InstructionArm {
+        counts,
+        startup,
+        net: min.saturating_sub(startup),
+        spread: max - min,
+    }
+}
+
+/// The instruction-count verdict.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InstructionVerdict {
+    /// `candidate.net / baseline.net`.
+    pub ratio: f64,
+    /// Half-width of the band.
+    pub noise_band: f64,
+    /// Reported direction.
+    pub direction: Direction,
+}
+
+/// Apply the instruction-count rule: the band is the largest of the arms'
+/// spreads and the control's difference from the baseline, relative to the
+/// baseline's net count, and [`INSTRUCTION_FLOOR`]. With exact counts the
+/// spreads are 0 and the floor decides. Failed invocations or a zero baseline
+/// report no direction.
+pub fn instruction_verdict(
+    baseline: &InstructionArm,
+    candidate: &InstructionArm,
+    control: &InstructionArm,
+    failed_invocations: u32,
+) -> InstructionVerdict {
+    if baseline.net == 0 {
+        return InstructionVerdict {
+            ratio: 1.0,
+            noise_band: INSTRUCTION_FLOOR,
+            direction: Direction::Indistinguishable,
+        };
+    }
+    let base = baseline.net as f64;
+    let ratio = candidate.net as f64 / base;
+    let control_difference = control.net.abs_diff(baseline.net);
+    let noise = baseline
+        .spread
+        .max(candidate.spread)
+        .max(control.spread)
+        .max(control_difference) as f64
+        / base;
+    let band = noise.max(INSTRUCTION_FLOOR);
+    let direction = if failed_invocations > 0 {
+        Direction::Indistinguishable
+    } else if ratio < 1.0 - band {
+        Direction::Faster
+    } else if ratio > 1.0 + band {
+        Direction::Slower
+    } else {
+        Direction::Indistinguishable
+    };
+    InstructionVerdict {
+        ratio,
+        noise_band: band,
+        direction,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,6 +277,62 @@ mod tests {
         let zero = summary(&[0; 3]);
         assert_eq!(
             verdict(&zero, &b, &zero, 0).direction,
+            Direction::Indistinguishable
+        );
+    }
+
+    fn arm(counts: &[u64], startup: u64) -> InstructionArm {
+        instruction_arm(counts.to_vec(), &[startup, startup + 5])
+    }
+
+    #[test]
+    fn instruction_arms_subtract_startup() {
+        let a = arm(&[1_000, 1_000, 1_002], 100);
+        assert_eq!((a.net, a.spread, a.startup), (900, 2, 100));
+        // A count below startup cannot underflow.
+        assert_eq!(arm(&[50], 100).net, 0);
+    }
+
+    #[test]
+    fn exact_counts_report_any_change_above_the_floor() {
+        let base = arm(&[100_100, 100_100], 100);
+        let control = arm(&[100_100], 100);
+        // 4.6% fewer instructions: faster. The spread is 0, so the floor decides.
+        let v = instruction_verdict(&base, &arm(&[95_500, 95_500], 100), &control, 0);
+        assert_eq!(v.direction, Direction::Faster);
+        assert!(v.ratio < 0.96 && v.noise_band == INSTRUCTION_FLOOR);
+        let v = instruction_verdict(&base, &arm(&[105_000, 105_000], 100), &control, 0);
+        assert_eq!(v.direction, Direction::Slower);
+        // 0.03% is below the floor.
+        let v = instruction_verdict(&base, &arm(&[100_130, 100_130], 100), &control, 0);
+        assert_eq!(v.direction, Direction::Indistinguishable);
+    }
+
+    #[test]
+    fn spread_and_control_difference_widen_the_band() {
+        let base = arm(&[100_100, 100_100], 100);
+        // The control disagrees with the baseline by 10%: nothing under 10% counts.
+        let control = arm(&[110_100], 100);
+        let v = instruction_verdict(&base, &arm(&[95_100], 100), &control, 0);
+        assert!(v.noise_band >= 0.1 - 1e-9);
+        assert_eq!(v.direction, Direction::Indistinguishable);
+        let noisy = arm(&[100_100, 120_100], 100);
+        let v = instruction_verdict(&noisy, &arm(&[50_100], 100), &arm(&[100_100], 100), 0);
+        assert!(v.noise_band >= 0.2 - 1e-9);
+        assert_eq!(v.direction, Direction::Faster, "x0.5 clears a 20% band");
+    }
+
+    #[test]
+    fn instruction_failures_and_zero_baselines_report_no_direction() {
+        let base = arm(&[1_000], 100);
+        let fast = arm(&[200], 100);
+        assert_eq!(
+            instruction_verdict(&base, &fast, &base, 1).direction,
+            Direction::Indistinguishable
+        );
+        let zero = arm(&[100], 100);
+        assert_eq!(
+            instruction_verdict(&zero, &fast, &zero, 0).direction,
             Direction::Indistinguishable
         );
     }

@@ -214,6 +214,7 @@ mod tests {
                 result(WorkloadId::DenseUnicode, directions[1]),
             ],
             allocation: vec![],
+            instructions: vec![],
             lost_paths: vec![],
             non_semantic: PerformanceNonSemantic {
                 started_at: Some(format!("run-{seed}")),
