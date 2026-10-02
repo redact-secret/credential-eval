@@ -225,6 +225,7 @@ the legacy engine are listed in
 | (new documents) | `PerformanceConfig` and `PerformanceArtifact`, frozen at their first revision ([ADR 0002](../decisions/0002-performance-measurement-kinds.md)). Not a revision of the four documents above. | #23 |
 | (new document) | `DirectionConfirmation`, frozen at its first revision. | #25 |
 | (revision of `PerformanceArtifact`) | Optional `HostDiagnostics.cpu_model` (sanitized CPU model name). | #25 |
+| (revision of `PerformanceArtifact`) | `MeasurementKind::Instructions` and optional `instructions[]` (`InstructionResult`, `InstructionArm`): exact instruction counts under callgrind. | #26 |
 
 A reader validates with the schema of the engine version that wrote the
 document, or with any later v1 schema. Every struct sets

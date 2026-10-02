@@ -143,3 +143,31 @@ artifact's `lost_paths` and not reproduced.
 - A later card that needs a different workload adds a `WorkloadId`, which is an
   additive enum change in the frozen schemas and bumps
   `WORKLOAD_CONTRACT_VERSION` only if existing bytes change.
+
+## Amendment: instruction counts (#26)
+
+Wall-clock latency of per-invocation processes proved unreliable on shared
+hosts: with identical executables, one hosted-runner run reported a direction
+that a second run did not (#23, #25), and process startup swamps scan-time
+differences. A third measurement kind, **instructions**, is accepted.
+
+- **Evidence (feasibility, #26).** Under `valgrind --tool=callgrind` on hosted
+  Linux runners, repeats of one build had a spread of exactly 0 on all 11
+  workloads, and the `be5fee95` executable built and run on two different VMs
+  gave identical counts for all 11. The directions matched the allocation
+  results: #1121's assignment workloads fell 4.6% to 8.0% in instructions,
+  #1131's duplicate-key workload fell to 22.7% of the baseline, and the sparse
+  Unicode and `azure-duplicate-keys` cells were unchanged for #1121. The same
+  run showed `dense-invisible` +1.9% and `seam-heavy` +0.6% for the
+  `be5fee95` to `ad877c03` pair, small but exact increases that no timing run
+  could have resolved.
+- **Where it lives.** The neutral engine, `credential-eval perf instructions`:
+  it needs only an external process and valgrind, and nothing from the
+  scanner's internals.
+- **Artifact.** `MeasurementKind::Instructions` and
+  `PerformanceArtifact.instructions` are additive, optional revisions of the
+  frozen performance schema (ADR 0001 rules). The counts are part of the
+  artifact's semantic digest because, unlike timings, they are reproducible.
+- **Limits.** Instructions are a proxy for work, not for wall time. They are
+  Linux-only (valgrind), whole-input only, and the direction floor is 0.1%.
+  Latency stays as the reality check, quoted only when confirmed (#25).
