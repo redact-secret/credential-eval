@@ -156,8 +156,8 @@ differences. A third measurement kind, **instructions**, is accepted.
   workloads, and the `be5fee95` executable built and run on two different VMs
   gave identical counts for all 11. The directions matched the allocation
   results: #1121's assignment workloads fell 4.6% to 8.0% in instructions,
-  #1131's duplicate-key workload fell to 22.7% of the baseline, and the sparse
-  Unicode and `azure-duplicate-keys` cells were unchanged for #1121. The same
+  #1131's duplicate-key workload fell to 22.7% of the baseline, and `azure-duplicate-keys`
+  was unchanged for the #1121 pair, as expected. The same
   run showed `dense-invisible` +1.9% and `seam-heavy` +0.6% for the
   `be5fee95` to `ad877c03` pair, small but exact increases that no timing run
   could have resolved.
