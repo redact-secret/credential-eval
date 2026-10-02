@@ -52,11 +52,50 @@ pub fn load_average() -> Option<LoadAverage> {
     parse_load_average(&String::from_utf8_lossy(&output.stdout))
 }
 
+/// Longest CPU model name recorded, in characters.
+const MAX_CPU_MODEL: usize = 128;
+
+/// Reduce a reported CPU model to a recordable name: printable ASCII from a
+/// small safe set, runs of spaces collapsed, at most [`MAX_CPU_MODEL`]
+/// characters. `None` when nothing is left.
+pub fn sanitize_cpu_model(raw: &str) -> Option<String> {
+    let kept: String = raw
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || " ()@.,-_/+".contains(*c))
+        .collect();
+    let collapsed = kept.split_whitespace().collect::<Vec<_>>().join(" ");
+    let name: String = collapsed.chars().take(MAX_CPU_MODEL).collect();
+    (!name.is_empty()).then_some(name)
+}
+
+/// The CPU model from `/proc/cpuinfo` text (the first `model name` line).
+pub fn parse_cpuinfo_model(text: &str) -> Option<String> {
+    text.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        (key.trim() == "model name")
+            .then(|| sanitize_cpu_model(value))
+            .flatten()
+    })
+}
+
+/// The CPU model of this host, when it reports one.
+pub fn cpu_model() -> Option<String> {
+    if let Ok(text) = std::fs::read_to_string("/proc/cpuinfo") {
+        return parse_cpuinfo_model(&text);
+    }
+    let output = std::process::Command::new("sysctl")
+        .args(["-n", "machdep.cpu.brand_string"])
+        .output()
+        .ok()?;
+    sanitize_cpu_model(&String::from_utf8_lossy(&output.stdout))
+}
+
 /// Host diagnostics, with the load average taken now as `load_before`.
 pub fn diagnostics() -> HostDiagnostics {
     HostDiagnostics {
         os: component(std::env::consts::OS),
         arch: component(std::env::consts::ARCH),
+        cpu_model: cpu_model(),
         cpus: std::thread::available_parallelism()
             .map_or(1, |n| u32::try_from(n.get()).unwrap_or(u32::MAX)),
         load_before: load_average(),
@@ -78,6 +117,30 @@ mod tests {
         assert!(parse_load_average("a b c").is_none());
         assert!(parse_load_average("1 2").is_none());
         assert!(parse_load_average("NaN 1 2").is_none());
+    }
+
+    #[test]
+    fn cpu_models_are_sanitized() {
+        let linux = "processor\t: 0\nmodel name\t: Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz\nmodel name\t: other\n";
+        assert_eq!(
+            parse_cpuinfo_model(linux).as_deref(),
+            Some("Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz")
+        );
+        assert_eq!(parse_cpuinfo_model("processor : 0\n"), None);
+        assert_eq!(
+            sanitize_cpu_model("  Apple   M2 \n").as_deref(),
+            Some("Apple M2")
+        );
+        // Anything outside the safe set is dropped, and the length is bounded.
+        assert_eq!(
+            sanitize_cpu_model("a\u{0}b\u{1b}[31mc<>|").as_deref(),
+            Some("ab31mc")
+        );
+        assert_eq!(sanitize_cpu_model("한글"), None);
+        assert_eq!(
+            sanitize_cpu_model(&"x".repeat(500)).unwrap().len(),
+            MAX_CPU_MODEL
+        );
     }
 
     #[test]

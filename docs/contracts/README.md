@@ -14,6 +14,7 @@ types and does not override them.
 | Run artifact | `artifact::RunArtifact` | `schemas/run-artifact-v1.schema.json` | output |
 | Performance configuration | `performance::PerformanceConfig` | `schemas/performance-config-v1.schema.json` | input (latency mode) |
 | Performance artifact | `performance::PerformanceArtifact` | `schemas/performance-artifact-v1.schema.json` | output ([../performance-measurement.md](../performance-measurement.md)) |
+| Direction confirmation | `performance::DirectionConfirmation` | `schemas/direction-confirmation-v1.schema.json` | output (`perf confirm`) |
 
 Each document has a top-level `schema` tag, such as
 `credential-eval/run-artifact/v1`, and a reader rejects any other tag. The
@@ -222,6 +223,8 @@ the legacy engine are listed in
 | v1.1 | Official-run inputs ([../official-runs.md](../official-runs.md)), all optional: `SnapshotIdentity.release {tag, manifest_digest}` (the verified evidence release, written only by the evaluator), `ScannerSpec.pin {version, sha256?}`, `ScannerIdentity.build` (`released` \| `candidate`), `RunManifest.run_class` (`official` \| `exploratory`) and `RunManifest.publication` (`public` \| `internal`). Absent `run_class`/`publication` read as `exploratory`/`internal`; absent `build` is never `released`. | #14 |
 
 | (new documents) | `PerformanceConfig` and `PerformanceArtifact`, frozen at their first revision ([ADR 0002](../decisions/0002-performance-measurement-kinds.md)). Not a revision of the four documents above. | #23 |
+| (new document) | `DirectionConfirmation`, frozen at its first revision. | #25 |
+| (revision of `PerformanceArtifact`) | Optional `HostDiagnostics.cpu_model` (sanitized CPU model name). | #25 |
 
 A reader validates with the schema of the engine version that wrote the
 document, or with any later v1 schema. Every struct sets
@@ -250,7 +253,7 @@ fall into five groups:
 | Evidence labels copied into the artifact | `CaseResult.{group, family, targets, taxonomy, evidence_class, twin_mutation_kind}` (P1) | Copies of the grouping labels above. |
 | Run configuration | `ScannerSpec.{configuration, mode}`, `ScannerIdentity.mode`, `AdapterIdentity.version`, `ScannerLimits.{max_stdout_bytes, max_stderr_bytes}` | Operator input. A configuration must not contain credentials, and only its digest reaches observations and artifacts. The two limits are byte counts. |
 | Engine and adapter code | `EngineIdentity.{name, version}`, `RunManifest.protocol_version`, `ObservationResult.reason`, `ScannerRun.detail`, `Assertion.reason`, `VariantRecord.{property, parameters}`, `ScannerProvenance.network_controls`, `ProvenanceComponent.{name, version, integrity}`, `ScannerIdentity.version`, `NonSemantic.{run_id, started_at, finished_at, host}`, `GroupAggregate.secret_bytes`, `VariantRecord.content_digest` | Fixed sanitized strings, identifiers, versions, timestamps, digests and counts. Operator parameters keep boolean and number values only. A scanner version is the first semantic-version match of the version probe, never the probe output. |
-| Performance run configuration and artifact | `PerfSubject.{program, args}` (config), `PerformanceManifest.performance_protocol`, `PerformanceNonSemantic.{started_at, finished_at}`, and `EngineIdentity.{name, version}` in the performance artifact | Operator input (an executable path and its arguments, hashed and never an output), an engine constant, and timestamps. A performance artifact holds counts, sizes, timings, digests and identities only: no workload text, no matched value, no scanner output. |
+| Performance run configuration and artifact | `PerfSubject.{program, args}` (config), `PerformanceManifest.performance_protocol`, `PerformanceNonSemantic.{started_at, finished_at}`, `HostDiagnostics.cpu_model`, and `EngineIdentity.{name, version}` in the performance artifact | Operator input (an executable path and its arguments, hashed and never an output), an engine constant, and timestamps. A performance artifact holds counts, sizes, timings, digests and identities only: no workload text, no matched value, no scanner output. |
 | Scanner-reported labels on findings | `NormalizedFinding.{family, action}`, `ObservedRange.{family, action}` | `family` comes only from an adapter's fixed mapping tables. `action` is the disposition label a scanner reports (`redact`, `warn`, `block`), passed through by the adapter. |
 
 Residual risk: `action` is the one value a scanner, rather than this

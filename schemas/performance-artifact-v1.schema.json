@@ -242,6 +242,13 @@
           "description": "CPU architecture.",
           "$ref": "#/$defs/ComponentId"
         },
+        "cpu_model": {
+          "description": "CPU model name (for example `Intel(R) Xeon(R) Platinum 8370C CPU @\n2.80GHz`), when the host reports one. Hosted runners of one name mix\nCPU generations, so a direction is only comparable between runs that\nrecorded the same model. Revision of the first performance schema.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "cpus": {
           "description": "Logical CPUs available to the process.",
           "type": "integer",

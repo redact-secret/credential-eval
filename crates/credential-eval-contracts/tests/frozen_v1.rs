@@ -25,7 +25,7 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 /// Frozen baseline files and the SHA-256 of their bytes.
-const FROZEN: [(&str, &str); 6] = [
+const FROZEN: [(&str, &str); 7] = [
     (
         "corpus-snapshot-v1.schema.json",
         "54e8bafff0b05df27f360913ebd97e220e3ed8d6b2ba81fd7c0a28d6be24e89b",
@@ -50,6 +50,10 @@ const FROZEN: [(&str, &str); 6] = [
     (
         "performance-artifact-v1.schema.json",
         "7c2c59883d7fb3c574d890e4a8fc56d9eac45bd7ee0ad2467ebbd2434be0fdb0",
+    ),
+    (
+        "direction-confirmation-v1.schema.json",
+        "14bbb479138fbdf7d813f7cd307509fa738fd8107e5ccebc15184e87c14e12bf",
     ),
 ];
 

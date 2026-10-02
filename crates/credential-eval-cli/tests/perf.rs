@@ -172,3 +172,62 @@ fn the_latency_template_is_valid_once_its_placeholders_are_filled() {
         assert!(ids.contains(&required), "{required:?}");
     }
 }
+
+#[test]
+fn perf_confirm_combines_independent_runs_and_refuses_bad_input() {
+    let dir = tempfile::tempdir().unwrap();
+    let run = |name: &str, candidate: &str| {
+        let config_path = dir.path().join(format!("{name}.config.json"));
+        let out = dir.path().join(format!("{name}.json"));
+        fs::write(&config_path, config(candidate).to_string()).unwrap();
+        let output = bin()
+            .args(["perf", "run", "--config"])
+            .arg(&config_path)
+            .arg("--out")
+            .arg(&out)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        out
+    };
+    // Two runs of one configuration; the candidate is much slower in both.
+    let a = run("a", "sleep 0.4; cat >/dev/null");
+    let b = run("b", "sleep 0.4; cat >/dev/null");
+    let out = dir.path().join("confirmation.json");
+    let confirm = |artifacts: &[&PathBuf]| {
+        let mut cmd = bin();
+        cmd.args(["perf", "confirm"]);
+        for artifact in artifacts {
+            cmd.arg("--artifact").arg(artifact);
+        }
+        cmd.arg("--out").arg(&out);
+        cmd.output().unwrap()
+    };
+    let output = confirm(&[&a, &b]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stderr.contains("2 runs"));
+    let value: Value = serde_json::from_slice(&fs::read(&out).unwrap()).unwrap();
+    let schema = all_schemas()
+        .into_iter()
+        .find(|(file, _)| *file == "direction-confirmation-v1.schema.json")
+        .map(|(_, schema)| serde_json::to_value(&schema).unwrap())
+        .unwrap();
+    let errors: Vec<String> = jsonschema::validator_for(&schema)
+        .unwrap()
+        .iter_errors(&value)
+        .map(|e| e.to_string())
+        .collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    assert_eq!(value["results"][0]["status"], "confirmed-slower");
+    // The same file twice is not two independent runs; one run is not enough;
+    // runs of different configurations cannot be combined.
+    assert_eq!(confirm(&[&a, &a]).status.code(), Some(2));
+    assert_eq!(confirm(&[&a]).status.code(), Some(2));
+    let other = run("c", "cat >/dev/null");
+    assert_eq!(confirm(&[&a, &other]).status.code(), Some(2));
+}
