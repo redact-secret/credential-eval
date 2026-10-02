@@ -1,0 +1,98 @@
+name: perf-instructions-feasibility
+
+# Feasibility of instruction counts as a deterministic timing proxy (issue #26,
+# ADR 0002). Runs the pinned Redact Secret CLI builds under callgrind on a
+# Linux runner and reports the run-to-run spread and the direction of each
+# card's change. Runs on the pull request that touches it and on demand; it is
+# an experiment, not a gate.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/perf-instructions-feasibility.yml
+      - tools/perf/callgrind-feasibility.py
+      - crates/credential-eval-perf/**
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  instructions:
+    name: instruction counts
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cards-1121
+            baseline: 44382b3f3006a3a34a2bab917711d00e2e53284a
+            candidate: be5fee9597311ee01cb33bcdc5c064d5cbb667ff
+          - name: cards-1131-1135
+            baseline: be5fee9597311ee01cb33bcdc5c064d5cbb667ff
+            candidate: ad877c036825a926f93478c2104e675d9c301326
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Install valgrind
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind
+
+      - name: Build the scanners
+        env:
+          BASELINE: ${{ matrix.baseline }}
+          CANDIDATE: ${{ matrix.candidate }}
+        run: |
+          set -euo pipefail
+          for rev in "$BASELINE" "$CANDIDATE"; do
+            cargo install --locked --git https://github.com/redact-secret/redact-secret \
+              --rev "$rev" redact-secret-cli --root "$RUNNER_TEMP/scanner-$rev"
+          done
+
+      # Small inputs: under callgrind a scan runs about 50x slower.
+      - name: Generate the workloads
+        run: |
+          set -euo pipefail
+          cargo build --release --locked -p credential-eval-perf --example workload
+          mkdir -p "$RUNNER_TEMP/workloads"
+          gen() { ./target/release/examples/workload "$1" "$2" "$RUNNER_TEMP/workloads/$1.txt"; }
+          gen sparse-unicode 300
+          gen dense-invisible 300
+          gen seam-heavy 100
+          gen repeated-short-log-lines 500
+          gen assignments-ordinary 200
+          gen assignments-diverse 200
+          gen assignments-references 200
+          gen azure-repeated-records 20
+          gen azure-duplicate-keys 100
+          gen overlap-pairs 200
+          gen overlap-dense 100
+
+      - name: Count instructions
+        env:
+          BASELINE: ${{ matrix.baseline }}
+          CANDIDATE: ${{ matrix.candidate }}
+        run: |
+          set -euo pipefail
+          python3 tools/perf/callgrind-feasibility.py \
+            "$RUNNER_TEMP/scanner-$BASELINE/bin/redact-secret" \
+            "$RUNNER_TEMP/scanner-$CANDIDATE/bin/redact-secret" \
+            "$RUNNER_TEMP/workloads" "$RUNNER_TEMP/instructions.json" | tee "$RUNNER_TEMP/summary.txt"
+          { echo '```'; cat "$RUNNER_TEMP/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: instructions-${{ matrix.name }}
+          path: ${{ runner.temp }}/instructions.json
+          if-no-files-found: error
