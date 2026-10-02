@@ -29,8 +29,35 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
+  # The engine is the instrument, not the thing measured: build it once and
+  # share it with the jobs below (in this workflow run only).
+  build:
+    name: build the engine
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Build the engine
+        run: cargo build --release --locked -p credential-eval-cli
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine
+          path: target/release/credential-eval
+          retention-days: 1
+          if-no-files-found: error
+
   latency:
     name: latency run ${{ matrix.run }}
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -45,10 +72,13 @@ jobs:
       - name: Install pinned toolchain
         run: rustup show active-toolchain || rustup toolchain install
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: engine
+          path: ${{ runner.temp }}/engine
 
-      - name: Build the engine
-        run: cargo build --release --locked -p credential-eval-cli
+      - name: Make the engine executable
+        run: chmod +x "$RUNNER_TEMP/engine/credential-eval"
 
       # A scanner build is identified by its commit, which never changes, so
       # the cache key is the commit (plus the toolchain it was built with): it
@@ -102,7 +132,7 @@ jobs:
       - name: Measure
         run: |
           set -euo pipefail
-          ./target/release/credential-eval perf run \
+          "$RUNNER_TEMP/engine/credential-eval" perf run \
             --config "$RUNNER_TEMP/performance-config.json" \
             --out "$RUNNER_TEMP/performance-artifact.json" \
             --work-dir "$RUNNER_TEMP/perf-work" 2> "$RUNNER_TEMP/summary.txt"
@@ -116,21 +146,17 @@ jobs:
 
   confirm:
     name: confirmed directions
-    needs: latency
+    needs: [build, latency]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          persist-credentials: false
+          name: engine
+          path: ${{ runner.temp }}/engine
 
-      - name: Install pinned toolchain
-        run: rustup show active-toolchain || rustup toolchain install
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-
-      - name: Build the engine
-        run: cargo build --release --locked -p credential-eval-cli
+      - name: Make the engine executable
+        run: chmod +x "$RUNNER_TEMP/engine/credential-eval"
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -142,7 +168,7 @@ jobs:
       - name: Confirm
         run: |
           set -euo pipefail
-          ./target/release/credential-eval perf confirm \
+          "$RUNNER_TEMP/engine/credential-eval" perf confirm \
             --artifact "$RUNNER_TEMP/runs/performance-artifact-1/performance-artifact.json" \
             --artifact "$RUNNER_TEMP/runs/performance-artifact-2/performance-artifact.json" \
             --out "$RUNNER_TEMP/direction-confirmation.json" 2> "$RUNNER_TEMP/summary.txt"
