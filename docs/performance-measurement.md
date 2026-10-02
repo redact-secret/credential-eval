@@ -157,6 +157,34 @@ workload (counted before anything starts), with the per-invocation timeout of
 the configuration (callgrind runs a scan about 50x slower). The callgrind file
 is read up to 64 KiB of header and deleted; it is never published.
 
+### Results (instructions)
+
+Recorded, exactly, in
+[measurements/redact-secret-instruction-counts-1121.json](measurements/redact-secret-instruction-counts-1121.json)
+(`44382b3f` to `be5fee95`) and
+[measurements/redact-secret-instruction-counts-1131-1135.json](measurements/redact-secret-instruction-counts-1131-1135.json)
+(`be5fee95` to `ad877c03`), from the `perf-instructions` workflow on a hosted
+Linux runner (valgrind 3.22.0). Every cell has spread 0 and a control equal to
+the baseline. Net instructions, candidate over baseline:
+
+| Card | Workload | Ratio | Direction |
+|---|---|---:|---|
+| #1121 | `assignments-ordinary` / `-diverse` / `-references` | 0.954 / 0.949 / 0.920 | faster |
+| #1121 | `overlap-pairs` / `overlap-dense` / `seam-heavy` | 0.952 / 0.948 / 0.968 | faster |
+| #1131 | `azure-duplicate-keys` | 0.227 | faster |
+| #1131 | `azure-repeated-records` | 0.999 | faster (by 0.12%) |
+| #1135 | `overlap-sparse` / `-pairs` / `-dense` | 0.984 / 0.998 / 0.998 | faster |
+| #1132-#1134 range | `dense-invisible` / `dense-unicode` / `seam-heavy` | 1.019 / 1.005 / 1.006 | slower |
+| | `assignments-*`, `dense-early-exhaustion`, `sparse-unicode` | 1.000 | indistinguishable |
+
+The increases for `dense-invisible`, `dense-unicode` and `seam-heavy` between
+`be5fee95` and `ad877c03` are small and exact. They are executed-instruction
+counts, not wall time, and they point at cards #1132 to #1134 (normalization
+and range mapping); the cards' own wall-clock samples saw gains on the sparse
+cases and no stable change on the dense ones, which this is consistent with.
+These are the timing-direction numbers to attach to the cards' evidence files;
+the latency mode confirms them only where a confirmed direction exists.
+
 ## Allocation: `measurements/redact-secret-alloc`
 
 ```bash
