@@ -231,3 +231,118 @@ fn perf_confirm_combines_independent_runs_and_refuses_bad_input() {
     let other = run("c", "cat >/dev/null");
     assert_eq!(confirm(&[&a, &other]).status.code(), Some(2));
 }
+
+/// A stand-in for valgrind (see the unit tests in `perf.rs`): counts 1000 per
+/// byte the scanner prints.
+fn fake_valgrind(dir: &std::path::Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join("valgrind");
+    fs::write(
+        &path,
+        "#!/bin/sh\n\
+         if [ \"$1\" = --version ]; then echo valgrind-3.22.0; exit 0; fi\n\
+         out=\"\"\n\
+         for a in \"$@\"; do case \"$a\" in --callgrind-out-file=*) out=\"${a#--callgrind-out-file=}\";; esac; done\n\
+         while [ \"$1\" != -- ]; do shift; done; shift\n\
+         tmp=$(mktemp); \"$@\" > \"$tmp\"; rc=$?\n\
+         n=$(wc -c < \"$tmp\" | tr -d ' '); rm -f \"$tmp\"\n\
+         printf 'events: Ir\\nsummary: %s\\n' $((n * 1000 + 7)) > \"$out\"\n\
+         exit $rc\n",
+    )
+    .unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+#[test]
+fn perf_instructions_writes_a_schema_valid_exact_artifact() {
+    let dir = tempfile::tempdir().unwrap();
+    let valgrind = fake_valgrind(dir.path());
+    let mut config = config("sed p");
+    config["baseline"] = subject("scanner-a", "cat");
+    config["shapes"] = json!(["whole"]);
+    let config_path = dir.path().join("config.json");
+    fs::write(&config_path, config.to_string()).unwrap();
+    let run = |out: &str| {
+        let out = dir.path().join(out);
+        let output = bin()
+            .args(["perf", "instructions", "--config"])
+            .arg(&config_path)
+            .arg("--valgrind")
+            .arg(&valgrind)
+            .arg("--out")
+            .arg(&out)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        (out, String::from_utf8_lossy(&output.stderr).into_owned())
+    };
+    let (first, stderr) = run("one.json");
+    assert!(stderr.contains("Slower"), "{stderr}");
+    let text = fs::read_to_string(&first).unwrap();
+    let value: Value = serde_json::from_str(&text).unwrap();
+    let errors: Vec<String> = validator()
+        .iter_errors(&value)
+        .map(|e| e.to_string())
+        .collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    let artifact: PerformanceArtifact = serde_json::from_str(&text).unwrap();
+    assert_eq!(artifact.instructions.len(), 1);
+    assert_eq!(artifact.instructions[0].direction, Direction::Slower);
+    assert!(!text.contains("GET /health"));
+    // Exact counts: a second run reproduces the instruction results.
+    let (second, _) = run("two.json");
+    let again: PerformanceArtifact =
+        serde_json::from_str(&fs::read_to_string(second).unwrap()).unwrap();
+    assert_eq!(artifact.instructions, again.instructions);
+    // A missing valgrind is a refused subject (exit 4), and nothing is written.
+    let output = bin()
+        .args(["perf", "instructions", "--config"])
+        .arg(&config_path)
+        .args(["--valgrind", "/nonexistent/valgrind", "--out"])
+        .arg(dir.path().join("none.json"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(4));
+    assert!(!dir.path().join("none.json").exists());
+    // `--valgrind` belongs to `perf instructions` only.
+    let output = bin()
+        .args(["perf", "run", "--valgrind", "x"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+}
+
+#[test]
+fn the_instructions_template_is_valid_once_its_placeholders_are_filled() {
+    let template = fs::read_to_string(
+        repo().join("configs/performance/redact-secret-instructions.template.json"),
+    )
+    .unwrap();
+    let sha = |c: char| c.to_string().repeat(40);
+    let filled = [
+        ("__BASELINE_ID__", "scanner-a".to_owned()),
+        ("__CANDIDATE_ID__", "scanner-b".to_owned()),
+        ("__BASELINE_VERSION__", "0.1.0".to_owned()),
+        ("__CANDIDATE_VERSION__", "0.1.0".to_owned()),
+        ("__BASELINE_REVISION__", sha('a')),
+        ("__CANDIDATE_REVISION__", sha('b')),
+        ("__BASELINE_BIN__", "/bin/cat".to_owned()),
+        ("__CANDIDATE_BIN__", "/bin/cat".to_owned()),
+        ("__LLVM_VERSION__", "20.1.5".to_owned()),
+        ("__RUSTC_VERSION__", "1.88.0".to_owned()),
+    ]
+    .iter()
+    .fold(template, |text, (key, value)| text.replace(key, value));
+    assert!(!filled.contains("__"));
+    let config: PerformanceConfig = serde_json::from_str(&filled).unwrap();
+    config.validate().unwrap();
+    assert_eq!(
+        config.shapes,
+        [credential_eval_contracts::performance::ScanShape::Whole]
+    );
+}

@@ -4,7 +4,9 @@
 
 use std::path::PathBuf;
 
-use credential_eval_contracts::performance::{MeasurementKind, PerformanceArtifact, WorkloadId};
+use credential_eval_contracts::performance::{
+    Direction, MeasurementKind, PerformanceArtifact, WorkloadId,
+};
 use credential_eval_contracts::schema::all_schemas;
 use serde_json::Value;
 
@@ -84,4 +86,61 @@ fn the_committed_allocation_counts_reproduce_the_1121_baseline() {
     // Sanitized: no generated line, only identities and counts.
     assert!(!text.contains("api_key"));
     assert!(!text.contains("AccountKey"));
+}
+
+#[test]
+fn the_committed_instruction_counts_are_exact_and_show_the_cards() {
+    let load = |name: &str| -> PerformanceArtifact {
+        let (_, text) = measurements()
+            .into_iter()
+            .find(|(n, _)| n == name)
+            .unwrap_or_else(|| panic!("{name} is committed"));
+        serde_json::from_str(&text).expect("typed")
+    };
+    for name in [
+        "redact-secret-instruction-counts-1121.json",
+        "redact-secret-instruction-counts-1131-1135.json",
+    ] {
+        let artifact = load(name);
+        assert_eq!(artifact.manifest.kind, MeasurementKind::Instructions);
+        assert!(!artifact.instructions.is_empty());
+        for result in &artifact.instructions {
+            // Exact counts: no spread, and the control reproduces the baseline.
+            assert_eq!(result.baseline.spread, 0, "{name} {:?}", result.workload);
+            assert_eq!(result.candidate.spread, 0, "{name} {:?}", result.workload);
+            assert_eq!(result.control.counts, result.baseline.counts);
+            assert_eq!(result.failed_invocations, 0);
+        }
+    }
+    let direction = |artifact: &PerformanceArtifact, workload: WorkloadId| {
+        artifact
+            .instructions
+            .iter()
+            .find(|r| r.workload == workload)
+            .expect("measured")
+            .direction
+    };
+    let first = load("redact-secret-instruction-counts-1121.json");
+    for workload in [
+        WorkloadId::AssignmentsOrdinary,
+        WorkloadId::AssignmentsDiverse,
+        WorkloadId::AssignmentsReferences,
+    ] {
+        assert_eq!(
+            direction(&first, workload),
+            Direction::Faster,
+            "{workload:?}"
+        );
+    }
+    let second = load("redact-secret-instruction-counts-1131-1135.json");
+    assert_eq!(
+        direction(&second, WorkloadId::AzureDuplicateKeys),
+        Direction::Faster
+    );
+    let duplicate = second
+        .instructions
+        .iter()
+        .find(|r| r.workload == WorkloadId::AzureDuplicateKeys)
+        .expect("measured");
+    assert!(duplicate.ratio < 0.25, "{}", duplicate.ratio);
 }

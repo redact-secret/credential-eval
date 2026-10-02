@@ -16,6 +16,8 @@
 //!                     --out-dir <dir>
 //! credential-eval perf run --config <performance-config.json> --out <performance-artifact.json>
 //!                     [--work-dir <dir>]
+//! credential-eval perf instructions --config <performance-config.json>
+//!                     --out <performance-artifact.json> [--valgrind <path>] [--work-dir <dir>]
 //! credential-eval perf confirm --artifact <performance-artifact.json> --artifact <...>
 //!                     --out <direction-confirmation.json>
 //! credential-eval default-config [--scanner <id>]... [--jobs N]
@@ -81,6 +83,8 @@ usage:
                       --index <legacy-index.json> --out-dir <dir>
   credential-eval perf run --config <performance-config.json>
                       --out <performance-artifact.json> [--work-dir <dir>]
+  credential-eval perf instructions --config <performance-config.json>
+                      --out <performance-artifact.json> [--valgrind <path>] [--work-dir <dir>]
   credential-eval perf confirm --artifact <performance-artifact.json>
                       --artifact <performance-artifact.json>... --out <direction-confirmation.json>
   credential-eval default-config [--scanner <id>]... [--jobs N]
@@ -589,21 +593,23 @@ fn run(args: &[OsString]) -> ExitCode {
 
 /// `perf` subcommands: measurements that are not detection outcomes (ADR 0002).
 fn perf_command(args: &[OsString]) -> ExitCode {
-    match args.first().and_then(|a| a.to_str()) {
-        Some("run") => {}
+    let instructions = match args.first().and_then(|a| a.to_str()) {
+        Some("run") => false,
+        Some("instructions") => true,
         Some("confirm") => return perf_confirm(&args[1..]),
         _ => {
-            eprintln!("error: perf takes a subcommand: run, confirm\n{USAGE}");
+            eprintln!("error: perf takes a subcommand: run, instructions, confirm\n{USAGE}");
             return ExitCode::from(2);
         }
-    }
-    let (mut config_path, mut out, mut work_dir) = (None, None, None);
+    };
+    let (mut config_path, mut out, mut work_dir, mut valgrind) = (None, None, None, None);
     let mut iter = args[1..].iter();
     while let Some(flag) = iter.next() {
         let slot = match flag.to_str() {
             Some("--config") => &mut config_path,
             Some("--out") => &mut out,
             Some("--work-dir") => &mut work_dir,
+            Some("--valgrind") if instructions => &mut valgrind,
             _ => {
                 eprintln!("error: unknown argument {flag:?}\n{USAGE}");
                 return ExitCode::from(2);
@@ -616,7 +622,7 @@ fn perf_command(args: &[OsString]) -> ExitCode {
         *slot = Some(PathBuf::from(value));
     }
     let (Some(config_path), Some(out)) = (config_path, out) else {
-        eprintln!("error: perf run needs --config and --out\n{USAGE}");
+        eprintln!("error: perf run and perf instructions need --config and --out\n{USAGE}");
         return ExitCode::from(2);
     };
     let config: PerformanceConfig =
@@ -648,7 +654,26 @@ fn perf_command(args: &[OsString]) -> ExitCode {
             scratch.path().to_path_buf()
         }
     };
-    let artifact = match perf::run_latency(&config, &work_dir, &cancel) {
+    let result = if instructions {
+        let valgrind = valgrind.unwrap_or_else(|| PathBuf::from("valgrind"));
+        let valgrind = if valgrind.components().count() > 1 {
+            Some(valgrind)
+        } else {
+            credential_eval_adapters::provenance::which(
+                &valgrind.to_string_lossy(),
+                std::env::var_os("PATH").as_deref(),
+            )
+        };
+        match valgrind {
+            Some(valgrind) => perf::run_instructions(&config, &valgrind, &work_dir, &cancel),
+            None => Err(perf::PerfError::Subject(
+                "valgrind not found on PATH".into(),
+            )),
+        }
+    } else {
+        perf::run_latency(&config, &work_dir, &cancel)
+    };
+    let artifact = match result {
         Ok(artifact) => artifact,
         Err(perf::PerfError::Cancelled) => {
             eprintln!("run cancelled; no artifact written");
@@ -670,6 +695,20 @@ fn perf_command(args: &[OsString]) -> ExitCode {
     if let Err(e) = write_atomic(&out, &pretty(&artifact)) {
         eprintln!("error: cannot write --out: {e}");
         return ExitCode::from(1);
+    }
+    for result in &artifact.instructions {
+        eprintln!(
+            "{:?}: {:?} (instructions x{:.4}, band ±{:.2}%{})",
+            result.workload,
+            result.direction,
+            result.ratio,
+            result.noise_band * 100.0,
+            if result.failed_invocations > 0 {
+                format!(", {} failed invocations", result.failed_invocations)
+            } else {
+                String::new()
+            }
+        );
     }
     for result in &artifact.latency {
         eprintln!(

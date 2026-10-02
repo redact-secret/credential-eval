@@ -1,0 +1,126 @@
+name: perf-instructions
+
+# Instruction counts of two pinned Redact Secret CLI builds under callgrind
+# (ADR 0002, kind 3). Counts are exact and reproduce bit for bit across hosts
+# (measured in #26), so one run is a result and the host does not matter; this
+# is the deterministic counterpart of the noisy `perf-latency` workflow. The
+# direction is a function of the counts alone. Runs on demand and on pull
+# requests that touch the mode.
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_revision:
+        description: Redact Secret commit of the baseline build
+        required: true
+        default: be5fee9597311ee01cb33bcdc5c064d5cbb667ff
+      candidate_revision:
+        description: Redact Secret commit of the candidate build
+        required: true
+        default: ad877c036825a926f93478c2104e675d9c301326
+  pull_request:
+    paths:
+      - .github/workflows/perf-instructions.yml
+      - configs/performance/redact-secret-instructions.template.json
+      - crates/credential-eval-cli/src/perf.rs
+      - crates/credential-eval-perf/**
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  instructions:
+    name: instruction counts (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cards-1121
+            baseline: ${{ github.event_name == 'workflow_dispatch' && inputs.baseline_revision || '44382b3f3006a3a34a2bab917711d00e2e53284a' }}
+            candidate: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_revision || 'be5fee9597311ee01cb33bcdc5c064d5cbb667ff' }}
+          - name: cards-1131-1135
+            baseline: ${{ github.event_name == 'workflow_dispatch' && inputs.baseline_revision || 'be5fee9597311ee01cb33bcdc5c064d5cbb667ff' }}
+            candidate: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_revision || 'ad877c036825a926f93478c2104e675d9c301326' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Install valgrind
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind
+
+      - name: Build the engine
+        run: cargo build --release --locked -p credential-eval-cli
+
+      # A scanner build is identified by its commit, which never changes, so
+      # the cache key is the commit (plus the toolchain it was built with).
+      - name: Restore scanner builds
+        id: scanners
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/scanner-${{ matrix.baseline }}
+            ${{ runner.temp }}/scanner-${{ matrix.candidate }}
+          key: scanners-${{ runner.os }}-${{ matrix.baseline }}-${{ matrix.candidate }}-${{ hashFiles('rust-toolchain.toml') }}
+
+      - name: Build the scanners
+        if: steps.scanners.outputs.cache-hit != 'true'
+        env:
+          BASELINE: ${{ matrix.baseline }}
+          CANDIDATE: ${{ matrix.candidate }}
+        run: |
+          set -euo pipefail
+          for rev in "$BASELINE" "$CANDIDATE"; do
+            [[ "$rev" =~ ^[0-9a-f]{40}$ ]] || { echo "not a full commit id: $rev"; exit 2; }
+            [ -x "$RUNNER_TEMP/scanner-$rev/bin/redact-secret" ] ||
+              cargo install --locked --git https://github.com/redact-secret/redact-secret \
+                --rev "$rev" redact-secret-cli --root "$RUNNER_TEMP/scanner-$rev"
+          done
+
+      - name: Fill the configuration
+        env:
+          BASELINE: ${{ matrix.baseline }}
+          CANDIDATE: ${{ matrix.candidate }}
+        run: |
+          set -euo pipefail
+          rustc_version=$(rustc -vV | sed -n 's/^release: //p')
+          llvm_version=$(rustc -vV | sed -n 's/^LLVM version: //p')
+          sed \
+            -e "s|__BASELINE_ID__|redact-secret-${BASELINE:0:8}|" \
+            -e "s|__CANDIDATE_ID__|redact-secret-${CANDIDATE:0:8}|" \
+            -e "s|__BASELINE_VERSION__|${BASELINE:0:8}|" \
+            -e "s|__CANDIDATE_VERSION__|${CANDIDATE:0:8}|" \
+            -e "s|__BASELINE_REVISION__|${BASELINE}|" \
+            -e "s|__CANDIDATE_REVISION__|${CANDIDATE}|" \
+            -e "s|__BASELINE_BIN__|$RUNNER_TEMP/scanner-${BASELINE}/bin/redact-secret|" \
+            -e "s|__CANDIDATE_BIN__|$RUNNER_TEMP/scanner-${CANDIDATE}/bin/redact-secret|" \
+            -e "s|__LLVM_VERSION__|${llvm_version}|" \
+            -e "s|__RUSTC_VERSION__|${rustc_version}|" \
+            configs/performance/redact-secret-instructions.template.json > "$RUNNER_TEMP/performance-config.json"
+          ! grep -q '__' "$RUNNER_TEMP/performance-config.json"
+
+      - name: Count instructions
+        run: |
+          set -euo pipefail
+          ./target/release/credential-eval perf instructions \
+            --config "$RUNNER_TEMP/performance-config.json" \
+            --out "$RUNNER_TEMP/instruction-counts.json" \
+            --work-dir "$RUNNER_TEMP/perf-work" 2> "$RUNNER_TEMP/summary.txt"
+          { echo '```'; cat "$RUNNER_TEMP/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: instruction-counts-${{ matrix.name }}
+          path: ${{ runner.temp }}/instruction-counts.json
+          if-no-files-found: error

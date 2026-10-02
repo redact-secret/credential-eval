@@ -11,9 +11,18 @@ first revision in the same way (`tests/frozen-v1/`).
 |---|---|---|---|
 | **latency** | wall time of an external-process scanner on a synthetic workload, whole-input and chunked, as an A/B direction | the neutral engine: `credential-eval perf run` | none |
 | **allocation** | allocation requests of in-process scanner builds on the same workloads | a separate package, `measurements/redact-secret-alloc/` | none (the counting allocator is the pinned crate `stats_alloc`) |
+| **instructions** | executed instructions of an external-process scanner under `valgrind --tool=callgrind`, a deterministic proxy for scan cost | the neutral engine: `credential-eval perf instructions` | none |
 
-Neither produces a score, a budget or a ranking. Latency reports a
-**direction**; allocation reports **counts**.
+None produces a score, a budget or a ranking. Latency reports a **direction**
+(and only a `confirmed` one is a result); allocation reports **counts**;
+instructions report **exact counts and a direction** that is a function of the
+counts alone.
+
+**Which to use.** Wall-clock latency of per-invocation processes is noisy on
+shared hosts and cannot resolve scan-time differences below process startup
+(~3 ms on a hosted runner). Instruction counts are exact and reproduce bit for
+bit across machines, so they are the primary timing proxy; latency is the
+check that the proxy matches reality, and it is only quoted when confirmed.
 
 ## Workloads
 
@@ -115,6 +124,66 @@ gh workflow run perf-latency.yml \
   -f baseline_revision=be5fee9597311ee01cb33bcdc5c064d5cbb667ff \
   -f candidate_revision=ad877c036825a926f93478c2104e675d9c301326
 ```
+
+## Instructions: `credential-eval perf instructions`
+
+```bash
+credential-eval perf instructions --config performance-config.json \
+  --out performance-artifact.json [--valgrind /path/to/valgrind]
+```
+
+Each subject runs under `valgrind --tool=callgrind` on every workload, `rounds`
+times as the baseline, the candidate and the baseline again (control), plus
+`rounds` runs on an empty input per subject to measure process startup. The
+count is the `summary:` total of callgrind's output header (the `Ir` event).
+`net = min(counts) - startup`, and the **direction** compares the two builds'
+net counts: faster or slower when `candidate.net / baseline.net` leaves the
+band of the largest spread, the control's difference and a 0.1% floor,
+`indistinguishable` otherwise, and `indistinguishable` for any failed
+invocation. Whole-input only; `batch_invocations` and `warmup_invocations` are
+not used. The configuration is the same document as for latency
+(`configs/performance/redact-secret-instructions.template.json`).
+
+Counts are exact on a deterministic build, so the spread is 0 and a single run
+is a result, with no confirmation step. In the feasibility run (#26) the same
+executable gave identical counts across repeats and on two different hosted
+VMs for all 11 workloads. Instruction counts are a **proxy**: fewer
+instructions do not guarantee less wall time (cache and branch behaviour), so a
+direction here is a statement about executed work. Run it on Linux
+(`perf-instructions` workflow); valgrind is not a macOS arm64 target.
+
+Bounds are those of the latency mode, applied to `5 x rounds` invocations per
+workload (counted before anything starts), with the per-invocation timeout of
+the configuration (callgrind runs a scan about 50x slower). The callgrind file
+is read up to 64 KiB of header and deleted; it is never published.
+
+### Results (instructions)
+
+Recorded, exactly, in
+[measurements/redact-secret-instruction-counts-1121.json](measurements/redact-secret-instruction-counts-1121.json)
+(`44382b3f` to `be5fee95`) and
+[measurements/redact-secret-instruction-counts-1131-1135.json](measurements/redact-secret-instruction-counts-1131-1135.json)
+(`be5fee95` to `ad877c03`), from the `perf-instructions` workflow on a hosted
+Linux runner (valgrind 3.22.0). Every cell has spread 0 and a control equal to
+the baseline. Net instructions, candidate over baseline:
+
+| Card | Workload | Ratio | Direction |
+|---|---|---:|---|
+| #1121 | `assignments-ordinary` / `-diverse` / `-references` | 0.954 / 0.949 / 0.920 | faster |
+| #1121 | `overlap-pairs` / `overlap-dense` / `seam-heavy` | 0.952 / 0.948 / 0.968 | faster |
+| #1131 | `azure-duplicate-keys` | 0.227 | faster |
+| #1131 | `azure-repeated-records` | 0.999 | faster (by 0.12%) |
+| #1135 | `overlap-sparse` / `-pairs` / `-dense` | 0.984 / 0.998 / 0.998 | faster |
+| #1132-#1134 range | `dense-invisible` / `dense-unicode` / `seam-heavy` | 1.019 / 1.005 / 1.006 | slower |
+| | `assignments-*`, `dense-early-exhaustion`, `sparse-unicode` | 1.000 | indistinguishable |
+
+The increases for `dense-invisible`, `dense-unicode` and `seam-heavy` between
+`be5fee95` and `ad877c03` are small and exact. They are executed-instruction
+counts, not wall time, and they point at cards #1132 to #1134 (normalization
+and range mapping); the cards' own wall-clock samples saw gains on the sparse
+cases and no stable change on the dense ones, which this is consistent with.
+These are the timing-direction numbers to attach to the cards' evidence files;
+the latency mode confirms them only where a confirmed direction exists.
 
 ## Allocation: `measurements/redact-secret-alloc`
 

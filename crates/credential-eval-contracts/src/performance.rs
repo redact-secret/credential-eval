@@ -348,6 +348,10 @@ pub enum MeasurementKind {
     Latency,
     /// Allocation requests of in-process scanner builds.
     Allocation,
+    /// Executed instructions of an external-process scanner, counted under
+    /// `valgrind --tool=callgrind`: a deterministic proxy for scan cost.
+    /// Added in a minor revision (ADR 0002).
+    Instructions,
 }
 
 /// Identity of one subject (scanner build) in a run.
@@ -482,6 +486,48 @@ pub struct LatencyResult {
     pub direction: Direction,
     /// Invocations that did not exit successfully (any arm); a non-zero count
     /// makes the timings unusable and `direction` is `indistinguishable`.
+    pub failed_invocations: u32,
+}
+
+/// Instruction counts of one build on one workload (revision of the first
+/// performance schema). Counts are exact: a build run twice on the same input
+/// reports the same number, so `spread` is expected to be 0.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InstructionArm {
+    /// Instruction count of every repeat, in order.
+    pub counts: Vec<u64>,
+    /// Instruction count of the same build on an empty input (process
+    /// startup), smallest of the repeats.
+    pub startup: u64,
+    /// `min(counts) - startup`: the cost of scanning the workload.
+    pub net: u64,
+    /// `max(counts) - min(counts)`.
+    pub spread: u64,
+}
+
+/// Instruction-count result of one workload.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InstructionResult {
+    /// Workload.
+    pub workload: WorkloadId,
+    /// Baseline build.
+    pub baseline: InstructionArm,
+    /// Candidate build.
+    pub candidate: InstructionArm,
+    /// The baseline measured a second time (control): it must agree with the
+    /// first measurement, and a difference widens the noise band.
+    pub control: InstructionArm,
+    /// `candidate.net / baseline.net`.
+    pub ratio: f64,
+    /// Half-width of the band: the largest spread or control difference,
+    /// relative to the baseline's net count, and the engine's floor.
+    pub noise_band: f64,
+    /// The reported direction.
+    pub direction: Direction,
+    /// Invocations that did not complete (any arm); non-zero makes the
+    /// direction `indistinguishable`.
     pub failed_invocations: u32,
 }
 
@@ -622,6 +668,10 @@ pub struct PerformanceArtifact {
     /// Allocation results, sorted by `(card, workload)`. Empty for latency.
     #[serde(default)]
     pub allocation: Vec<AllocationResult>,
+    /// Instruction-count results, sorted by workload. Empty unless the kind is
+    /// `instructions`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub instructions: Vec<InstructionResult>,
     /// Reproduction paths recorded as lost, sorted.
     #[serde(default)]
     pub lost_paths: Vec<LostPath>,
@@ -638,6 +688,7 @@ impl PerformanceArtifact {
         self.latency.sort_by_key(|r| (r.workload, r.shape));
         self.allocation
             .sort_by(|a, b| (&a.card, a.workload).cmp(&(&b.card, b.workload)));
+        self.instructions.sort_by_key(|r| r.workload);
         self.lost_paths.sort();
     }
 

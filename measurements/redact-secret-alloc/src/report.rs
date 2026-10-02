@@ -149,6 +149,7 @@ pub fn run(comparisons: &[Comparison]) -> PerformanceArtifact {
         workloads: workload_identities.into_values().collect(),
         latency: vec![],
         allocation,
+        instructions: vec![],
         lost_paths: lost_paths(),
         non_semantic: PerformanceNonSemantic {
             started_at: Some(started_at),

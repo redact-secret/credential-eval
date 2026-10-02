@@ -13,6 +13,13 @@
         "$ref": "#/$defs/AllocationResult"
       }
     },
+    "instructions": {
+      "description": "Instruction-count results, sorted by workload. Empty unless the kind is\n`instructions`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/InstructionResult"
+      }
+    },
     "latency": {
       "description": "Latency results, sorted by `(workload, shape)`. Empty for allocation.",
       "type": "array",
@@ -289,6 +296,99 @@
         "cpus"
       ]
     },
+    "InstructionArm": {
+      "description": "Instruction counts of one build on one workload (revision of the first\nperformance schema). Counts are exact: a build run twice on the same input\nreports the same number, so `spread` is expected to be 0.",
+      "type": "object",
+      "properties": {
+        "counts": {
+          "description": "Instruction count of every repeat, in order.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "net": {
+          "description": "`min(counts) - startup`: the cost of scanning the workload.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "spread": {
+          "description": "`max(counts) - min(counts)`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "startup": {
+          "description": "Instruction count of the same build on an empty input (process\nstartup), smallest of the repeats.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "counts",
+        "startup",
+        "net",
+        "spread"
+      ]
+    },
+    "InstructionResult": {
+      "description": "Instruction-count result of one workload.",
+      "type": "object",
+      "properties": {
+        "baseline": {
+          "description": "Baseline build.",
+          "$ref": "#/$defs/InstructionArm"
+        },
+        "candidate": {
+          "description": "Candidate build.",
+          "$ref": "#/$defs/InstructionArm"
+        },
+        "control": {
+          "description": "The baseline measured a second time (control): it must agree with the\nfirst measurement, and a difference widens the noise band.",
+          "$ref": "#/$defs/InstructionArm"
+        },
+        "direction": {
+          "description": "The reported direction.",
+          "$ref": "#/$defs/Direction"
+        },
+        "failed_invocations": {
+          "description": "Invocations that did not complete (any arm); non-zero makes the\ndirection `indistinguishable`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "noise_band": {
+          "description": "Half-width of the band: the largest spread or control difference,\nrelative to the baseline's net count, and the engine's floor.",
+          "type": "number",
+          "format": "double"
+        },
+        "ratio": {
+          "description": "`candidate.net / baseline.net`.",
+          "type": "number",
+          "format": "double"
+        },
+        "workload": {
+          "description": "Workload.",
+          "$ref": "#/$defs/WorkloadId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "workload",
+        "baseline",
+        "candidate",
+        "control",
+        "ratio",
+        "noise_band",
+        "direction",
+        "failed_invocations"
+      ]
+    },
     "LatencyResult": {
       "description": "Latency result of one workload in one shape.",
       "type": "object",
@@ -426,6 +526,11 @@
           "description": "Allocation requests of in-process scanner builds.",
           "type": "string",
           "const": "allocation"
+        },
+        {
+          "description": "Executed instructions of an external-process scanner, counted under\n`valgrind --tool=callgrind`: a deterministic proxy for scan cost.\nAdded in a minor revision (ADR 0002).",
+          "type": "string",
+          "const": "instructions"
         }
       ]
     },
