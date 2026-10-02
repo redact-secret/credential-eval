@@ -134,6 +134,7 @@ dependencies = [
  "credential-eval-compat",
  "credential-eval-contracts",
  "credential-eval-kernel",
+ "credential-eval-perf",
  "ctrlc",
  "jsonschema",
  "serde",
@@ -173,6 +174,15 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "credential-eval-perf"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "credential-eval-contracts",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

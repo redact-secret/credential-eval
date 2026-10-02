@@ -1,5 +1,6 @@
 # Rust build output.
 /target/
+/measurements/redact-secret-alloc/target/
 
 node_modules/
 .venv/

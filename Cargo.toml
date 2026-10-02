@@ -1,11 +1,15 @@
 [workspace]
 resolver = "3"
+# In-process allocation counting links a pinned Redact Secret core and is
+# built on its own (ADR 0002); it is not part of the neutral workspace.
+exclude = ["measurements/redact-secret-alloc"]
 members = [
     "crates/credential-eval-contracts",
     "crates/credential-eval-kernel",
     "crates/credential-eval-adapters",
     "crates/credential-eval-cli",
     "crates/credential-eval-compat",
+    "crates/credential-eval-perf",
 ]
 
 [workspace.package]
@@ -23,6 +27,7 @@ credential-eval-contracts = { path = "crates/credential-eval-contracts" }
 credential-eval-kernel = { path = "crates/credential-eval-kernel" }
 credential-eval-adapters = { path = "crates/credential-eval-adapters" }
 credential-eval-compat = { path = "crates/credential-eval-compat" }
+credential-eval-perf = { path = "crates/credential-eval-perf" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 schemars = "1"

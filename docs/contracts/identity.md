@@ -109,3 +109,15 @@ writes `evidence.release` whenever a release was verified. An official run
 always has one ([../official-runs.md](../official-runs.md)). A reader treats
 a missing `run_class` as `exploratory`, a missing `publication` as
 `internal`, and a missing `build` as not released.
+
+## Reproduction identities in a performance artifact
+
+A `PerformanceArtifact` ([../performance-measurement.md](../performance-measurement.md))
+requires its own identities: the engine, the performance protocol version, the
+measurement kind, the workload generator and its version, every subject (id,
+version label, source revision, and the SHA-256 of the executable for an
+external-process subject), the toolchain, the SHA-256 and size of every
+generated workload, and, for latency, the config hash and the schedule. The
+config hash is the canonical digest of the `PerformanceConfig`
+(`PerformanceConfig::config_hash`). `PerformanceArtifact::semantic_digest`
+excludes exactly the timestamps, host state and timing samples.

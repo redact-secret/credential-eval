@@ -28,6 +28,7 @@ pub mod corpus;
 pub mod error;
 pub mod ids;
 pub mod observation;
+pub mod performance;
 pub mod range;
 pub mod schema;
 

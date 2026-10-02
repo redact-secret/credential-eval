@@ -57,6 +57,12 @@ const CORPUS_AND_ARTIFACT: &[&str] = &[
     "run-artifact-v1.schema.json",
 ];
 const ARTIFACT: &[&str] = &["run-artifact-v1.schema.json"];
+const PERF_CONFIG: &[&str] = &["performance-config-v1.schema.json"];
+const PERF_ARTIFACT: &[&str] = &["performance-artifact-v1.schema.json"];
+const ARTIFACT_AND_PERF: &[&str] = &[
+    "run-artifact-v1.schema.json",
+    "performance-artifact-v1.schema.json",
+];
 const CONFIG_OBSERVATIONS_ARTIFACT: &[&str] = &[
     "run-config-v1.schema.json",
     "observation-set-v1.schema.json",
@@ -199,15 +205,42 @@ const ALLOWLIST: &[(&str, &[&str], &str)] = &[
         CONFIG,
         "a byte limit, not output",
     ),
+    // Performance run configuration (ADR 0002; operator input, hashed).
+    (
+        "PerfSubject.program",
+        PERF_CONFIG,
+        "performance configuration: executable path of a scanner build; hashed, never a value or output",
+    ),
+    (
+        "PerfSubject.args",
+        PERF_CONFIG,
+        "performance configuration: command arguments with the literal `{input}` slot; must not contain credentials; hashed",
+    ),
+    // Performance artifact (ADR 0002).
+    (
+        "PerformanceManifest.performance_protocol",
+        PERF_ARTIFACT,
+        "engine code: constant PERFORMANCE_PROTOCOL_VERSION",
+    ),
+    (
+        "PerformanceNonSemantic.started_at",
+        PERF_ARTIFACT,
+        "non-semantic RFC 3339 timestamp",
+    ),
+    (
+        "PerformanceNonSemantic.finished_at",
+        PERF_ARTIFACT,
+        "non-semantic RFC 3339 timestamp",
+    ),
     // Engine and adapter code.
     (
         "EngineIdentity.name",
-        ARTIFACT,
+        ARTIFACT_AND_PERF,
         "engine code: constant ENGINE_NAME",
     ),
     (
         "EngineIdentity.version",
-        ARTIFACT,
+        ARTIFACT_AND_PERF,
         "engine code: crate version",
     ),
     (

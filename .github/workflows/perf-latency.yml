@@ -1,0 +1,95 @@
+name: perf-latency
+
+# Latency measurement of two pinned Redact Secret CLI builds (ADR 0002,
+# kind 1), run on a hosted runner and never on a developer machine: a quiet
+# host is part of the protocol. The A/A control inside each run measures the
+# runner's own noise, and the artifact records the load average, the toolchain
+# and both executables' digests. The result is a direction, not a budget.
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_revision:
+        description: Redact Secret commit of the baseline build (arm A and its A/A control)
+        required: true
+        default: be5fee9597311ee01cb33bcdc5c064d5cbb667ff
+      candidate_revision:
+        description: Redact Secret commit of the candidate build (arm B)
+        required: true
+        default: ad877c036825a926f93478c2104e675d9c301326
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  latency:
+    name: latency direction
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Build the engine
+        run: cargo build --release --locked -p credential-eval-cli
+
+      # Each build is installed from its exact commit; the revision is the
+      # identity, and the executable's SHA-256 is recorded by the run.
+      - name: Build the scanners
+        env:
+          BASELINE: ${{ inputs.baseline_revision }}
+          CANDIDATE: ${{ inputs.candidate_revision }}
+        run: |
+          set -euo pipefail
+          for rev in "$BASELINE" "$CANDIDATE"; do
+            [[ "$rev" =~ ^[0-9a-f]{40}$ ]] || { echo "not a full commit id: $rev"; exit 2; }
+            cargo install --locked --git https://github.com/redact-secret/redact-secret \
+              --rev "$rev" redact-secret-cli --root "$RUNNER_TEMP/scanner-$rev"
+          done
+
+      - name: Fill the configuration
+        env:
+          BASELINE: ${{ inputs.baseline_revision }}
+          CANDIDATE: ${{ inputs.candidate_revision }}
+        run: |
+          set -euo pipefail
+          rustc_version=$(rustc -vV | sed -n 's/^release: //p')
+          llvm_version=$(rustc -vV | sed -n 's/^LLVM version: //p')
+          sed \
+            -e "s|__BASELINE_ID__|redact-secret-${BASELINE:0:8}|" \
+            -e "s|__CANDIDATE_ID__|redact-secret-${CANDIDATE:0:8}|" \
+            -e "s|__BASELINE_VERSION__|${BASELINE:0:8}|" \
+            -e "s|__CANDIDATE_VERSION__|${CANDIDATE:0:8}|" \
+            -e "s|__BASELINE_REVISION__|${BASELINE}|" \
+            -e "s|__CANDIDATE_REVISION__|${CANDIDATE}|" \
+            -e "s|__BASELINE_BIN__|$RUNNER_TEMP/scanner-${BASELINE}/bin/redact-secret|" \
+            -e "s|__CANDIDATE_BIN__|$RUNNER_TEMP/scanner-${CANDIDATE}/bin/redact-secret|" \
+            -e "s|__LLVM_VERSION__|${llvm_version}|" \
+            -e "s|__RUSTC_VERSION__|${rustc_version}|" \
+            configs/performance/redact-secret-latency.template.json > "$RUNNER_TEMP/performance-config.json"
+          ! grep -q '__' "$RUNNER_TEMP/performance-config.json"
+
+      - name: Measure
+        run: |
+          set -euo pipefail
+          ./target/release/credential-eval perf run \
+            --config "$RUNNER_TEMP/performance-config.json" \
+            --out "$RUNNER_TEMP/performance-artifact.json" \
+            --work-dir "$RUNNER_TEMP/perf-work" 2> "$RUNNER_TEMP/summary.txt"
+          { echo '```'; cat "$RUNNER_TEMP/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: performance-artifact
+          path: ${{ runner.temp }}/performance-artifact.json
+          if-no-files-found: error

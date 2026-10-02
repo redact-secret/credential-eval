@@ -1,0 +1,410 @@
+{
+  "$id": "https://github.com/redact-secret/credential-eval/schemas/performance-config-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PerformanceConfig",
+  "description": "Configuration of a latency run. Its canonical digest is the run's\n`config_hash`.",
+  "type": "object",
+  "properties": {
+    "baseline": {
+      "description": "The build every direction is relative to (arm A and its A/A control).",
+      "$ref": "#/$defs/PerfSubject"
+    },
+    "batch_invocations": {
+      "description": "Invocations per batch. A sample is the batch time per invocation.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "candidate": {
+      "description": "The build under test (arm B).",
+      "$ref": "#/$defs/PerfSubject"
+    },
+    "chunk_bytes": {
+      "description": "Chunk size in bytes; used by the `chunked` shape.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "limits": {
+      "description": "Explicit bounds.",
+      "$ref": "#/$defs/PerfLimits"
+    },
+    "rounds": {
+      "description": "Rounds of alternating batches (at least 3).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "schema": {
+      "description": "Document tag: `credential-eval/performance-config/v1`.",
+      "$ref": "#/$defs/PerformanceConfigSchema"
+    },
+    "shapes": {
+      "description": "Shapes to measure each workload in. Sorted, unique.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ScanShape"
+      }
+    },
+    "toolchain": {
+      "description": "Toolchain the subjects were built with. Sorted by name.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ToolchainEntry"
+      }
+    },
+    "warmup_invocations": {
+      "description": "Untimed invocations per arm and workload before measuring.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "workloads": {
+      "description": "Workloads, in measurement order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorkloadSpec"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "baseline",
+    "candidate",
+    "workloads",
+    "shapes",
+    "chunk_bytes",
+    "rounds",
+    "batch_invocations",
+    "warmup_invocations",
+    "limits",
+    "toolchain"
+  ],
+  "$defs": {
+    "ComponentId": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "GitRevision": {
+      "type": "string",
+      "maxLength": 40,
+      "minLength": 1,
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "InputDelivery": {
+      "description": "How a scanner command receives the input.",
+      "oneOf": [
+        {
+          "description": "The input is written to the command's standard input.",
+          "type": "string",
+          "const": "stdin"
+        },
+        {
+          "description": "The input is written to a file and its path replaces the `{input}`\nargument.",
+          "type": "string",
+          "const": "file"
+        }
+      ]
+    },
+    "PerfLimits": {
+      "description": "Explicit per-invocation limits.",
+      "type": "object",
+      "properties": {
+        "max_diagnostic_bytes": {
+          "description": "Largest diagnostic stream read per invocation (never retained).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_input_bytes": {
+          "description": "Largest generated input per workload, in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_response_bytes": {
+          "description": "Largest response read per invocation before the process is killed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "timeout_ms": {
+          "description": "Wall-clock timeout per invocation, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "timeout_ms",
+        "max_input_bytes",
+        "max_response_bytes",
+        "max_diagnostic_bytes"
+      ]
+    },
+    "PerfSubject": {
+      "description": "One scanner build under test: an external command.",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Arguments. With `delivery = file`, exactly one is the literal `{input}`.\nOperator input; recorded and hashed.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "delivery": {
+          "description": "How the input reaches the command.",
+          "$ref": "#/$defs/InputDelivery"
+        },
+        "id": {
+          "description": "Subject id, unique within the run.",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "ok_exit_codes": {
+          "description": "Exit codes that count as a completed scan. Scanners that exit non-zero\nwhen they find something list that code here; any other code, a signal\nor a timeout is a failed invocation.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "program": {
+          "description": "Executable path. Operator input; recorded and hashed.",
+          "type": "string"
+        },
+        "revision": {
+          "description": "Source revision of the build, when it was built from a Git commit.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GitRevision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sha256": {
+          "description": "Required SHA-256 of the executable. A mismatch refuses the run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Version label of the build (a release or a revision abbreviation).",
+          "$ref": "#/$defs/ReleaseTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "program",
+        "args",
+        "delivery",
+        "ok_exit_codes"
+      ]
+    },
+    "PerformanceConfigSchema": {
+      "type": "string",
+      "const": "credential-eval/performance-config/v1"
+    },
+    "ReleaseTag": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "ScanShape": {
+      "description": "Whether the scanner receives each workload whole or in chunks.",
+      "oneOf": [
+        {
+          "description": "One invocation over the whole input.",
+          "type": "string",
+          "const": "whole"
+        },
+        {
+          "description": "One invocation per chunk of at most `chunk_bytes`, split at line\nboundaries; a sample is the sum over the chunks.",
+          "type": "string",
+          "const": "chunked"
+        }
+      ]
+    },
+    "ScannerId": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "Sha256Digest": {
+      "type": "string",
+      "maxLength": 71,
+      "minLength": 1,
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ToolchainEntry": {
+      "description": "A named toolchain component, recorded for reproduction.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Component (`rustc`, `cargo`, `llvm`, ...).",
+          "$ref": "#/$defs/ComponentId"
+        },
+        "version": {
+          "description": "Its version.",
+          "$ref": "#/$defs/ReleaseTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ]
+    },
+    "WorkloadId": {
+      "description": "A generated synthetic workload. The generator for each id is deterministic\nand lives in `credential-eval-perf`; its output is identified by digest.",
+      "oneOf": [
+        {
+          "description": "Ordinary text with one non-ASCII character at the end.",
+          "type": "string",
+          "const": "sparse-unicode"
+        },
+        {
+          "description": "Non-ASCII text on every line.",
+          "type": "string",
+          "const": "dense-unicode"
+        },
+        {
+          "description": "Ordinary text with one invisible (zero-width) character.",
+          "type": "string",
+          "const": "sparse-invisible"
+        },
+        {
+          "description": "Invisible characters throughout.",
+          "type": "string",
+          "const": "dense-invisible"
+        },
+        {
+          "description": "Assignment lines whose value is also a standalone token shape, so more\nthan one detector claims the same range.",
+          "type": "string",
+          "const": "overlap-clusters"
+        },
+        {
+          "description": "Secret-bearing lines with invisible characters inside the value, so\nevery reported range crosses a normalization seam.",
+          "type": "string",
+          "const": "seam-heavy"
+        },
+        {
+          "description": "The same short log line, repeated.",
+          "type": "string",
+          "const": "repeated-short-log-lines"
+        },
+        {
+          "description": "A few very long single-line assignments.",
+          "type": "string",
+          "const": "long-single-line-assignments"
+        },
+        {
+          "description": "Assignment lines, densely, so a bounded scanner exhausts its budget\nearly in the input.",
+          "type": "string",
+          "const": "dense-early-exhaustion"
+        },
+        {
+          "description": "32-character alphanumeric values under one key.",
+          "type": "string",
+          "const": "assignments-ordinary"
+        },
+        {
+          "description": "Five keys and five value shapes.",
+          "type": "string",
+          "const": "assignments-diverse"
+        },
+        {
+          "description": "Cloud secret-manager references and placeholders.",
+          "type": "string",
+          "const": "assignments-references"
+        },
+        {
+          "description": "One `otpauth://` URI per line.",
+          "type": "string",
+          "const": "otp-dense"
+        },
+        {
+          "description": "One `otpauth://` URI inside about 74 KB of ordinary log text.",
+          "type": "string",
+          "const": "otp-sparse"
+        },
+        {
+          "description": "One synthetic storage connection string.",
+          "type": "string",
+          "const": "azure-single"
+        },
+        {
+          "description": "100 storage connection strings, one per line.",
+          "type": "string",
+          "const": "azure-repeated-records"
+        },
+        {
+          "description": "One segment that repeats the same account-key field 100 times.",
+          "type": "string",
+          "const": "azure-duplicate-keys"
+        },
+        {
+          "description": "Ordinary log lines with no connection string.",
+          "type": "string",
+          "const": "azure-benign"
+        },
+        {
+          "description": "Tokens on separate lines, none overlapping.",
+          "type": "string",
+          "const": "overlap-disjoint"
+        },
+        {
+          "description": "As `overlap-disjoint`, with one overlapping pair in the middle.",
+          "type": "string",
+          "const": "overlap-sparse"
+        },
+        {
+          "description": "Every token overlaps exactly one other.",
+          "type": "string",
+          "const": "overlap-pairs"
+        },
+        {
+          "description": "Every token overlaps its neighbours.",
+          "type": "string",
+          "const": "overlap-dense"
+        }
+      ]
+    },
+    "WorkloadSpec": {
+      "description": "One workload of a run.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Which generator.",
+          "$ref": "#/$defs/WorkloadId"
+        },
+        "units": {
+          "description": "Size in generator units (lines, records or tokens; see the generator).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "units"
+      ]
+    }
+  }
+}
