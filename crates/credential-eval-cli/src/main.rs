@@ -16,6 +16,8 @@
 //!                     --out-dir <dir>
 //! credential-eval perf run --config <performance-config.json> --out <performance-artifact.json>
 //!                     [--work-dir <dir>]
+//! credential-eval perf confirm --artifact <performance-artifact.json> --artifact <...>
+//!                     --out <direction-confirmation.json>
 //! credential-eval default-config [--scanner <id>]... [--jobs N]
 //! credential-eval --version
 //! ```
@@ -59,7 +61,7 @@ use credential_eval_contracts::config::{EvaluationSettings, RunConfig, SeedConve
 use credential_eval_contracts::corpus::CorpusSnapshot;
 use credential_eval_contracts::ids::ScannerId;
 use credential_eval_contracts::observation::ScannerStatus;
-use credential_eval_contracts::performance::PerformanceConfig;
+use credential_eval_contracts::performance::{PerformanceArtifact, PerformanceConfig};
 use credential_eval_kernel::evaluation::{GenerationLimits, MethodId};
 
 const USAGE: &str = "\
@@ -79,6 +81,8 @@ usage:
                       --index <legacy-index.json> --out-dir <dir>
   credential-eval perf run --config <performance-config.json>
                       --out <performance-artifact.json> [--work-dir <dir>]
+  credential-eval perf confirm --artifact <performance-artifact.json>
+                      --artifact <performance-artifact.json>... --out <direction-confirmation.json>
   credential-eval default-config [--scanner <id>]... [--jobs N]
   credential-eval --version
 methods: twin, benign, metamorphic, mutation, differential";
@@ -585,10 +589,14 @@ fn run(args: &[OsString]) -> ExitCode {
 
 /// `perf` subcommands: measurements that are not detection outcomes (ADR 0002).
 fn perf_command(args: &[OsString]) -> ExitCode {
-    let Some("run") = args.first().and_then(|a| a.to_str()) else {
-        eprintln!("error: perf takes a subcommand: run\n{USAGE}");
-        return ExitCode::from(2);
-    };
+    match args.first().and_then(|a| a.to_str()) {
+        Some("run") => {}
+        Some("confirm") => return perf_confirm(&args[1..]),
+        _ => {
+            eprintln!("error: perf takes a subcommand: run, confirm\n{USAGE}");
+            return ExitCode::from(2);
+        }
+    }
     let (mut config_path, mut out, mut work_dir) = (None, None, None);
     let mut iter = args[1..].iter();
     while let Some(flag) = iter.next() {
@@ -680,6 +688,83 @@ fn perf_command(args: &[OsString]) -> ExitCode {
         );
     }
     eprintln!("semantic digest {}", artifact.semantic_digest());
+    ExitCode::SUCCESS
+}
+
+/// `perf confirm`: combine independent latency runs into confirmed directions.
+fn perf_confirm(args: &[OsString]) -> ExitCode {
+    let (mut artifacts, mut out) = (Vec::new(), None);
+    let mut iter = args.iter();
+    while let Some(flag) = iter.next() {
+        let Some(value) = iter.next() else {
+            eprintln!("error: {flag:?} needs a value");
+            return ExitCode::from(2);
+        };
+        match flag.to_str() {
+            Some("--artifact") => artifacts.push(PathBuf::from(value)),
+            Some("--out") => out = Some(PathBuf::from(value)),
+            _ => {
+                eprintln!("error: unknown argument {flag:?}\n{USAGE}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let Some(out) = out else {
+        eprintln!("error: perf confirm needs --artifact (twice or more) and --out\n{USAGE}");
+        return ExitCode::from(2);
+    };
+    let mut loaded = Vec::new();
+    for path in &artifacts {
+        match read_bounded(path, 64 << 20, "--artifact").and_then(|bytes| {
+            serde_json::from_slice::<PerformanceArtifact>(&bytes)
+                .map_err(|e| format!("invalid --artifact {}: {e}", path.display()))
+        }) {
+            Ok(artifact) => loaded.push(artifact),
+            Err(message) => {
+                eprintln!("error: {message}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let refs: Vec<&PerformanceArtifact> = loaded.iter().collect();
+    let confirmation = match credential_eval_perf::confirm::confirm(&refs) {
+        Ok(confirmation) => confirmation,
+        Err(error) => {
+            eprintln!("error: {error}; no confirmation written");
+            return ExitCode::from(2);
+        }
+    };
+    if let Err(e) = write_atomic(&out, &pretty(&confirmation)) {
+        eprintln!("error: cannot write --out: {e}");
+        return ExitCode::from(1);
+    }
+    for result in &confirmation.results {
+        eprintln!(
+            "{:?}/{:?}: {:?} {:?}",
+            result.workload, result.shape, result.status, result.directions
+        );
+    }
+    let confirmed = confirmation
+        .results
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.status,
+                credential_eval_contracts::performance::Confirmation::ConfirmedFaster
+                    | credential_eval_contracts::performance::Confirmation::ConfirmedSlower
+            )
+        })
+        .count();
+    eprintln!(
+        "{} runs · {confirmed} of {} cells confirmed · same CPU model: {}",
+        confirmation.runs.len(),
+        confirmation.results.len(),
+        match confirmation.same_cpu_model {
+            Some(true) => "yes",
+            Some(false) => "NO",
+            None => "unrecorded",
+        }
+    );
     ExitCode::SUCCESS
 }
 

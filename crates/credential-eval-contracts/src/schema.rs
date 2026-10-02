@@ -82,6 +82,11 @@ schema_tag!(
     PerformanceArtifactSchema = "credential-eval/performance-artifact/v1"
 );
 
+schema_tag!(
+    /// Tag of [`crate::performance::DirectionConfirmation`] documents (ADR 0002).
+    DirectionConfirmationSchema = "credential-eval/direction-confirmation/v1"
+);
+
 /// Base URI used for the `$id` of committed schemas.
 pub const SCHEMA_ID_BASE: &str = "https://github.com/redact-secret/credential-eval/schemas/";
 
@@ -133,6 +138,13 @@ pub fn all_schemas() -> Vec<(&'static str, Schema)> {
             schema_for::<crate::performance::PerformanceArtifact>(
                 "performance-artifact-v1.schema.json",
                 "PerformanceArtifact",
+            ),
+        ),
+        (
+            "direction-confirmation-v1.schema.json",
+            schema_for::<crate::performance::DirectionConfirmation>(
+                "direction-confirmation-v1.schema.json",
+                "DirectionConfirmation",
             ),
         ),
     ]

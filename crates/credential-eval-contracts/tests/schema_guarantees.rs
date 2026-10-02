@@ -223,6 +223,11 @@ const ALLOWLIST: &[(&str, &[&str], &str)] = &[
         "engine code: constant PERFORMANCE_PROTOCOL_VERSION",
     ),
     (
+        "HostDiagnostics.cpu_model",
+        PERF_ARTIFACT,
+        "non-semantic CPU model name, sanitized to a safe character set and 128 characters; never a host name",
+    ),
+    (
         "PerformanceNonSemantic.started_at",
         PERF_ARTIFACT,
         "non-semantic RFC 3339 timestamp",

@@ -1,0 +1,356 @@
+{
+  "$id": "https://github.com/redact-secret/credential-eval/schemas/direction-confirmation-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DirectionConfirmation",
+  "description": "The combination of independent latency runs of one configuration\n(`credential-eval perf confirm`). A deterministic function of the artifacts:\nthe order they are given in does not matter.",
+  "type": "object",
+  "properties": {
+    "config_hash": {
+      "description": "The configuration digest every run shares.",
+      "$ref": "#/$defs/Sha256Digest"
+    },
+    "results": {
+      "description": "One entry per workload and shape, sorted.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ConfirmedResult"
+      }
+    },
+    "runs": {
+      "description": "The runs, sorted by artifact digest.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RunReference"
+      }
+    },
+    "same_cpu_model": {
+      "description": "Whether every run recorded the same CPU model; absent when a run did\nnot record one. Directions from different models are less comparable.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "schema": {
+      "description": "Document tag: `credential-eval/direction-confirmation/v1`.",
+      "$ref": "#/$defs/DirectionConfirmationSchema"
+    },
+    "subjects": {
+      "description": "The subjects every run shares, sorted by id.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SubjectIdentity"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "config_hash",
+    "subjects",
+    "runs",
+    "results"
+  ],
+  "$defs": {
+    "Confirmation": {
+      "description": "Whether a direction held across independent runs of one configuration.",
+      "oneOf": [
+        {
+          "description": "Every run reported `faster`.",
+          "type": "string",
+          "const": "confirmed-faster"
+        },
+        {
+          "description": "Every run reported `slower`.",
+          "type": "string",
+          "const": "confirmed-slower"
+        },
+        {
+          "description": "The runs disagree, or only some of them reported a direction. A\ndirection seen once is not a result.",
+          "type": "string",
+          "const": "unconfirmed"
+        },
+        {
+          "description": "Every run was `indistinguishable`. This is \"no evidence\", not \"no\neffect\": the measurement could not resolve a difference.",
+          "type": "string",
+          "const": "no-evidence"
+        }
+      ]
+    },
+    "ConfirmedResult": {
+      "description": "The directions of one workload and shape across the runs.",
+      "type": "object",
+      "properties": {
+        "directions": {
+          "description": "The direction each run reported, in the order of `runs`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Direction"
+          }
+        },
+        "shape": {
+          "description": "Shape.",
+          "$ref": "#/$defs/ScanShape"
+        },
+        "status": {
+          "description": "The combined status.",
+          "$ref": "#/$defs/Confirmation"
+        },
+        "workload": {
+          "description": "Workload.",
+          "$ref": "#/$defs/WorkloadId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "workload",
+        "shape",
+        "directions",
+        "status"
+      ]
+    },
+    "Direction": {
+      "description": "Which way the candidate moved relative to the baseline.",
+      "oneOf": [
+        {
+          "description": "The candidate is faster by more than the A/A noise band, in both the\nmedian and the minimum.",
+          "type": "string",
+          "const": "faster"
+        },
+        {
+          "description": "The candidate is slower by more than the A/A noise band, in both the\nmedian and the minimum.",
+          "type": "string",
+          "const": "slower"
+        },
+        {
+          "description": "Within the A/A noise band, or the median and the minimum disagree.",
+          "type": "string",
+          "const": "indistinguishable"
+        }
+      ]
+    },
+    "DirectionConfirmationSchema": {
+      "type": "string",
+      "const": "credential-eval/direction-confirmation/v1"
+    },
+    "GitRevision": {
+      "type": "string",
+      "maxLength": 40,
+      "minLength": 1,
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "ReleaseTag": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "RunReference": {
+      "description": "One independent run that a confirmation was drawn from.",
+      "type": "object",
+      "properties": {
+        "artifact_digest": {
+          "description": "SHA-256 of the run's canonical artifact, timings included.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "cpu_model_digest": {
+          "description": "The run's CPU model, when it recorded one.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "artifact_digest"
+      ]
+    },
+    "ScanShape": {
+      "description": "Whether the scanner receives each workload whole or in chunks.",
+      "oneOf": [
+        {
+          "description": "One invocation over the whole input.",
+          "type": "string",
+          "const": "whole"
+        },
+        {
+          "description": "One invocation per chunk of at most `chunk_bytes`, split at line\nboundaries; a sample is the sum over the chunks.",
+          "type": "string",
+          "const": "chunked"
+        }
+      ]
+    },
+    "ScannerId": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "Sha256Digest": {
+      "type": "string",
+      "maxLength": 71,
+      "minLength": 1,
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "SubjectIdentity": {
+      "description": "Identity of one subject (scanner build) in a run.",
+      "type": "object",
+      "properties": {
+        "executable_sha256": {
+          "description": "SHA-256 of the executable, for external-process subjects.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "description": "Subject id.",
+          "$ref": "#/$defs/ScannerId"
+        },
+        "revision": {
+          "description": "Source revision, when built from a Git commit.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GitRevision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "description": "Version label.",
+          "$ref": "#/$defs/ReleaseTag"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "WorkloadId": {
+      "description": "A generated synthetic workload. The generator for each id is deterministic\nand lives in `credential-eval-perf`; its output is identified by digest.",
+      "oneOf": [
+        {
+          "description": "Ordinary text with one non-ASCII character at the end.",
+          "type": "string",
+          "const": "sparse-unicode"
+        },
+        {
+          "description": "Non-ASCII text on every line.",
+          "type": "string",
+          "const": "dense-unicode"
+        },
+        {
+          "description": "Ordinary text with one invisible (zero-width) character.",
+          "type": "string",
+          "const": "sparse-invisible"
+        },
+        {
+          "description": "Invisible characters throughout.",
+          "type": "string",
+          "const": "dense-invisible"
+        },
+        {
+          "description": "Assignment lines whose value is also a standalone token shape, so more\nthan one detector claims the same range.",
+          "type": "string",
+          "const": "overlap-clusters"
+        },
+        {
+          "description": "Secret-bearing lines with invisible characters inside the value, so\nevery reported range crosses a normalization seam.",
+          "type": "string",
+          "const": "seam-heavy"
+        },
+        {
+          "description": "The same short log line, repeated.",
+          "type": "string",
+          "const": "repeated-short-log-lines"
+        },
+        {
+          "description": "A few very long single-line assignments.",
+          "type": "string",
+          "const": "long-single-line-assignments"
+        },
+        {
+          "description": "Assignment lines, densely, so a bounded scanner exhausts its budget\nearly in the input.",
+          "type": "string",
+          "const": "dense-early-exhaustion"
+        },
+        {
+          "description": "32-character alphanumeric values under one key.",
+          "type": "string",
+          "const": "assignments-ordinary"
+        },
+        {
+          "description": "Five keys and five value shapes.",
+          "type": "string",
+          "const": "assignments-diverse"
+        },
+        {
+          "description": "Cloud secret-manager references and placeholders.",
+          "type": "string",
+          "const": "assignments-references"
+        },
+        {
+          "description": "One `otpauth://` URI per line.",
+          "type": "string",
+          "const": "otp-dense"
+        },
+        {
+          "description": "One `otpauth://` URI inside about 74 KB of ordinary log text.",
+          "type": "string",
+          "const": "otp-sparse"
+        },
+        {
+          "description": "One synthetic storage connection string.",
+          "type": "string",
+          "const": "azure-single"
+        },
+        {
+          "description": "100 storage connection strings, one per line.",
+          "type": "string",
+          "const": "azure-repeated-records"
+        },
+        {
+          "description": "One segment that repeats the same account-key field 100 times.",
+          "type": "string",
+          "const": "azure-duplicate-keys"
+        },
+        {
+          "description": "Ordinary log lines with no connection string.",
+          "type": "string",
+          "const": "azure-benign"
+        },
+        {
+          "description": "Tokens on separate lines, none overlapping.",
+          "type": "string",
+          "const": "overlap-disjoint"
+        },
+        {
+          "description": "As `overlap-disjoint`, with one overlapping pair in the middle.",
+          "type": "string",
+          "const": "overlap-sparse"
+        },
+        {
+          "description": "Every token overlaps exactly one other.",
+          "type": "string",
+          "const": "overlap-pairs"
+        },
+        {
+          "description": "Every token overlaps its neighbours.",
+          "type": "string",
+          "const": "overlap-dense"
+        }
+      ]
+    }
+  }
+}

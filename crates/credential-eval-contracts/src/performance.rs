@@ -20,7 +20,9 @@ use serde::{Deserialize, Serialize};
 use crate::artifact::EngineIdentity;
 use crate::canonical::sha256_canonical;
 use crate::ids::{ComponentId, GitRevision, ReleaseTag, ScannerId, Sha256Digest};
-use crate::schema::{PerformanceArtifactSchema, PerformanceConfigSchema};
+use crate::schema::{
+    DirectionConfirmationSchema, PerformanceArtifactSchema, PerformanceConfigSchema,
+};
 
 /// Version of the performance measurement rules (independent of the outcome
 /// protocol and of both schema tags).
@@ -575,6 +577,12 @@ pub struct HostDiagnostics {
     pub arch: ComponentId,
     /// Logical CPUs available to the process.
     pub cpus: u32,
+    /// CPU model name (for example `Intel(R) Xeon(R) Platinum 8370C CPU @
+    /// 2.80GHz`), when the host reports one. Hosted runners of one name mix
+    /// CPU generations, so a direction is only comparable between runs that
+    /// recorded the same model. Revision of the first performance schema.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_model: Option<String>,
     /// Load average before the first batch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub load_before: Option<LoadAverage>,
@@ -643,6 +651,7 @@ impl PerformanceArtifact {
             host: identity.non_semantic.host.clone(),
         };
         identity.non_semantic.host.cpus = 0;
+        identity.non_semantic.host.cpu_model = None;
         identity.non_semantic.host.load_before = None;
         identity.non_semantic.host.load_after = None;
         for result in &mut identity.latency {
@@ -663,6 +672,71 @@ impl PerformanceArtifact {
         }
         sha256_canonical(&identity)
     }
+}
+
+/// Whether a direction held across independent runs of one configuration.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum Confirmation {
+    /// Every run reported `faster`.
+    ConfirmedFaster,
+    /// Every run reported `slower`.
+    ConfirmedSlower,
+    /// The runs disagree, or only some of them reported a direction. A
+    /// direction seen once is not a result.
+    Unconfirmed,
+    /// Every run was `indistinguishable`. This is "no evidence", not "no
+    /// effect": the measurement could not resolve a difference.
+    NoEvidence,
+}
+
+/// One independent run that a confirmation was drawn from.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RunReference {
+    /// SHA-256 of the run's canonical artifact, timings included.
+    pub artifact_digest: Sha256Digest,
+    /// The run's CPU model, when it recorded one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_model_digest: Option<Sha256Digest>,
+}
+
+/// The directions of one workload and shape across the runs.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmedResult {
+    /// Workload.
+    pub workload: WorkloadId,
+    /// Shape.
+    pub shape: ScanShape,
+    /// The direction each run reported, in the order of `runs`.
+    pub directions: Vec<Direction>,
+    /// The combined status.
+    pub status: Confirmation,
+}
+
+/// The combination of independent latency runs of one configuration
+/// (`credential-eval perf confirm`). A deterministic function of the artifacts:
+/// the order they are given in does not matter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DirectionConfirmation {
+    /// Document tag: `credential-eval/direction-confirmation/v1`.
+    pub schema: DirectionConfirmationSchema,
+    /// The configuration digest every run shares.
+    pub config_hash: Sha256Digest,
+    /// The subjects every run shares, sorted by id.
+    pub subjects: Vec<SubjectIdentity>,
+    /// The runs, sorted by artifact digest.
+    pub runs: Vec<RunReference>,
+    /// Whether every run recorded the same CPU model; absent when a run did
+    /// not record one. Directions from different models are less comparable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub same_cpu_model: Option<bool>,
+    /// One entry per workload and shape, sorted.
+    pub results: Vec<ConfirmedResult>,
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 //!
 //! * [`workloads`]: deterministic, bounded, synthetic inputs;
 //! * [`stats`]: timing summaries and the direction rule;
+//! * [`confirm`]: combining independent latency runs into confirmed directions;
 //! * [`host`]: host and load-average diagnostics.
 //!
 //! Nothing here executes a scanner or counts allocations: the latency runner
@@ -11,6 +12,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod confirm;
 pub mod host;
 pub mod stats;
 pub mod workloads;

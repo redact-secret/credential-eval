@@ -68,9 +68,31 @@ Everything else is `indistinguishable`, and so is any result with a failed
 invocation. The artifact keeps every sample, the minimum and the
 median per arm, both ratios and the band.
 
+**Confirmed directions.** A direction from one run is not a result. The A/A
+control sees the noise inside a run, not what changes between runs (neighbouring
+VMs, a different CPU generation), and two runs of identical executables on
+hosted runners have disagreed. `credential-eval perf confirm --artifact A
+--artifact B --out confirmation.json` combines independent runs of one
+configuration (it refuses different configurations, subjects, workloads or
+cells, and the same artifact twice) into a `DirectionConfirmation`
+(`credential-eval/direction-confirmation/v1`):
+
+| Status | Meaning |
+|---|---|
+| `confirmed-faster` / `confirmed-slower` | every run reported that direction |
+| `unconfirmed` | the runs disagree, or only some reported a direction: not a result |
+| `no-evidence` | every run was `indistinguishable`: the measurement could not resolve a difference, which is not the same as no difference |
+
+The confirmation records `same_cpu_model` (hosted runners of one name mix CPU
+generations; directions from different models are less comparable) and does not
+depend on the order of its inputs. Quote a latency direction only when it is
+`confirmed-*`. The `perf-latency` workflow runs the measurement as two
+independent jobs (separate VMs) and a third job runs `perf confirm`.
+
 **Identity.** The artifact records both executables' SHA-256 (and refuses the
 run when a configured pin does not match), the source revisions, the config
-hash, the toolchain, the load average before and after, CPU count, OS and
+hash, the toolchain, the load average before and after, CPU model (sanitized, when the host reports
+one) and count, OS and
 architecture. Never paths, user names or host names.
 
 **Bounds.** `rounds` 3–200, `batch_invocations` 1–100, `warmup_invocations`
