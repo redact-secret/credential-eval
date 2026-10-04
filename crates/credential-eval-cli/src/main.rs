@@ -21,6 +21,7 @@
 //! credential-eval perf confirm --artifact <performance-artifact.json> --artifact <...>
 //!                     --out <direction-confirmation.json>
 //! credential-eval default-config [--scanner <id>]... [--jobs N]
+//! credential-eval capabilities
 //! credential-eval --version
 //! ```
 //!
@@ -90,6 +91,7 @@ usage:
   credential-eval perf confirm --artifact <performance-artifact.json>
                       --artifact <performance-artifact.json>... --out <direction-confirmation.json>
   credential-eval default-config [--scanner <id>]... [--jobs N]
+  credential-eval capabilities
   credential-eval --version
 methods: twin, benign, metamorphic, mutation, differential";
 
@@ -943,6 +945,56 @@ fn default_config_command(args: &[OsString]) -> ExitCode {
     }
 }
 
+/// What this build supports, for a consumer that pins an engine version: the
+/// contract revision, the representation contract it reads and reports, and
+/// the opt-in decoded-finding mapping of each adapter. Stable, sorted JSON.
+fn capabilities() -> serde_json::Value {
+    use credential_eval_adapters::decode::{DECODED_MAPPING_KEY, MAX_DEPTH, SOURCE_SEGMENT};
+    use credential_eval_contracts::representation::{CONTRACT_REVISION, REPRESENTATION_CONTRACT};
+    serde_json::json!({
+        "engine": {
+            "name": credential_eval_contracts::ENGINE_NAME,
+            "version": credential_eval_kernel::score::ENGINE_VERSION,
+        },
+        "protocol_version": credential_eval_contracts::PROTOCOL_VERSION,
+        "contract_revision": CONTRACT_REVISION,
+        "schemas": [
+            "credential-eval/corpus-snapshot/v1",
+            "credential-eval/observation-set/v1",
+            "credential-eval/run-artifact/v1",
+            "credential-eval/run-config/v1",
+        ],
+        "representation": {
+            "contract": REPRESENTATION_CONTRACT,
+            "snapshot_fields": [
+                "cases[].expected[].base",
+                "cases[].expected[].decoded",
+                "cases[].expected[].fragments",
+                "cases[].representation",
+                "identity.representation",
+            ],
+            "input_validity": ["unpaired-surrogate-split", "valid"],
+            "input_validity_refused": ["invalid-utf8"],
+            "decode_steps_verified": ["base64", "hex", "strip-codepoints"],
+            "decode_steps_carried_unverified": ["normalize"],
+            "artifact_fields": [
+                "manifest.representation",
+                "scanners[].cases[].actual[].mapping",
+                "scanners[].findings[].mapping",
+            ],
+            "decoded_mapping": {
+                "configuration_key": DECODED_MAPPING_KEY,
+                "values": ["off", SOURCE_SEGMENT],
+                "max_depth": MAX_DEPTH,
+                "adapters": {
+                    "gitleaks": ["base64", "hex"],
+                    "trufflehog": ["base64"],
+                },
+            },
+        },
+    })
+}
+
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     match args.first().and_then(|a| a.to_str()) {
@@ -959,6 +1011,13 @@ fn main() -> ExitCode {
         Some("compat") => compat_command(&args[1..]),
         Some("perf") => perf_command(&args[1..]),
         Some("default-config") => default_config_command(&args[1..]),
+        Some("capabilities") => {
+            let mut text =
+                serde_json::to_string_pretty(&capabilities()).expect("capabilities serialize");
+            text.push('\n');
+            print!("{text}");
+            ExitCode::SUCCESS
+        }
         Some("--help" | "-h" | "help") => {
             println!("{USAGE}");
             ExitCode::SUCCESS

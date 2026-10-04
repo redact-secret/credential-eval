@@ -194,6 +194,7 @@ mod tests {
             end,
             family: family.map(str::to_owned),
             action: None,
+            mapping: None,
         }
     }
 

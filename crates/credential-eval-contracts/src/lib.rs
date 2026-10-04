@@ -30,6 +30,7 @@ pub mod ids;
 pub mod observation;
 pub mod performance;
 pub mod range;
+pub mod representation;
 pub mod schema;
 
 pub use error::ContractError;

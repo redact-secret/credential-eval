@@ -21,6 +21,7 @@ use crate::corpus::{CaseKind, EvidenceTier, SnapshotIdentity, SpanRole};
 use crate::ids::{CaseId, ComponentId, FixturePath, ScannerId, Sha256Digest};
 use crate::observation::{NormalizedFinding, Replays, ScannerIdentity, ScannerStatus};
 use crate::range::ByteRange;
+use crate::representation::{FindingMapping, RepresentationReport};
 use crate::schema::RunArtifactSchema;
 
 /// The complete result of one evaluation run.
@@ -78,6 +79,11 @@ pub struct RunManifest {
     /// before v1.1; a reader treats absence as `internal`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publication: Option<Publication>,
+    /// The representation facts the snapshot carried (revision v1.3): what was
+    /// received, as counts and a digest. Absent when the snapshot declares no
+    /// representation contract and carries no fact.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub representation: Option<RepresentationReport>,
 }
 
 /// How a run was invoked. Not a measurement: it records which inputs were
@@ -243,6 +249,10 @@ pub struct ObservedRange {
     /// Scanner-reported action, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
+    /// How an adapter placed a decoded finding on the original bytes
+    /// (revision v1.3); absent for a finding located directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapping: Option<FindingMapping>,
 }
 
 /// Span-level outcome lattice (protocol semantics; see `docs/contracts/outcomes.md`).

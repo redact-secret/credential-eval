@@ -24,6 +24,7 @@
 #![forbid(unsafe_code)]
 
 pub mod binary;
+pub mod decode;
 pub mod families;
 pub mod gitleaks;
 pub mod locate;

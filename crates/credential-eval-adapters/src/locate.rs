@@ -139,7 +139,7 @@ impl Line {
         }
     }
 
-    fn accepts(self, line: usize) -> bool {
+    pub(crate) fn accepts(self, line: usize) -> bool {
         match self {
             Self::Undefined | Self::Null => true,
             #[allow(clippy::cast_precision_loss)]
@@ -148,7 +148,7 @@ impl Line {
         }
     }
 
-    fn key(self) -> String {
+    pub(crate) fn key(self) -> String {
         match self {
             Self::Undefined => "undefined".into(),
             Self::Null => "null".into(),
@@ -165,7 +165,11 @@ pub struct Claims(HashMap<(String, String, String), BTreeSet<usize>>);
 impl Claims {
     /// Pick the first unclaimed candidate when there are several; legacy
     /// `index.mjs:93-102`.
-    fn resolve(&mut self, key: (String, String, String), matches: &[usize]) -> Vec<usize> {
+    pub(crate) fn resolve(
+        &mut self,
+        key: (String, String, String),
+        matches: &[usize],
+    ) -> Vec<usize> {
         if matches.len() <= 1 {
             return matches.to_vec();
         }

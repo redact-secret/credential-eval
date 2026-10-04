@@ -126,6 +126,19 @@ fn git_revision(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+fn code_point(value: &str) -> bool {
+    value.strip_prefix("U+").is_some_and(|hex| {
+        (4..=6).contains(&hex.len())
+            && hex
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'A'..=b'F').contains(&b))
+            && u32::from_str_radix(hex, 16)
+                .ok()
+                .and_then(char::from_u32)
+                .is_some()
+    })
+}
+
 fn sha256(value: &str) -> bool {
     value.strip_prefix("sha256:").is_some_and(|hex| {
         hex.len() == 64
@@ -161,6 +174,18 @@ validated_string!(
 validated_string!(
     /// A SHA-256 digest rendered as `sha256:<64 lowercase hex>`.
     Sha256Digest, kind = "digest", pattern = "^sha256:[0-9a-f]{64}$", max = 71, check = sha256
+);
+
+validated_string!(
+    /// A short lowercase label of a representation fact (a mechanism, a
+    /// carrier or an escape style): the case-id grammar, at most 64 bytes.
+    Slug, kind = "slug", pattern = "^[a-z0-9][a-z0-9-]*$", max = 64, check = slug
+);
+
+validated_string!(
+    /// A Unicode code point rendered as `U+` and four to six upper-case hex
+    /// digits (`U+200B`).
+    CodePoint, kind = "code point", pattern = "^U\\+[0-9A-F]{4,6}$", max = 8, check = code_point
 );
 
 validated_string!(
@@ -214,6 +239,19 @@ mod tests {
             "g".repeat(40).as_str(),
         ] {
             assert!(GitRevision::new(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn slugs_and_code_points() {
+        assert!(Slug::new("string-literal-addition").is_ok());
+        assert!(Slug::new("Upper").is_err());
+        assert!(Slug::new("a".repeat(65)).is_err());
+        for ok in ["U+200B", "U+0041", "U+1F600", "U+10FFFF"] {
+            assert!(CodePoint::new(ok).is_ok(), "{ok}");
+        }
+        for bad in ["u+200b", "U+200", "U+D800", "U+110000", "200B", "U+20 0B"] {
+            assert!(CodePoint::new(bad).is_err(), "{bad}");
         }
     }
 

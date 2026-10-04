@@ -40,7 +40,22 @@ pub fn build_cases(
     methods: &[MethodId],
     seed_key: SeedKey<'_>,
 ) -> Result<Vec<EvaluationCase>, KernelError> {
-    let mut corpus: Vec<&Case> = snapshot.cases.iter().collect();
+    // A variant is a different input: the representation facts of its seed
+    // (fragments, decoded values, validity) do not hold for it, so seeds are
+    // taken without them. This also keeps `source_hash` a function of the
+    // seed's bytes and spans, as before revision v1.3.
+    let stripped: Vec<Case>;
+    let source: &[Case] = if snapshot.uses_representation() {
+        stripped = snapshot
+            .cases
+            .iter()
+            .map(Case::without_representation)
+            .collect();
+        &stripped
+    } else {
+        &snapshot.cases
+    };
+    let mut corpus: Vec<&Case> = source.iter().collect();
     corpus.sort_by(|a, b| a.id.cmp(&b.id));
     let wants = |m: MethodId| methods.contains(&m);
     let mut cases = Vec::new();

@@ -1,0 +1,258 @@
+{
+  "schema": "credential-eval/corpus-snapshot/v1",
+  "identity": {
+    "source": "synthetic:representation",
+    "revision": "r1",
+    "evidence_schema": "synthetic-v1",
+    "corpus_digest": "sha256:327a7d32abda58a64cec334e68cf8b082a834ebc1facd5ad75a25317de9b77ae",
+    "representation": "credential-eval/representation/1"
+  },
+  "cases": [
+    {
+      "id": "enc-b64-whole",
+      "path": "rep/enc-b64-whole.txt",
+      "content": "ENCODED=U1lOVEhFVElDX0VYQU1QTEVfS0VZX05FVkVSX0lTU1VFRF8wMQ==\n",
+      "expected": [
+        {
+          "start": 8,
+          "end": 60,
+          "role": "secret",
+          "base": "enc-base",
+          "decoded": {
+            "via": [
+              {
+                "codec": "base64",
+                "alphabet": "standard",
+                "padding": "padded"
+              }
+            ],
+            "sha256": "sha256:e5b2d7e66d608c366a52c5df1b118a7fc0d3ebaba0f21c4eb96efdc8f60d407e",
+            "bytes": 37
+          }
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T1",
+        "family": "example-api-key",
+        "group": "representation-smoke"
+      },
+      "representation": {
+        "derivation": {
+          "kind": "projection",
+          "bases": [
+            "enc-base"
+          ]
+        },
+        "transformation": {
+          "steps": [
+            {
+              "op": "encode",
+              "codec": "base64",
+              "alphabet": "standard",
+              "padding": "padded"
+            },
+            {
+              "op": "embed",
+              "mode": "whole-value",
+              "carrier": "shell-assignment"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "enc-hex-json",
+      "path": "rep/enc-hex-json.txt",
+      "content": "{\"k\": \"53594E5448455449435F4558414D504C455F4B45595F4E455645525F4953535545445F3031\"}\n",
+      "expected": [
+        {
+          "start": 7,
+          "end": 81,
+          "role": "secret",
+          "decoded": {
+            "via": [
+              {
+                "codec": "hex",
+                "case": "upper"
+              }
+            ],
+            "sha256": "sha256:e5b2d7e66d608c366a52c5df1b118a7fc0d3ebaba0f21c4eb96efdc8f60d407e",
+            "bytes": 37
+          }
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T1",
+        "family": "example-api-key",
+        "group": "representation-smoke"
+      }
+    },
+    {
+      "id": "enc-nested",
+      "path": "rep/enc-nested.txt",
+      "content": "v=VTFsT1ZFaEZWRWxEWDBWWVFVMVFURVZmUzBWWlgwNUZWa1ZTWDBsVFUxVkZSRjh3TVE9PQ\n",
+      "expected": [
+        {
+          "start": 2,
+          "end": 72,
+          "role": "secret",
+          "decoded": {
+            "via": [
+              {
+                "codec": "base64",
+                "alphabet": "url-safe",
+                "padding": "unpadded"
+              },
+              {
+                "codec": "base64",
+                "alphabet": "standard",
+                "padding": "padded"
+              }
+            ],
+            "sha256": "sha256:e5b2d7e66d608c366a52c5df1b118a7fc0d3ebaba0f21c4eb96efdc8f60d407e",
+            "bytes": 37
+          }
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T1",
+        "family": "example-api-key",
+        "group": "representation-smoke"
+      }
+    },
+    {
+      "id": "frag-shell",
+      "path": "rep/frag-shell.txt",
+      "content": "# café 密钥\nKEY=SYNTHETIC_\\\nEXAMPLE_KEY_NEVER_ISSUED_01\n",
+      "expected": [
+        {
+          "start": 19,
+          "end": 58,
+          "role": "secret",
+          "fragments": [
+            {
+              "start": 19,
+              "end": 29
+            },
+            {
+              "start": 31,
+              "end": 58
+            }
+          ]
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T2",
+        "family": "example-api-key",
+        "group": "representation-smoke"
+      },
+      "representation": {
+        "transformation": {
+          "steps": [
+            {
+              "op": "fragment",
+              "mechanism": "shell-line-continuation",
+              "line_break": "lf",
+              "reconstruction": "reconstructs-original"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "strip-zero-width",
+      "path": "rep/strip.txt",
+      "content": "é=SYNTH​ETIC_EXAMPLE_KE​Y_NEVER_ISSUED_01\n",
+      "expected": [
+        {
+          "start": 3,
+          "end": 46,
+          "role": "secret",
+          "decoded": {
+            "via": [
+              {
+                "codec": "strip-codepoints",
+                "code_points": [
+                  "U+200B"
+                ]
+              }
+            ],
+            "sha256": "sha256:e5b2d7e66d608c366a52c5df1b118a7fc0d3ebaba0f21c4eb96efdc8f60d407e",
+            "bytes": 37
+          }
+        }
+      ],
+      "grouping": {
+        "kind": "must-redact",
+        "tier": "T3",
+        "family": "example-api-key",
+        "group": "representation-smoke"
+      }
+    },
+    {
+      "id": "reject-surrogate",
+      "path": "rep/reject.txt",
+      "content": "🔑KEY=EXAMPLE\n",
+      "expected": [],
+      "grouping": {
+        "kind": "must-not-flag",
+        "tier": "T0",
+        "group": "representation-smoke"
+      },
+      "representation": {
+        "input_validity": "unpaired-surrogate-split",
+        "chunking": {
+          "unit": "utf16-code-unit",
+          "boundaries": [
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "enc-pending",
+      "path": "rep/pending.txt",
+      "content": "X=U1lOVEhFVElDX0VYQU1QTEVfS0VZX05FVkVSX0lTU1VFRF8wMQ==\n",
+      "expected": [],
+      "grouping": {
+        "kind": "must-not-flag",
+        "tier": "T0",
+        "group": "representation-smoke"
+      },
+      "representation": {
+        "derivation": {
+          "kind": "projection",
+          "bases": [
+            "enc-base"
+          ]
+        },
+        "transformation": {
+          "steps": [
+            {
+              "op": "encode",
+              "codec": "base64",
+              "alphabet": "standard",
+              "padding": "padded"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "raw-control",
+      "path": "rep/raw.txt",
+      "content": "nothing to see\n",
+      "expected": [],
+      "grouping": {
+        "kind": "must-not-flag",
+        "tier": "T1",
+        "group": "representation-smoke",
+        "taxonomy": "prose"
+      }
+    }
+  ]
+}

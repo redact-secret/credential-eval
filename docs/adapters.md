@@ -79,6 +79,20 @@ These rules reproduce the legacy adapters exactly
   In an evaluation-methods run the unmeasured unit is the generated variant,
   which has no assertion or comparison for that scanner and is in no
   denominator ([ADR 0004](decisions/0004-per-case-unmeasured-handling-in-methods-and-trufflehog.md)).
+- **Decoded findings** ([ADR 0005](decisions/0005-representation-contract.md),
+  [contracts/representation.md](contracts/representation.md)): the optional
+  scanner configuration key `decoded_mapping` (`"off"` default, or
+  `"source-segment"`) for Gitleaks and TruffleHog places a finding the scanner
+  reports as decoded (base64, hex, nested, up to four layers) on the original
+  bytes **only when the placement can be re-derived**: exactly one run of
+  encoded text on the reported line decodes strictly, through the reported
+  codecs and depth, to text containing the reported value. The range is the
+  whole segment, recorded as `mapping {bound, layers, codecs}`. With the key
+  on, a decoded-tagged row runs this rule first and the rules above are the
+  fallback, so the choice only adds mappings. Anything the rule cannot prove
+  (other codecs, deeper layers, ambiguous or absent segments) stays what
+  `unmappable_findings` makes it. The key is in `config_hash`; absent, output
+  is byte for byte what it was.
 - **TruffleHog**: the optional scanner configuration key
   `unmappable_findings` works as for Gitleaks (`"fail"` default, or
   `"unmeasured-case"`): a row the adapter cannot map, such as an ambiguous or

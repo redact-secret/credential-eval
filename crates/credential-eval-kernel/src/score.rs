@@ -35,12 +35,32 @@ pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Deduplicate findings by `(path, start, end)`; the last duplicate's
 /// classification wins. Output is sorted by `(path, start, end)`.
+///
+/// A range that any duplicate reports as a mapped decoded finding keeps that
+/// mapping (the smallest one, so the result does not depend on emission
+/// order): a plain finding on the same bytes must not hide that the range is
+/// also a bound for a decoded one.
 pub fn dedupe(findings: &[NormalizedFinding]) -> Vec<NormalizedFinding> {
-    let mut unique: BTreeMap<(&FixturePath, u64, u64), &NormalizedFinding> = BTreeMap::new();
+    let mut unique: BTreeMap<(&FixturePath, u64, u64), NormalizedFinding> = BTreeMap::new();
     for finding in findings {
-        unique.insert((&finding.path, finding.start, finding.end), finding);
+        let key = (&finding.path, finding.start, finding.end);
+        let mapping = match (
+            &finding.mapping,
+            unique.get(&key).and_then(|f| f.mapping.as_ref()),
+        ) {
+            (Some(new), Some(old)) => Some(new.min(old).clone()),
+            (Some(new), None) => Some(new.clone()),
+            (None, old) => old.cloned(),
+        };
+        unique.insert(
+            key,
+            NormalizedFinding {
+                mapping,
+                ..finding.clone()
+            },
+        );
     }
-    unique.into_values().cloned().collect()
+    unique.into_values().collect()
 }
 
 fn expected_of(case: &Case) -> Vec<ScoredSpan> {
@@ -109,6 +129,7 @@ pub fn score_scanner(corpus: &CorpusSnapshot, observation: &ScannerObservation) 
             end: f.end,
             family: f.family.clone(),
             action: f.action.clone(),
+            mapping: f.mapping.clone(),
         });
     }
     let complete = matches!(observation.result, ObservationResult::Complete { .. });
@@ -242,6 +263,7 @@ pub fn build_artifact(
                 .collect(),
             run_class: None,
             publication: None,
+            representation: corpus.representation_report(),
         },
         scanners,
         variants: Vec::new(),

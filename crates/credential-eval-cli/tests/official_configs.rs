@@ -160,6 +160,18 @@ fn official_configs_choose_per_case_handling_and_a_sufficient_stdout_bound() {
             } else {
                 assert_eq!(policy, None, "{path}: {id} implements no per-case handling");
             }
+            // The representation contract (ADR 0005): both binary scanners place
+            // decoded findings on the original bytes when the rule can prove it.
+            let decoded = spec.configuration.get("decoded_mapping");
+            if ["gitleaks", "trufflehog"].contains(&id) {
+                assert_eq!(
+                    decoded,
+                    Some(&Value::from("source-segment")),
+                    "{path}: {id}"
+                );
+            } else {
+                assert_eq!(decoded, None, "{path}: {id} implements no decoded mapping");
+            }
             if id == "openredaction" {
                 assert!(
                     spec.limits.max_stdout_bytes >= 1 << 30,

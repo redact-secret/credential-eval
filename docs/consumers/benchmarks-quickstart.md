@@ -19,7 +19,7 @@ The CI pins every input in its own files. Nothing is resolved at run time.
 
 | Input | Pin |
 |---|---|
-| credential-eval | tag `v0.1.0-alpha.3` (`credential-eval --version` prints `credential-eval 0.1.0-alpha.3`) |
+| credential-eval | tag `v0.1.0-alpha.4` (`credential-eval --version` prints `credential-eval 0.1.0-alpha.4`) |
 | Run configuration | `configs/official/credential-public-v1.json` at that tag (linux-x64 executable digests) |
 | Evidence release | `redact-secret/credential-evidence` tag `snapshot-2026.10.01.2`, manifest digest `sha256:2557a72ae8dec3ca6d734a6c87b6db9cb4881543541693a4555fdfd9f7ba26d8` |
 | Corpus | 5,950 cases, corpus digest `sha256:1bc5a07b49dab7b8182f51bf11a65a9bb8a220adbd5216b364bc15b2d8e6a5af` |
@@ -42,7 +42,7 @@ archives. They are what the `pin.sha256` in the configuration checks
 set -euo pipefail
 TAG=snapshot-2026.10.01.2
 MANIFEST_DIGEST=2557a72ae8dec3ca6d734a6c87b6db9cb4881543541693a4555fdfd9f7ba26d8
-CE=v0.1.0-alpha.3
+CE=v0.1.0-alpha.4
 
 # 1. Fetch the evidence release by tag and verify the manifest digest.
 #    credential-eval verifies it again (step 5); checking here fails earlier.
@@ -57,7 +57,7 @@ echo "$MANIFEST_DIGEST  evidence/release-manifest.json" | sha256sum -c -
 #    Record the tag's commit SHA with the artifact.
 git clone --depth 1 --branch "$CE" https://github.com/redact-secret/credential-eval ce
 cargo build --release --locked -p credential-eval-cli --manifest-path ce/Cargo.toml
-ce/target/release/credential-eval --version   # credential-eval 0.1.0-alpha.3
+ce/target/release/credential-eval --version   # credential-eval 0.1.0-alpha.4
 
 # 3. Provision the binary scanners at their pins (linux-x64), read-only.
 mkdir -p peer-bin dl

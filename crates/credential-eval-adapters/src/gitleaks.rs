@@ -11,6 +11,9 @@ use credential_eval_contracts::observation::ObservationResult;
 use regex::Regex;
 use serde_json::{Value, json};
 
+use credential_eval_contracts::representation::{Codec, FindingMapping, MappingBound};
+
+use crate::decode::{DECODED_MAPPING_KEY, Depth, decoded_policy, map_decoded};
 use crate::families::{FAMILY_MAPPING_VERSION, LabelTable, finding_family};
 use crate::locate::{Claims, Fixtures, Line, Located, MapError, locate, utf16_prefix_bytes};
 use crate::process::CancelToken;
@@ -99,6 +102,7 @@ impl Adapter for Gitleaks {
                     "family_mapping_version",
                     "required_version",
                     UNMAPPABLE_FINDINGS_KEY,
+                    DECODED_MAPPING_KEY,
                 ],
                 fixed: &[
                     ("arguments", json!(ARGUMENTS)),
@@ -111,7 +115,8 @@ impl Adapter for Gitleaks {
             },
         )?;
         let per_case = per_case_policy(spec, &mut prepared)?;
-        prepared.settings = json!({ "per_case": per_case });
+        let decoded = decoded_policy(spec, &prepared)?;
+        prepared.settings = json!({ "per_case": per_case, "decoded": decoded });
         Ok(prepared)
     }
 
@@ -138,10 +143,13 @@ impl Adapter for Gitleaks {
         stdout: &[u8],
         fixtures: &Fixtures<'_>,
     ) -> Result<Measured, MapError> {
+        let options = Options {
+            decoded: prepared.settings.get("decoded") == Some(&Value::Bool(true)),
+        };
         if prepared.settings.get("per_case") == Some(&Value::Bool(true)) {
-            normalize_per_case(stdout, fixtures)
+            normalize_per_case_with(stdout, fixtures, options)
         } else {
-            normalize(stdout, fixtures).map(|findings| Measured {
+            normalize_with(stdout, fixtures, options).map(|findings| Measured {
                 findings,
                 unmeasured: Vec::new(),
             })
@@ -194,11 +202,28 @@ pub fn normalize(
     stdout: &[u8],
     fixtures: &Fixtures<'_>,
 ) -> Result<Vec<NormalizedFinding>, MapError> {
+    normalize_with(stdout, fixtures, Options::default())
+}
+
+/// Mapping choices of one scan, from the scanner configuration.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Options {
+    /// Place findings the scanner reports as decoded on the original bytes
+    /// ([`crate::decode`]); `decoded_mapping: "source-segment"`.
+    pub decoded: bool,
+}
+
+/// [`normalize`] with explicit [`Options`].
+pub fn normalize_with(
+    stdout: &[u8],
+    fixtures: &Fixtures<'_>,
+    options: Options,
+) -> Result<Vec<NormalizedFinding>, MapError> {
     let rows = canonical_rows(stdout)?;
     let mut claims = Claims::default();
     let rows = without_decoded_duplicates(&rows);
     rows.into_iter()
-        .map(|row| map_row(fixtures, row, &mut claims))
+        .map(|row| map_row(fixtures, row, &mut claims, options))
         .collect()
 }
 
@@ -212,6 +237,15 @@ pub fn normalize(
 /// [`normalize`]. Rows are processed in the same canonical order, so the
 /// result does not depend on report order.
 pub fn normalize_per_case(stdout: &[u8], fixtures: &Fixtures<'_>) -> Result<Measured, MapError> {
+    normalize_per_case_with(stdout, fixtures, Options::default())
+}
+
+/// [`normalize_per_case`] with explicit [`Options`].
+pub fn normalize_per_case_with(
+    stdout: &[u8],
+    fixtures: &Fixtures<'_>,
+    options: Options,
+) -> Result<Measured, MapError> {
     let rows = canonical_rows(stdout)?;
     let mut claims = Claims::default();
     let rows = without_decoded_duplicates(&rows);
@@ -219,7 +253,7 @@ pub fn normalize_per_case(stdout: &[u8], fixtures: &Fixtures<'_>) -> Result<Meas
     let mut unmeasured: std::collections::BTreeMap<String, &'static str> =
         std::collections::BTreeMap::new();
     for row in rows {
-        match map_row(fixtures, row, &mut claims) {
+        match map_row(fixtures, row, &mut claims, options) {
             Ok(finding) => findings.push((finding.path.to_string(), finding)),
             Err(error) => {
                 let reason = error.0;
@@ -269,13 +303,23 @@ fn map_row(
     fixtures: &Fixtures<'_>,
     row: &Value,
     claims: &mut Claims,
+    options: Options,
 ) -> Result<NormalizedFinding, MapError> {
-    let located = normalize_row(fixtures, row, claims)?;
     let family = finding_family(
         LabelTable::Gitleaks,
         row.get("RuleID").and_then(Value::as_str),
         None,
     );
+    if options.decoded && has_decoded_tag(row) {
+        // The contract's rule first; the rules that predate it are the
+        // fallback, so opting in only ever adds mappings.
+        if let Some(mapped) = decoded_row(fixtures, row, claims) {
+            return finding_with(mapped.located, family, Some(mapped.mapping));
+        }
+        let located = normalize_row(fixtures, row, claims)?;
+        return finding_with(located, family, legacy_mapping(row));
+    }
+    let located = normalize_row(fixtures, row, claims)?;
     finding(located, family)
 }
 
@@ -283,13 +327,89 @@ pub(crate) fn finding(
     located: Located,
     family: Option<String>,
 ) -> Result<NormalizedFinding, MapError> {
+    finding_with(located, family, None)
+}
+
+pub(crate) fn finding_with(
+    located: Located,
+    family: Option<String>,
+    mapping: Option<FindingMapping>,
+) -> Result<NormalizedFinding, MapError> {
     Ok(NormalizedFinding {
         path: FixturePath::new(located.path).map_err(|_| MapError("Unknown scanner path"))?,
         start: located.start as u64,
         end: located.end as u64,
         family,
         action: None,
+        mapping,
     })
+}
+
+fn has_decoded_tag(row: &Value) -> bool {
+    row.get("Tags")
+        .and_then(Value::as_array)
+        .is_some_and(|tags| {
+            tags.iter()
+                .any(|t| t.as_str().is_some_and(|t| t.starts_with("decoded:")))
+        })
+}
+
+/// How a decoded-tagged row that the rules predating the contract placed is
+/// described: only the depth-one base64 shape those rules support.
+fn legacy_mapping(row: &Value) -> Option<FindingMapping> {
+    if !has_tag(row, "decoded:base64") || !has_tag(row, "decode-depth:1") {
+        return None;
+    }
+    let bound = if row.get("RuleID").and_then(Value::as_str) == Some("private-key") {
+        MappingBound::SourceBlock
+    } else {
+        MappingBound::SourceSegmentExtended
+    };
+    Some(FindingMapping {
+        bound,
+        layers: 1,
+        codecs: vec![Codec::Base64],
+    })
+}
+
+/// The decoded finding of a row, placed by [`map_decoded`]; `None` when the
+/// row names a codec or depth the rule does not support or cannot be placed.
+fn decoded_row(
+    fixtures: &Fixtures<'_>,
+    row: &Value,
+    claims: &mut Claims,
+) -> Option<crate::decode::Mapped> {
+    let tags = row.get("Tags").and_then(Value::as_array)?;
+    let mut codecs = std::collections::BTreeSet::new();
+    let mut depth = None;
+    for tag in tags.iter().filter_map(Value::as_str) {
+        match tag {
+            "decoded:base64" => {
+                codecs.insert(Codec::Base64);
+            }
+            "decoded:hex" => {
+                codecs.insert(Codec::Hex);
+            }
+            _ if tag.starts_with("decoded:") => return None,
+            _ => {
+                if let Some(n) = tag.strip_prefix("decode-depth:") {
+                    depth = Some(n.parse::<u8>().ok()?);
+                }
+            }
+        }
+    }
+    let file = row.get("File").and_then(Value::as_str)?;
+    let secret = row.get("Secret").and_then(Value::as_str)?;
+    map_decoded(
+        fixtures,
+        file,
+        secret,
+        Line::from_json(row.get("StartLine")),
+        &codecs,
+        Depth::Exactly(depth?),
+        claims,
+    )
+    .ok()
 }
 
 fn has_tag(row: &Value, tag: &str) -> bool {
@@ -706,6 +826,132 @@ mod tests {
                                  "StartLine": 1, "Tags": ["decoded:base64", "decode-depth:1"]}]),
         );
         assert!(normalize(&out, &fixtures).is_err());
+    }
+
+    fn decoded() -> Options {
+        Options { decoded: true }
+    }
+
+    fn hex(text: &str) -> String {
+        text.bytes().map(|b| format!("{b:02x}")).collect()
+    }
+
+    #[test]
+    fn decoded_mapping_is_opt_in_and_only_adds_mappings() {
+        let secret = "FAKE_DECODED_VALUE_EXAMPLE_0123";
+        let hexed = hex(secret);
+        let twice = base64_encode(base64_encode(secret.as_bytes()).as_bytes());
+        let content = format!("h={hexed}\nn={twice}\n");
+        let fixtures = fx(&[("f.txt", content.as_str())]);
+        let rows = report(json!([
+            {"RuleID": "r", "File": "f.txt", "Secret": secret, "StartLine": 1,
+             "Tags": ["decoded:hex", "decode-depth:1"]},
+            {"RuleID": "r", "File": "f.txt", "Secret": secret, "StartLine": 2,
+             "Tags": ["decoded:base64", "decode-depth:2"]}
+        ]));
+        // Off: the rows are unplaceable, as they were.
+        assert!(normalize(&rows, &fixtures).is_err());
+        let off = normalize_per_case(&rows, &fixtures).unwrap();
+        assert!(off.findings.is_empty());
+        assert_eq!(off.unmeasured.len(), 1);
+        // On: both are placed on their source segments, with the mapping.
+        let on = normalize_with(&rows, &fixtures, decoded()).unwrap();
+        assert_eq!(on.len(), 2);
+        let ranges: Vec<(u64, u64, u8)> = on
+            .iter()
+            .map(|f| (f.start, f.end, f.mapping.as_ref().unwrap().layers))
+            .collect();
+        assert!(ranges.contains(&(2, 2 + hexed.len() as u64, 1)));
+        let second = content.rfind(&twice).unwrap() as u64;
+        assert!(ranges.contains(&(second, second + twice.len() as u64, 2)));
+        // Nothing unmeasured under per-case handling plus the choice.
+        let both = normalize_per_case_with(&rows, &fixtures, decoded()).unwrap();
+        assert_eq!((both.findings.len(), both.unmeasured.len()), (2, 0));
+    }
+
+    #[test]
+    fn the_rules_that_predate_the_contract_are_the_fallback_and_are_described() {
+        // Depth-one base64 whose secret continues past the decoded text: the
+        // old rule extends the range; the contract's rule cannot prove it, so
+        // the fallback places it and says so.
+        let run = base64_encode(b"FAKEPART");
+        let content = format!("é key: {run}.tail rest\n");
+        let fixtures = fx(&[("d.txt", content.as_str())]);
+        let rows = report(json!([{"RuleID": "generic-api-key", "File": "d.txt",
+            "Secret": "FAKEPART.tail", "StartLine": 1,
+            "Tags": ["decoded:base64", "decode-depth:1"]}]));
+        let off = normalize(&rows, &fixtures).unwrap();
+        assert!(off[0].mapping.is_none(), "no record without the choice");
+        let on = normalize_with(&rows, &fixtures, decoded()).unwrap();
+        assert_eq!((on[0].start, on[0].end), (off[0].start, off[0].end));
+        let mapping = on[0].mapping.as_ref().unwrap();
+        assert_eq!(mapping.bound, MappingBound::SourceSegmentExtended);
+        assert_eq!(
+            (mapping.layers, mapping.codecs.clone()),
+            (1, vec![Codec::Base64])
+        );
+    }
+
+    #[test]
+    fn a_decoded_pem_block_is_described_as_a_source_block() {
+        let inner = "FAKEPEMBODYEXAMPLE";
+        let body = base64_encode(inner.as_bytes());
+        let content =
+            format!("x\n-----BEGIN RSA PRIVATE KEY-----\n{body}\n-----END RSA PRIVATE KEY-----\n");
+        let fixtures = fx(&[("k.pem", content.as_str())]);
+        let secret =
+            format!("-----BEGIN RSA PRIVATE KEY-----\n{inner}\n-----END RSA PRIVATE KEY-----");
+        let rows = report(
+            json!([{"RuleID": "private-key", "File": "k.pem", "Secret": secret,
+            "StartLine": 2, "Tags": ["decoded:base64", "decode-depth:1"]}]),
+        );
+        let on = normalize_with(&rows, &fixtures, decoded()).unwrap();
+        assert_eq!(on[0].start, 2);
+        assert_eq!(
+            on[0].mapping.as_ref().unwrap().bound,
+            MappingBound::SourceBlock
+        );
+        assert_eq!(on, {
+            let mut plain = normalize(&rows, &fixtures).unwrap();
+            plain[0].mapping = on[0].mapping.clone();
+            plain
+        });
+    }
+
+    #[test]
+    fn unsupported_codecs_and_unprovable_rows_stay_unmeasured_with_the_choice() {
+        let content = format!("a={}\n", hex("FAKE_VALUE_EXAMPLE_0123456"));
+        let fixtures = fx(&[("f.txt", content.as_str())]);
+        let per = |tags: Value, secret: &str| {
+            let rows = report(json!([{"RuleID": "r", "File": "f.txt", "Secret": secret,
+                "StartLine": 1, "Tags": tags}]));
+            normalize_per_case_with(&rows, &fixtures, decoded()).unwrap()
+        };
+        // A codec the rule does not support.
+        let m = per(
+            json!(["decoded:percent", "decode-depth:1"]),
+            "FAKE_VALUE_EXAMPLE_0123456",
+        );
+        assert_eq!((m.findings.len(), m.unmeasured.len()), (0, 1));
+        // A depth beyond the bound, a missing depth, a wrong secret.
+        for tags in [
+            json!(["decoded:hex", "decode-depth:9"]),
+            json!(["decoded:hex"]),
+        ] {
+            let m = per(tags, "FAKE_VALUE_EXAMPLE_0123456");
+            assert_eq!((m.findings.len(), m.unmeasured.len()), (0, 1));
+        }
+        let m = per(
+            json!(["decoded:hex", "decode-depth:1"]),
+            "SOMETHING_ELSE_ENTIRELY",
+        );
+        assert_eq!((m.findings.len(), m.unmeasured.len()), (0, 1));
+        // The right one is placed.
+        let m = per(
+            json!(["decoded:hex", "decode-depth:1"]),
+            "FAKE_VALUE_EXAMPLE_0123456",
+        );
+        assert_eq!((m.findings.len(), m.unmeasured.len()), (1, 0));
     }
 
     #[test]

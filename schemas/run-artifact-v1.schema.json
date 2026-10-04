@@ -646,6 +646,21 @@
         "measurement"
       ]
     },
+    "Codec": {
+      "description": "A decoding or encoding codec of the bounded vocabulary.",
+      "oneOf": [
+        {
+          "description": "Base64 (standard or URL-safe alphabet).",
+          "type": "string",
+          "const": "base64"
+        },
+        {
+          "description": "Hexadecimal.",
+          "type": "string",
+          "const": "hex"
+        }
+      ]
+    },
     "ComparisonStatus": {
       "description": "Status of one differential comparison.",
       "oneOf": [
@@ -907,6 +922,36 @@
         "evaluator_ms"
       ]
     },
+    "FindingMapping": {
+      "description": "What an adapter did to place a finding that was reported in decoded\ncoordinates. Carried on the finding and on its artifact row so a consumer\ncan see which ranges are mapped, and how, and which are plain.",
+      "type": "object",
+      "properties": {
+        "bound": {
+          "description": "What the mapped range is, relative to the decoded finding.",
+          "$ref": "#/$defs/MappingBound"
+        },
+        "codecs": {
+          "description": "The codecs of those layers, sorted and unique.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Codec"
+          }
+        },
+        "layers": {
+          "description": "Decode layers between the original bytes and the finding (one to four).",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "bound",
+        "layers",
+        "codecs"
+      ]
+    },
     "FixturePath": {
       "type": "string",
       "maxLength": 512,
@@ -1166,6 +1211,26 @@
         }
       ]
     },
+    "MappingBound": {
+      "description": "The bound a mapped range gives for a decoded finding.",
+      "oneOf": [
+        {
+          "description": "The range is the whole encoded segment of the original input; the\nfinding lies somewhere inside its decoded text. Proved by re-deriving\nthe decode from the original bytes (never by trusting the scanner).",
+          "type": "string",
+          "const": "source-segment"
+        },
+        {
+          "description": "The range is an encoded segment extended over the adjacent literal\nbytes the finding also matched (the depth-one base64 rule that\npredates this contract).",
+          "type": "string",
+          "const": "source-segment-extended"
+        },
+        {
+          "description": "The range is a whole block whose body is encoded (a PEM block with a\nbase64 body), by the rule that predates this contract.",
+          "type": "string",
+          "const": "source-block"
+        }
+      ]
+    },
     "MethodIdentity": {
       "description": "An evaluation method and its version.",
       "type": "object",
@@ -1281,6 +1346,17 @@
             "null"
           ]
         },
+        "mapping": {
+          "description": "Set when the scanner reported the finding in decoded coordinates and\nthe adapter placed it on the original bytes (revision v1.3): the range\nis then a bound ([`FindingMapping`]), not the finding's own bytes.\nAbsent for a finding located directly in the original input.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FindingMapping"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "path": {
           "description": "Fixture path the finding is in.",
           "$ref": "#/$defs/FixturePath"
@@ -1321,6 +1397,17 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "mapping": {
+          "description": "How an adapter placed a decoded finding on the original bytes\n(revision v1.3); absent for a finding located directly.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FindingMapping"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "start": {
@@ -1625,6 +1712,92 @@
         "agreed"
       ]
     },
+    "RepresentationContract": {
+      "type": "string",
+      "const": "credential-eval/representation/1"
+    },
+    "RepresentationReport": {
+      "description": "Per-snapshot account of the representation facts received. Written to the\nrun manifest only when the snapshot declares the contract.",
+      "type": "object",
+      "properties": {
+        "cases": {
+          "description": "Cases carrying any representation fact (case-level or span-level).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "chunked_cases": {
+          "description": "Cases with `chunking`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "contract": {
+          "description": "The contract version the snapshot declared.",
+          "$ref": "#/$defs/RepresentationContract"
+        },
+        "decoded_spans": {
+          "description": "Spans with `decoded`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "decoded_unverified": {
+          "description": "Of those, spans carried but not re-derivable here (`normalize`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "decoded_verified": {
+          "description": "Of those, spans whose decode was re-derived and matched.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "expected_rejections": {
+          "description": "Expected rejections: cases whose `input_validity` is not `valid`.\nNon-asserting; in no TP/FN denominator.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "facts_digest": {
+          "description": "Digest of every representation fact received, canonical and sorted by\ncase id. An exporter computes the same digest from what it wrote, so a\nconsumer can prove which facts reached the engine.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "fragmented_spans": {
+          "description": "Spans with `fragments`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fragments": {
+          "description": "Fragments over all such spans.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "transformed_cases": {
+          "description": "Cases with a `transformation`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "contract",
+        "facts_digest",
+        "cases",
+        "transformed_cases",
+        "chunked_cases",
+        "expected_rejections",
+        "fragmented_spans",
+        "fragments",
+        "decoded_spans",
+        "decoded_verified",
+        "decoded_unverified"
+      ]
+    },
     "ReviewOccurrence": {
       "description": "One entry of the review queue: an occurrence that needs an authored\ndecision. Neither scanner of a disagreement is ground truth.",
       "type": "object",
@@ -1765,6 +1938,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Publication"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "representation": {
+          "description": "The representation facts the snapshot carried (revision v1.3): what was\nreceived, as counts and a digest. Absent when the snapshot declares no\nrepresentation contract and carries no fact.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepresentationReport"
             },
             {
               "type": "null"
@@ -2083,6 +2267,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/EvidenceRelease"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "representation": {
+          "description": "The representation contract the snapshot uses (revision v1.3). Required\nwhen any case carries a representation fact; absent otherwise, so a\nsnapshot without facts is byte-for-byte what it was. Declaring it with\nno facts is allowed and means the exporter supports the contract.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepresentationContract"
             },
             {
               "type": "null"

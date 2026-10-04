@@ -40,6 +40,10 @@ pub enum ContractError {
     InvalidUnmeasured { path: String },
     /// Scanner ids are duplicated or empty.
     DuplicateScanner(String),
+    /// A representation fact is malformed or inconsistent (revision v1.3).
+    InvalidRepresentation { case: String, reason: &'static str },
+    /// A snapshot carries representation facts without declaring the contract.
+    RepresentationUndeclared,
 }
 
 impl fmt::Display for ContractError {
@@ -85,6 +89,13 @@ impl fmt::Display for ContractError {
                 write!(f, "invalid unmeasured path {path}")
             }
             Self::DuplicateScanner(id) => write!(f, "duplicate or empty scanner id: {id}"),
+            Self::InvalidRepresentation { case, reason } => {
+                write!(f, "invalid representation in case {case}: {reason}")
+            }
+            Self::RepresentationUndeclared => write!(
+                f,
+                "the snapshot carries representation facts but does not declare identity.representation"
+            ),
         }
     }
 }

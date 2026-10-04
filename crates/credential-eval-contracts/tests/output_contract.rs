@@ -110,6 +110,7 @@ fn sample() -> RunArtifact {
                     tag: ReleaseTag::new("snapshot-2026.10.01").unwrap(),
                     manifest_digest: digest('d'),
                 }),
+                representation: None,
             },
             config_hash: digest('b'),
             accounting: AccountingConfig {
@@ -142,6 +143,7 @@ fn sample() -> RunArtifact {
             }],
             run_class: Some(RunClass::Official),
             publication: Some(Publication::Public),
+            representation: None,
         },
         scanners: vec![ScannerRun {
             scanner: scanner.clone(),

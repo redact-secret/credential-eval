@@ -15,6 +15,7 @@ use crate::config::{AdapterIdentity, NetworkPolicy};
 use crate::corpus::CorpusSnapshot;
 use crate::ids::{FixturePath, ScannerId, Sha256Digest};
 use crate::range::ByteRange;
+use crate::representation::FindingMapping;
 use crate::schema::ObservationSetSchema;
 
 /// Observations of one or more scanners over one corpus.
@@ -264,6 +265,12 @@ pub struct NormalizedFinding {
     /// redaction action), when it reports one. Observation only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
+    /// Set when the scanner reported the finding in decoded coordinates and
+    /// the adapter placed it on the original bytes (revision v1.3): the range
+    /// is then a bound ([`FindingMapping`]), not the finding's own bytes.
+    /// Absent for a finding located directly in the original input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapping: Option<FindingMapping>,
 }
 
 impl NormalizedFinding {

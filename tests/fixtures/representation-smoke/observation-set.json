@@ -1,0 +1,135 @@
+{
+  "schema": "credential-eval/observation-set/v1",
+  "corpus_digest": "sha256:327a7d32abda58a64cec334e68cf8b082a834ebc1facd5ad75a25317de9b77ae",
+  "observations": [
+    {
+      "scanner": {
+        "id": "fake-scanner-b",
+        "version": null,
+        "mode": "canned partial",
+        "adapter": {
+          "id": "canned",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:d6dc29e57faa6cfb39c505e490b98410973c11c2d2c056f7a21ebd21b2e1e4cd"
+      },
+      "result": {
+        "status": "complete",
+        "findings": [
+          {
+            "path": "rep/enc-b64-whole.txt",
+            "start": 8,
+            "end": 60,
+            "mapping": {
+              "bound": "source-segment",
+              "layers": 1,
+              "codecs": [
+                "base64"
+              ]
+            }
+          },
+          {
+            "path": "rep/frag-shell.txt",
+            "start": 19,
+            "end": 29
+          }
+        ],
+        "replays": {
+          "count": 2,
+          "agreed": true
+        },
+        "unmeasured": [
+          {
+            "path": "rep/enc-hex-json.txt",
+            "reason": "Unmappable decoded finding"
+          }
+        ]
+      }
+    },
+    {
+      "scanner": {
+        "id": "fake-scanner-a",
+        "version": "1.0.0",
+        "mode": "canned findings",
+        "adapter": {
+          "id": "canned",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:fb506980b5157ca5e891c674ab0627a0e14e39bf3c15f673bd0973678e9987ff"
+      },
+      "result": {
+        "status": "complete",
+        "findings": [
+          {
+            "path": "rep/enc-b64-whole.txt",
+            "start": 8,
+            "end": 60,
+            "family": "example-api-key",
+            "mapping": {
+              "bound": "source-segment",
+              "layers": 1,
+              "codecs": [
+                "base64"
+              ]
+            }
+          },
+          {
+            "path": "rep/enc-hex-json.txt",
+            "start": 7,
+            "end": 81,
+            "family": "example-api-key",
+            "mapping": {
+              "bound": "source-segment",
+              "layers": 1,
+              "codecs": [
+                "hex"
+              ]
+            }
+          },
+          {
+            "path": "rep/enc-nested.txt",
+            "start": 2,
+            "end": 72,
+            "family": "example-api-key",
+            "mapping": {
+              "bound": "source-segment",
+              "layers": 2,
+              "codecs": [
+                "base64"
+              ]
+            }
+          },
+          {
+            "path": "rep/frag-shell.txt",
+            "start": 19,
+            "end": 58,
+            "family": "example-api-key"
+          },
+          {
+            "path": "rep/raw.txt",
+            "start": 0,
+            "end": 7,
+            "family": "example-api-key"
+          },
+          {
+            "path": "rep/pending.txt",
+            "start": 2,
+            "end": 54,
+            "mapping": {
+              "bound": "source-segment",
+              "layers": 1,
+              "codecs": [
+                "base64"
+              ]
+            }
+          }
+        ],
+        "replays": {
+          "count": 2,
+          "agreed": true
+        }
+      },
+      "duration_ms": 7
+    }
+  ]
+}

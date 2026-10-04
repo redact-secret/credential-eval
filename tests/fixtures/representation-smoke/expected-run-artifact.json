@@ -1,0 +1,870 @@
+{
+  "schema": "credential-eval/run-artifact/v1",
+  "manifest": {
+    "engine": {
+      "name": "credential-eval",
+      "version": "0.1.0-alpha.4"
+    },
+    "protocol_version": "credential-eval-protocol/1",
+    "evidence": {
+      "source": "synthetic:representation",
+      "revision": "r1",
+      "evidence_schema": "synthetic-v1",
+      "corpus_digest": "sha256:327a7d32abda58a64cec334e68cf8b082a834ebc1facd5ad75a25317de9b77ae",
+      "representation": "credential-eval/representation/1"
+    },
+    "config_hash": "sha256:d432963315a86d921d6f399037d491fd63ba0f13dac51cb09c4d0331a2edada5",
+    "accounting": {
+      "min_denominator": 5,
+      "resolved_rate_floor": {
+        "default": 0.9,
+        "differential": 0.0
+      },
+      "measurable_share_floor": {
+        "default": 0.7,
+        "policy": 0.0
+      },
+      "twin_coverage_floor": {
+        "default": 0.5,
+        "policy": 0.0
+      },
+      "replays": 2,
+      "interval_z": 1.96,
+      "interval_precision": 6
+    },
+    "methods": [],
+    "scanners": [
+      {
+        "id": "fake-scanner-a",
+        "version": "1.0.0",
+        "mode": "canned findings",
+        "adapter": {
+          "id": "canned",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:fb506980b5157ca5e891c674ab0627a0e14e39bf3c15f673bd0973678e9987ff"
+      },
+      {
+        "id": "fake-scanner-b",
+        "version": null,
+        "mode": "canned partial",
+        "adapter": {
+          "id": "canned",
+          "version": "1"
+        },
+        "configuration_hash": "sha256:d6dc29e57faa6cfb39c505e490b98410973c11c2d2c056f7a21ebd21b2e1e4cd"
+      }
+    ],
+    "representation": {
+      "contract": "credential-eval/representation/1",
+      "facts_digest": "sha256:e65a4d449f59c52269bec36332ce949364710cc64dc0c30e81ee9af54d5464d3",
+      "cases": 7,
+      "transformed_cases": 3,
+      "chunked_cases": 1,
+      "expected_rejections": 1,
+      "fragmented_spans": 1,
+      "fragments": 2,
+      "decoded_spans": 4,
+      "decoded_verified": 4,
+      "decoded_unverified": 0
+    }
+  },
+  "scanners": [
+    {
+      "scanner": "fake-scanner-a",
+      "status": "complete",
+      "replays": {
+        "count": 2,
+        "agreed": true
+      },
+      "findings": [
+        {
+          "path": "rep/enc-b64-whole.txt",
+          "start": 8,
+          "end": 60,
+          "family": "example-api-key",
+          "mapping": {
+            "bound": "source-segment",
+            "layers": 1,
+            "codecs": [
+              "base64"
+            ]
+          }
+        },
+        {
+          "path": "rep/enc-hex-json.txt",
+          "start": 7,
+          "end": 81,
+          "family": "example-api-key",
+          "mapping": {
+            "bound": "source-segment",
+            "layers": 1,
+            "codecs": [
+              "hex"
+            ]
+          }
+        },
+        {
+          "path": "rep/enc-nested.txt",
+          "start": 2,
+          "end": 72,
+          "family": "example-api-key",
+          "mapping": {
+            "bound": "source-segment",
+            "layers": 2,
+            "codecs": [
+              "base64"
+            ]
+          }
+        },
+        {
+          "path": "rep/frag-shell.txt",
+          "start": 19,
+          "end": 58,
+          "family": "example-api-key"
+        },
+        {
+          "path": "rep/pending.txt",
+          "start": 2,
+          "end": 54,
+          "mapping": {
+            "bound": "source-segment",
+            "layers": 1,
+            "codecs": [
+              "base64"
+            ]
+          }
+        },
+        {
+          "path": "rep/raw.txt",
+          "start": 0,
+          "end": 7,
+          "family": "example-api-key"
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "enc-b64-whole",
+          "path": "rep/enc-b64-whole.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 8,
+              "end": 60,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 8,
+              "end": 60,
+              "family": "example-api-key",
+              "mapping": {
+                "bound": "source-segment",
+                "layers": 1,
+                "codecs": [
+                  "base64"
+                ]
+              }
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "EXACT"
+            ],
+            "leaked_bytes": 0,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "enc-hex-json",
+          "path": "rep/enc-hex-json.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 7,
+              "end": 81,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 7,
+              "end": 81,
+              "family": "example-api-key",
+              "mapping": {
+                "bound": "source-segment",
+                "layers": 1,
+                "codecs": [
+                  "hex"
+                ]
+              }
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "EXACT"
+            ],
+            "leaked_bytes": 0,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "enc-nested",
+          "path": "rep/enc-nested.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 2,
+              "end": 72,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 2,
+              "end": 72,
+              "family": "example-api-key",
+              "mapping": {
+                "bound": "source-segment",
+                "layers": 2,
+                "codecs": [
+                  "base64"
+                ]
+              }
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "EXACT"
+            ],
+            "leaked_bytes": 0,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "enc-pending",
+          "path": "rep/pending.txt",
+          "kind": "must-not-flag",
+          "tier": "T0",
+          "group": "representation-smoke",
+          "expected": [],
+          "actual": [
+            {
+              "start": 2,
+              "end": 54,
+              "mapping": {
+                "bound": "source-segment",
+                "layers": 1,
+                "codecs": [
+                  "base64"
+                ]
+              }
+            }
+          ],
+          "measurement": {
+            "type": "pending"
+          }
+        },
+        {
+          "case_id": "frag-shell",
+          "path": "rep/frag-shell.txt",
+          "kind": "must-redact",
+          "tier": "T2",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 19,
+              "end": 58,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 19,
+              "end": 58,
+              "family": "example-api-key"
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "EXACT"
+            ],
+            "leaked_bytes": 0,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "raw-control",
+          "path": "rep/raw.txt",
+          "kind": "must-not-flag",
+          "tier": "T1",
+          "group": "representation-smoke",
+          "taxonomy": "prose",
+          "expected": [],
+          "actual": [
+            {
+              "start": 0,
+              "end": 7,
+              "family": "example-api-key"
+            }
+          ],
+          "measurement": {
+            "type": "control",
+            "flagged": true,
+            "findings": 1,
+            "co_detected": false
+          }
+        },
+        {
+          "case_id": "reject-surrogate",
+          "path": "rep/reject.txt",
+          "kind": "must-not-flag",
+          "tier": "T0",
+          "group": "representation-smoke",
+          "expected": [],
+          "actual": [],
+          "measurement": {
+            "type": "pending"
+          }
+        },
+        {
+          "case_id": "strip-zero-width",
+          "path": "rep/strip.txt",
+          "kind": "must-redact",
+          "tier": "T3",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 3,
+              "end": 46,
+              "role": "secret"
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "MISS"
+            ],
+            "leaked_bytes": 43,
+            "collateral_bytes": 0
+          }
+        }
+      ],
+      "assertions": [],
+      "aggregates": {
+        "groups": {
+          "must-not-flag/T1": {
+            "population": "control",
+            "files": 1,
+            "flagged_files": 1,
+            "findings": 1,
+            "false_alarm_rate": "insufficient-evidence",
+            "mean_findings_per_flagged": "insufficient-evidence",
+            "diagnostics": {
+              "fp": 1,
+              "tn": 0
+            }
+          },
+          "must-redact/T1": {
+            "population": "positive",
+            "files": 3,
+            "spans": 3,
+            "secret_bytes": 196,
+            "outcomes": {
+              "EXACT": 3,
+              "COVERED": 0,
+              "OVERBROAD": 0,
+              "PARTIAL": 0,
+              "MISS": 0
+            },
+            "pending_files": 0,
+            "measurable_share": "insufficient-evidence",
+            "envelope_width": {
+              "spans": 0,
+              "bytes": 0
+            },
+            "leaked_spans": 0,
+            "leaked_span_rate": "insufficient-evidence",
+            "leaked_bytes": 0,
+            "leaked_byte_rate": "insufficient-evidence",
+            "collateral_bytes": 0,
+            "collateral_ratio": "insufficient-evidence",
+            "twins": {
+              "positives": 3,
+              "pairs": 0,
+              "discriminated": 0,
+              "co_detected": 0,
+              "coverage": "insufficient-evidence",
+              "rate": null
+            },
+            "diagnostics": {
+              "tp": 3,
+              "fp": 0,
+              "fn": 0
+            }
+          },
+          "must-redact/T2": {
+            "population": "positive",
+            "files": 1,
+            "spans": 1,
+            "secret_bytes": 39,
+            "outcomes": {
+              "EXACT": 1,
+              "COVERED": 0,
+              "OVERBROAD": 0,
+              "PARTIAL": 0,
+              "MISS": 0
+            },
+            "pending_files": 0,
+            "measurable_share": "insufficient-evidence",
+            "envelope_width": {
+              "spans": 0,
+              "bytes": 0
+            },
+            "leaked_spans": 0,
+            "leaked_span_rate": "insufficient-evidence",
+            "leaked_bytes": 0,
+            "leaked_byte_rate": "insufficient-evidence",
+            "collateral_bytes": 0,
+            "collateral_ratio": "insufficient-evidence",
+            "twins": {
+              "positives": 1,
+              "pairs": 0,
+              "discriminated": 0,
+              "co_detected": 0,
+              "coverage": "insufficient-evidence",
+              "rate": null
+            },
+            "diagnostics": {
+              "tp": 1,
+              "fp": 0,
+              "fn": 0
+            }
+          },
+          "must-redact/T3": {
+            "population": "positive",
+            "files": 1,
+            "spans": 1,
+            "secret_bytes": 43,
+            "outcomes": {
+              "EXACT": 0,
+              "COVERED": 0,
+              "OVERBROAD": 0,
+              "PARTIAL": 0,
+              "MISS": 1
+            },
+            "pending_files": 0,
+            "measurable_share": "insufficient-evidence",
+            "envelope_width": {
+              "spans": 0,
+              "bytes": 0
+            },
+            "leaked_spans": 1,
+            "leaked_span_rate": "insufficient-evidence",
+            "leaked_bytes": 43,
+            "leaked_byte_rate": "insufficient-evidence",
+            "collateral_bytes": 0,
+            "collateral_ratio": "insufficient-evidence",
+            "twins": {
+              "positives": 1,
+              "pairs": 0,
+              "discriminated": 0,
+              "co_detected": 0,
+              "coverage": "insufficient-evidence",
+              "rate": null
+            },
+            "diagnostics": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 1
+            }
+          },
+          "pending/T0": {
+            "population": "pending",
+            "files": 2,
+            "candidate_kinds": {
+              "must-not-flag": 2
+            }
+          }
+        },
+        "resolution": {},
+        "by_target": {},
+        "resolution_by_target": {}
+      }
+    },
+    {
+      "scanner": "fake-scanner-b",
+      "status": "complete",
+      "replays": {
+        "count": 2,
+        "agreed": true
+      },
+      "findings": [
+        {
+          "path": "rep/enc-b64-whole.txt",
+          "start": 8,
+          "end": 60,
+          "mapping": {
+            "bound": "source-segment",
+            "layers": 1,
+            "codecs": [
+              "base64"
+            ]
+          }
+        },
+        {
+          "path": "rep/frag-shell.txt",
+          "start": 19,
+          "end": 29
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "enc-b64-whole",
+          "path": "rep/enc-b64-whole.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 8,
+              "end": 60,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 8,
+              "end": 60,
+              "mapping": {
+                "bound": "source-segment",
+                "layers": 1,
+                "codecs": [
+                  "base64"
+                ]
+              }
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "EXACT"
+            ],
+            "leaked_bytes": 0,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "enc-hex-json",
+          "path": "rep/enc-hex-json.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 7,
+              "end": 81,
+              "role": "secret"
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "not-measured",
+            "status": "malformed"
+          }
+        },
+        {
+          "case_id": "enc-nested",
+          "path": "rep/enc-nested.txt",
+          "kind": "must-redact",
+          "tier": "T1",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 2,
+              "end": 72,
+              "role": "secret"
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "MISS"
+            ],
+            "leaked_bytes": 70,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "enc-pending",
+          "path": "rep/pending.txt",
+          "kind": "must-not-flag",
+          "tier": "T0",
+          "group": "representation-smoke",
+          "expected": [],
+          "actual": [],
+          "measurement": {
+            "type": "pending"
+          }
+        },
+        {
+          "case_id": "frag-shell",
+          "path": "rep/frag-shell.txt",
+          "kind": "must-redact",
+          "tier": "T2",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 19,
+              "end": 58,
+              "role": "secret"
+            }
+          ],
+          "actual": [
+            {
+              "start": 19,
+              "end": 29
+            }
+          ],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "PARTIAL"
+            ],
+            "leaked_bytes": 29,
+            "collateral_bytes": 0
+          }
+        },
+        {
+          "case_id": "raw-control",
+          "path": "rep/raw.txt",
+          "kind": "must-not-flag",
+          "tier": "T1",
+          "group": "representation-smoke",
+          "taxonomy": "prose",
+          "expected": [],
+          "actual": [],
+          "measurement": {
+            "type": "control",
+            "flagged": false,
+            "findings": 0,
+            "co_detected": false
+          }
+        },
+        {
+          "case_id": "reject-surrogate",
+          "path": "rep/reject.txt",
+          "kind": "must-not-flag",
+          "tier": "T0",
+          "group": "representation-smoke",
+          "expected": [],
+          "actual": [],
+          "measurement": {
+            "type": "pending"
+          }
+        },
+        {
+          "case_id": "strip-zero-width",
+          "path": "rep/strip.txt",
+          "kind": "must-redact",
+          "tier": "T3",
+          "family": "example-api-key",
+          "group": "representation-smoke",
+          "expected": [
+            {
+              "start": 3,
+              "end": 46,
+              "role": "secret"
+            }
+          ],
+          "actual": [],
+          "measurement": {
+            "type": "positive",
+            "span_outcomes": [
+              "MISS"
+            ],
+            "leaked_bytes": 43,
+            "collateral_bytes": 0
+          }
+        }
+      ],
+      "assertions": [],
+      "aggregates": {
+        "groups": {
+          "must-not-flag/T1": {
+            "population": "control",
+            "files": 1,
+            "flagged_files": 0,
+            "findings": 0,
+            "false_alarm_rate": "insufficient-evidence",
+            "mean_findings_per_flagged": null,
+            "diagnostics": {
+              "fp": 0,
+              "tn": 1
+            }
+          },
+          "must-redact/T1": {
+            "population": "positive",
+            "files": 2,
+            "spans": 2,
+            "secret_bytes": 122,
+            "outcomes": {
+              "EXACT": 1,
+              "COVERED": 0,
+              "OVERBROAD": 0,
+              "PARTIAL": 0,
+              "MISS": 1
+            },
+            "pending_files": 0,
+            "measurable_share": "insufficient-evidence",
+            "envelope_width": {
+              "spans": 0,
+              "bytes": 0
+            },
+            "leaked_spans": 1,
+            "leaked_span_rate": "insufficient-evidence",
+            "leaked_bytes": 70,
+            "leaked_byte_rate": "insufficient-evidence",
+            "collateral_bytes": 0,
+            "collateral_ratio": "insufficient-evidence",
+            "twins": {
+              "positives": 2,
+              "pairs": 0,
+              "discriminated": 0,
+              "co_detected": 0,
+              "coverage": "insufficient-evidence",
+              "rate": null
+            },
+            "diagnostics": {
+              "tp": 1,
+              "fp": 0,
+              "fn": 1
+            }
+          },
+          "must-redact/T2": {
+            "population": "positive",
+            "files": 1,
+            "spans": 1,
+            "secret_bytes": 39,
+            "outcomes": {
+              "EXACT": 0,
+              "COVERED": 0,
+              "OVERBROAD": 0,
+              "PARTIAL": 1,
+              "MISS": 0
+            },
+            "pending_files": 0,
+            "measurable_share": "insufficient-evidence",
+            "envelope_width": {
+              "spans": 0,
+              "bytes": 0
+            },
+            "leaked_spans": 1,
+            "leaked_span_rate": "insufficient-evidence",
+            "leaked_bytes": 29,
+            "leaked_byte_rate": "insufficient-evidence",
+            "collateral_bytes": 0,
+            "collateral_ratio": "insufficient-evidence",
+            "twins": {
+              "positives": 1,
+              "pairs": 0,
+              "discriminated": 0,
+              "co_detected": 0,
+              "coverage": "insufficient-evidence",
+              "rate": null
+            },
+            "diagnostics": {
+              "tp": 0,
+              "fp": 1,
+              "fn": 1
+            }
+          },
+          "must-redact/T3": {
+            "population": "positive",
+            "files": 1,
+            "spans": 1,
+            "secret_bytes": 43,
+            "outcomes": {
+              "EXACT": 0,
+              "COVERED": 0,
+              "OVERBROAD": 0,
+              "PARTIAL": 0,
+              "MISS": 1
+            },
+            "pending_files": 0,
+            "measurable_share": "insufficient-evidence",
+            "envelope_width": {
+              "spans": 0,
+              "bytes": 0
+            },
+            "leaked_spans": 1,
+            "leaked_span_rate": "insufficient-evidence",
+            "leaked_bytes": 43,
+            "leaked_byte_rate": "insufficient-evidence",
+            "collateral_bytes": 0,
+            "collateral_ratio": "insufficient-evidence",
+            "twins": {
+              "positives": 1,
+              "pairs": 0,
+              "discriminated": 0,
+              "co_detected": 0,
+              "coverage": "insufficient-evidence",
+              "rate": null
+            },
+            "diagnostics": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 1
+            }
+          },
+          "pending/T0": {
+            "population": "pending",
+            "files": 2,
+            "candidate_kinds": {
+              "must-not-flag": 2
+            }
+          }
+        },
+        "resolution": {},
+        "by_target": {},
+        "resolution_by_target": {}
+      },
+      "unmeasured_cases": [
+        {
+          "case_id": "enc-hex-json",
+          "reason": "Unmappable decoded finding"
+        }
+      ]
+    }
+  ],
+  "variants": [],
+  "comparisons": [],
+  "review_queue": [],
+  "non_semantic": {
+    "durations_ms": {
+      "fake-scanner-a": 7
+    }
+  }
+}

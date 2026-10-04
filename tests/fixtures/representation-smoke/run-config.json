@@ -1,0 +1,64 @@
+{
+  "schema": "credential-eval/run-config/v1",
+  "scanners": [
+    {
+      "id": "fake-scanner-a",
+      "adapter": {
+        "id": "canned",
+        "version": "1"
+      },
+      "mode": "canned findings",
+      "configuration": {
+        "rules": "synthetic"
+      },
+      "network": "disabled",
+      "limits": {
+        "timeout_ms": 1000,
+        "max_stdout_bytes": 1048576,
+        "max_stderr_bytes": 65536,
+        "concurrency": 1
+      }
+    },
+    {
+      "id": "fake-scanner-b",
+      "adapter": {
+        "id": "canned",
+        "version": "1"
+      },
+      "mode": "canned timeout",
+      "configuration": {
+        "rules": "synthetic",
+        "slow": true
+      },
+      "network": "disabled",
+      "limits": {
+        "timeout_ms": 1000,
+        "max_stdout_bytes": 1048576,
+        "max_stderr_bytes": 65536,
+        "concurrency": 1
+      }
+    }
+  ],
+  "methods": [],
+  "execution": {
+    "jobs": 1
+  },
+  "accounting": {
+    "min_denominator": 5,
+    "resolved_rate_floor": {
+      "default": 0.9,
+      "differential": 0
+    },
+    "measurable_share_floor": {
+      "default": 0.7,
+      "policy": 0
+    },
+    "twin_coverage_floor": {
+      "default": 0.5,
+      "policy": 0
+    },
+    "replays": 2,
+    "interval_z": 1.96,
+    "interval_precision": 6
+  }
+}
