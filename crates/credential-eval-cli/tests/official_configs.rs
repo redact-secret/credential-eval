@@ -138,3 +138,34 @@ fn npm_pins_match_the_node_shim_lockfile() {
         );
     }
 }
+
+/// The official measurement runs over decoded and percent-encoded evidence
+/// that two binary scanners report where the adapter cannot place a finding,
+/// and over 35,322 methods variants where OpenRedaction's stdout is several
+/// hundred MiB (ADR 0003, ADR 0004). Dropping either choice makes the
+/// official methods run refuse again.
+#[test]
+fn official_configs_choose_per_case_handling_and_a_sufficient_stdout_bound() {
+    for path in all_configs() {
+        let config: RunConfig = serde_json::from_value(read_json(path)).expect(path);
+        for spec in &config.scanners {
+            let id = spec.id.as_str();
+            let policy = spec.configuration.get("unmappable_findings");
+            if ["gitleaks", "trufflehog"].contains(&id) {
+                assert_eq!(
+                    policy,
+                    Some(&Value::from("unmeasured-case")),
+                    "{path}: {id}"
+                );
+            } else {
+                assert_eq!(policy, None, "{path}: {id} implements no per-case handling");
+            }
+            if id == "openredaction" {
+                assert!(
+                    spec.limits.max_stdout_bytes >= 1 << 30,
+                    "{path}: openredaction methods output exceeds 256 MiB"
+                );
+            }
+        }
+    }
+}

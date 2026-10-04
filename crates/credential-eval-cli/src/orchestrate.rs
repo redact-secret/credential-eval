@@ -541,7 +541,7 @@ pub fn run_methods(
     let variants = plan.variant_corpus(&request.corpus.identity);
     timing.evaluator += phase.elapsed();
 
-    let observed = fail_closed_on_unmeasured(scan(request, &variants, &mut timing)?);
+    let observed = scan(request, &variants, &mut timing)?;
 
     let phase = Instant::now();
     let observations = match methods.allowlist {
@@ -569,26 +569,6 @@ pub fn run_methods(
         report,
         artifact,
     })
-}
-
-/// Evaluation methods score whole scanners, not single fixtures, so they do not
-/// read per-case unmeasured paths (ADR 0003). A scanner that reported any is
-/// `malformed` for the methods run, exactly as it was before per-case handling
-/// existed: nothing is read as a zero detection.
-fn fail_closed_on_unmeasured(mut set: ObservationSet) -> ObservationSet {
-    for observation in &mut set.observations {
-        if matches!(
-            &observation.result,
-            ObservationResult::Complete { unmeasured, .. } if !unmeasured.is_empty()
-        ) {
-            observation.result = ObservationResult::Malformed {
-                reason: "scanner output could not be mapped to ranges for some fixtures; \
-                         evaluation methods do not support per-case unmeasured handling"
-                    .into(),
-            };
-        }
-    }
-    set
 }
 
 fn millis(d: Duration) -> u64 {

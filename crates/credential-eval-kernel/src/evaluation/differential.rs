@@ -144,6 +144,12 @@ pub fn evaluate_differential(
                 });
                 continue;
             };
+            // Neither scanner's finding set is known on a variant it could not
+            // map, so there is nothing to compare (ADR 0004): no comparison is
+            // recorded, and it is in no denominator.
+            if p.is_unmeasured(v) || peer.is_unmeasured(v) {
+                continue;
+            }
             let (pf, qf) = (p.on(v), peer.on(v));
             let (a, b) = (ranges(&pf), ranges(&qf));
             let (ac, bc) = (classifications(&pf), classifications(&qf));
@@ -195,6 +201,7 @@ pub fn evaluate_differential(
             let seen = if s.status == ScannerStatus::Complete {
                 variants
                     .iter()
+                    .filter(|v| !s.is_unmeasured(v))
                     .map(|v| {
                         let f = s.on(v);
                         VariantObservation {

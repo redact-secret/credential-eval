@@ -252,3 +252,136 @@ fn method_flags_are_validated() {
         Some(2)
     );
 }
+
+/// A fake Gitleaks like [`grep_scanner`] that cannot map the first fixture
+/// containing the canonical value: it reports a decoded depth-2 row for it
+/// instead (ADR 0003, ADR 0004).
+fn partial_scanner(dir: &Path, name: &str, pattern: &str) -> PathBuf {
+    let scan = format!(
+        r#"unm=$(grep -rlE 'EXAMPLE_FAKE_KEY_0123456789abcdef' "$root" | grep -E 'metamorphic|mutation' | sort | head -1)
+printf '['
+grep -rnoE '{pattern}' "$root" | grep -v "^$unm:" | awk -F: '{{ printf "%s{{\"RuleID\":\"generic-api-key\",\"File\":\"%s\",\"Secret\":\"%s\",\"StartLine\":%s}}", sep, $1, $3, $2; sep = "," }}'
+printf ',{{"RuleID":"generic-api-key","File":"%s","Secret":"x","StartLine":1,"Tags":["decoded:base64","decode-depth:2"]}}' "$unm"
+printf ']'"#
+    );
+    fake_gitleaks(dir, name, "8.30.1", &scan)
+}
+
+#[test]
+fn an_unmeasured_variant_is_in_no_denominator_and_never_a_miss_in_methods() {
+    use credential_eval_contracts::artifact::{AssertionStatus, CaseMeasurement};
+    let tmp = tempfile::tempdir().unwrap();
+    let d = tmp.path().to_path_buf();
+    let clean = |name: &str, id: &str| {
+        gitleaks_spec(id, &grep_scanner(&d, name, "EXAMPLE_FAKE_KEY_[0-9a-f]+"))
+    };
+    let mut gappy = gitleaks_spec(
+        "gappy",
+        &partial_scanner(&d, "g2", "EXAMPLE_FAKE_KEY_[0-9a-f]+"),
+    );
+    gappy
+        .configuration
+        .insert("unmappable_findings".into(), "unmeasured-case".into());
+    // The same fake without the opt-in: the scanner is malformed, as before.
+    let mut strict = gitleaks_spec(
+        "strict",
+        &partial_scanner(&d, "g3", "EXAMPLE_FAKE_KEY_[0-9a-f]+"),
+    );
+    strict
+        .configuration
+        .insert("unmappable_findings".into(), "fail".into());
+    let config = d.join("run-config.json");
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&common::config(
+            vec![clean("g1", "reference"), clean("g4", "peer"), gappy, strict],
+            1,
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let s = Setup {
+        corpus: corpus(&d),
+        evidence: evidence(&d),
+        config,
+        dir: d,
+        _dir: tmp,
+    };
+    let mut texts = Vec::new();
+    for jobs in ["1", "8"] {
+        let (output, out) = method_run(&s, &format!("gap-{jobs}"), &["--jobs", jobs]);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stderr}");
+        assert!(
+            stderr.contains("gappy unmeasured:") && stderr.contains("variants by method:"),
+            "{stderr}"
+        );
+        let artifact: RunArtifact = serde_json::from_slice(&fs::read(&out).unwrap()).unwrap();
+        assert_schema_valid(&artifact);
+        texts.push(semantic_text(&artifact));
+        let run = |id: &str| {
+            artifact
+                .scanners
+                .iter()
+                .find(|r| r.scanner.as_str() == id)
+                .unwrap()
+        };
+        let (reference, gappy, strict) = (run("reference"), run("gappy"), run("strict"));
+        assert_eq!(
+            strict.status,
+            credential_eval_contracts::observation::ScannerStatus::Malformed,
+            "without the opt-in a single unmappable row still fails the scanner"
+        );
+        assert_eq!(reference.unmeasured_cases.len(), 0);
+        assert_eq!(gappy.unmeasured_cases.len(), 1);
+        let gone = &gappy.unmeasured_cases[0].case_id;
+        let row = gappy.cases.iter().find(|c| &c.case_id == gone).unwrap();
+        assert!(matches!(
+            row.measurement,
+            CaseMeasurement::NotMeasured { .. }
+        ));
+        assert!(row.actual.is_empty());
+        // No assertion mentions the unmeasured variant, and none is a
+        // not-measured stand-in: it is in no denominator.
+        let record = artifact
+            .variants
+            .iter()
+            .find(|v| v.path == row.path)
+            .unwrap();
+        let (case_id, variant) = (record.case_id.clone(), record.variant.clone());
+        let mentions = |a: &credential_eval_contracts::artifact::Assertion| {
+            a.case_id == case_id
+                && (a.variant.as_ref() == Some(&variant)
+                    || a.baseline.as_ref() == Some(&variant)
+                    || a.candidate.as_ref() == Some(&variant))
+        };
+        assert!(!gappy.assertions.iter().any(mentions));
+        assert!(
+            gappy
+                .assertions
+                .iter()
+                .all(|a| a.status != AssertionStatus::NotMeasured)
+        );
+        assert!(gappy.assertions.len() < reference.assertions.len());
+        // Every other variant of the scanner is measured as the clean peer is.
+        let peer = run("peer");
+        let kept = peer.assertions.iter().filter(|a| !mentions(a)).count();
+        assert_eq!(gappy.assertions.len(), kept);
+        // Differential comparisons skip the variant for that peer only.
+        let compared = |peer: &str| {
+            artifact
+                .comparisons
+                .iter()
+                .filter(|c| c.peer.as_str() == peer && c.case_id == case_id && c.variant == variant)
+                .count()
+        };
+        // A clean peer is compared with the reference on the variant (or the
+        // variant carries assertions), the gappy one is not.
+        assert!(compared("peer") > 0 || peer.assertions.iter().any(mentions));
+        assert_eq!(compared("gappy"), 0);
+    }
+    assert_eq!(texts[0], texts[1], "jobs must not change a method run");
+    // `--require-fully-measured` surfaces the gap as an exit code.
+    let (output, _) = method_run(&s, "gate", &["--require-fully-measured"]);
+    assert_eq!(output.status.code(), Some(3));
+}

@@ -6,7 +6,7 @@ use credential_eval_contracts::artifact::{
     Relation, ScoredSpan, VariantStrategy,
 };
 use credential_eval_contracts::corpus::EvidenceTier;
-use credential_eval_contracts::ids::{CaseId, ScannerId};
+use credential_eval_contracts::ids::{CaseId, FixturePath, ScannerId};
 use credential_eval_contracts::observation::{NormalizedFinding, ScannerStatus};
 use serde::Serialize;
 
@@ -80,6 +80,18 @@ pub fn observe(v: &GeneratedVariant, findings: &[&NormalizedFinding]) -> CaseRes
         expected,
         actual,
         measurement,
+    }
+}
+
+/// The row of a variant a scanner could not map to ranges: its findings are
+/// unknown, so it carries no actual ranges and reads `not_measured`, never a
+/// miss (ADR 0004).
+pub fn unmeasured_row(v: &GeneratedVariant) -> CaseResult {
+    CaseResult {
+        measurement: CaseMeasurement::NotMeasured {
+            status: ScannerStatus::Malformed,
+        },
+        ..observe(v, &[])
     }
 }
 
@@ -215,9 +227,20 @@ pub struct ScannerView<'a> {
             Vec<&'a NormalizedFinding>,
         >,
     >,
+    /// Variant paths a complete scanner could not map to ranges (ADR 0004).
+    /// A variant on one of them is not measured by this scanner: it has no
+    /// assertion and no comparison, so it is in no denominator and is never
+    /// read as a missed detection.
+    pub unmeasured: Option<&'a std::collections::BTreeSet<&'a FixturePath>>,
 }
 
 impl ScannerView<'_> {
+    /// Whether this scanner left the variant unmeasured (ADR 0004).
+    pub fn is_unmeasured(&self, v: &GeneratedVariant) -> bool {
+        self.unmeasured
+            .is_some_and(|set| set.contains(&v.fixture.path))
+    }
+
     pub(crate) fn on(&self, v: &GeneratedVariant) -> Vec<&NormalizedFinding> {
         self.findings
             .and_then(|m| m.get(&v.fixture.path))
@@ -275,16 +298,28 @@ pub fn evaluate_assertions(
                     rows: Vec::new(),
                 };
             }
+            // A variant the scanner could not map is neither passed nor failed:
+            // its row is `not_measured`, and it carries no assertion (ADR 0004).
             let rows: Vec<CaseResult> = variants
                 .iter()
-                .map(|v| observe(v, &scanner.on(v)))
+                .map(|v| {
+                    if scanner.is_unmeasured(v) {
+                        unmeasured_row(v)
+                    } else {
+                        observe(v, &scanner.on(v))
+                    }
+                })
                 .collect();
             let mut assertions: Vec<Assertion> = variants
                 .iter()
                 .zip(&rows)
+                .filter(|(v, _)| !scanner.is_unmeasured(v))
                 .map(|(v, row)| keyed(Some(v), None, None, absolute(v, row)))
                 .collect();
             for i in 1..variants.len() {
+                if scanner.is_unmeasured(&variants[0]) || scanner.is_unmeasured(&variants[i]) {
+                    continue;
+                }
                 if let Some(r) = variants[i].transformation.relation {
                     let verdict = relation((&variants[0], &rows[0]), (&variants[i], &rows[i]), r);
                     assertions.push(keyed(None, Some(&variants[0]), Some(&variants[i]), verdict));

@@ -10,19 +10,20 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use credential_eval_contracts::config::{AdapterIdentity, ScannerSpec};
+use credential_eval_contracts::ids::FixturePath;
 use regex::Regex;
 use serde_json::{Value, json};
 
 use crate::families::{FAMILY_MAPPING_VERSION, LabelTable, finding_family};
-use crate::gitleaks::{finding, substitute};
+use crate::gitleaks::{UNMAPPABLE_FINDINGS_KEY, finding, per_case_policy, substitute};
 use crate::locate::{
     Claims, Fixtures, Line, Located, MapError, has_percent_escape, line_of, locate,
     locate_percent_encoded,
 };
 use crate::process::CancelToken;
 use crate::{
-    Adapter, AdapterEnv, Invocation, NormalizedFinding, PrepareFailure, Prepared, ScannerBuild,
-    adapter_identity, default_limits, spec,
+    Adapter, AdapterEnv, Invocation, Measured, NormalizedFinding, PrepareFailure, Prepared,
+    ScannerBuild, adapter_identity, default_limits, spec,
 };
 
 /// Adapter id.
@@ -79,7 +80,7 @@ impl Adapter for Trufflehog {
         env: &AdapterEnv,
         cancel: &CancelToken,
     ) -> Result<Prepared, Box<PrepareFailure>> {
-        crate::binary::prepare(
+        let mut prepared = crate::binary::prepare(
             spec,
             env,
             cancel,
@@ -91,6 +92,7 @@ impl Adapter for Trufflehog {
                     "update",
                     "family_mapping_version",
                     "required_version",
+                    UNMAPPABLE_FINDINGS_KEY,
                 ],
                 fixed: &[
                     ("arguments", json!(ARGUMENTS)),
@@ -101,7 +103,10 @@ impl Adapter for Trufflehog {
                 version_args: &["--version", "--no-update"],
                 network_controls: &["--no-update", "--no-verification"],
             },
-        )
+        )?;
+        let per_case = per_case_policy(spec, &mut prepared)?;
+        prepared.settings = json!({ "per_case": per_case });
+        Ok(prepared)
     }
 
     fn scan_invocation(&self, prepared: &Prepared, root: &Path, _paths: &[&str]) -> Invocation {
@@ -119,6 +124,22 @@ impl Adapter for Trufflehog {
         fixtures: &Fixtures<'_>,
     ) -> Result<Vec<NormalizedFinding>, MapError> {
         normalize(stdout, fixtures)
+    }
+
+    fn normalize_measured(
+        &self,
+        prepared: &Prepared,
+        stdout: &[u8],
+        fixtures: &Fixtures<'_>,
+    ) -> Result<Measured, MapError> {
+        if prepared.settings.get("per_case") == Some(&Value::Bool(true)) {
+            normalize_per_case(stdout, fixtures)
+        } else {
+            normalize(stdout, fixtures).map(|findings| Measured {
+                findings,
+                unmeasured: Vec::new(),
+            })
+        }
     }
 }
 
@@ -151,6 +172,67 @@ pub fn normalize(
         }
     }
     Ok(out)
+}
+
+/// [`normalize`] where a row that cannot be mapped (a percent-encoded value
+/// whose decoded form is ambiguous or absent from the file, an unsupported
+/// composite, ...) makes its fixture unmeasured instead of failing the scan
+/// (ADR 0003, extended to TruffleHog by ADR 0004).
+///
+/// A failure is attributed to the fixture the row names, and only when that
+/// names a known fixture; unparseable output or an unknown path still fails
+/// closed. Every finding on an unmeasured fixture is discarded, so it reads as
+/// not measured and never as a zero detection. Lines are processed in the same
+/// byte order as [`normalize`].
+pub fn normalize_per_case(stdout: &[u8], fixtures: &Fixtures<'_>) -> Result<Measured, MapError> {
+    let text = std::str::from_utf8(stdout).map_err(|_| MapError("Invalid scanner output"))?;
+    let mut claims = Claims::default();
+    let mut found: Vec<(String, NormalizedFinding)> = Vec::new();
+    let mut unmeasured: std::collections::BTreeMap<String, &'static str> =
+        std::collections::BTreeMap::new();
+    let mut lines: Vec<&str> = text.split('\n').filter(|l| !l.trim().is_empty()).collect();
+    lines.sort_unstable();
+    for line in lines {
+        let row: Value =
+            serde_json::from_str(line).map_err(|_| MapError("Invalid scanner output"))?;
+        let family = finding_family(
+            LabelTable::Trufflehog,
+            row.get("DetectorName").and_then(Value::as_str),
+            None,
+        );
+        let mapped = normalize_findings(fixtures, &row, &mut claims).and_then(|located| {
+            located
+                .into_iter()
+                .map(|l| finding(l, family.clone()))
+                .collect::<Result<Vec<_>, _>>()
+        });
+        match mapped {
+            Ok(rows) => found.extend(rows.into_iter().map(|f| (f.path.to_string(), f))),
+            Err(error) => {
+                let reason = error.0;
+                let file = meta_file(&row).ok_or(MapError(reason))?;
+                let (path, _) = fixtures.resolve(file).map_err(|_| MapError(reason))?;
+                unmeasured.entry(path.to_owned()).or_insert(reason);
+            }
+        }
+    }
+    let findings = found
+        .into_iter()
+        .filter(|(path, _)| !unmeasured.contains_key(path))
+        .map(|(_, f)| f)
+        .collect();
+    let unmeasured = unmeasured
+        .into_iter()
+        .map(|(path, reason)| {
+            FixturePath::new(path)
+                .map(|p| (p, reason))
+                .map_err(|_| MapError("Unknown scanner path"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Measured {
+        findings,
+        unmeasured,
+    })
 }
 
 fn filesystem(row: &Value) -> Option<&Value> {
@@ -498,6 +580,33 @@ mod tests {
             &content[f[0].start as usize..f[0].end as usize],
             "https://fakeuser:p!ss@example.invalid"
         );
+    }
+
+    #[test]
+    fn per_case_handling_drops_only_the_unmappable_fixture() {
+        // `p%21ss` decodes to a value that is not in `enc.txt`, so the row is
+        // unmappable; `ok.txt` maps normally.
+        let ok = "key: FAKEGITHUBTOKENEXAMPLE0001\n";
+        // Built at run time so no URL-shaped credential sits in the source.
+        let encoded = ["https://", "fakeuser", ":p%21ss", "@example.invalid"].concat();
+        let fixtures = fx(&[("ok.txt", ok), ("enc.txt", "nothing here\n")]);
+        let out = ndjson(&[
+            row("Github", 8, "FAKEGITHUBTOKENEXAMPLE0001", "ok.txt", 1),
+            row("URI", 17, &encoded, "enc.txt", 1),
+            row("Github", 8, "FAKEGITHUBTOKENEXAMPLE0001", "enc.txt", 1),
+        ]);
+        // The whole-scan reading still fails closed.
+        assert!(normalize(&out, &fixtures).is_err());
+        let measured = normalize_per_case(&out, &fixtures).unwrap();
+        assert_eq!(measured.findings.len(), 1);
+        assert_eq!(measured.findings[0].path.as_str(), "ok.txt");
+        assert_eq!(measured.unmeasured.len(), 1);
+        assert_eq!(measured.unmeasured[0].0.as_str(), "enc.txt");
+        // A failure that names no known fixture, or unparseable output, still
+        // fails closed.
+        let unknown = ndjson(&[row("URI", 17, &encoded, "nope.txt", 1)]);
+        assert!(normalize_per_case(&unknown, &fixtures).is_err());
+        assert!(normalize_per_case(b"{not json}\n", &fixtures).is_err());
     }
 
     #[test]

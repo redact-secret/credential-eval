@@ -76,7 +76,15 @@ These rules reproduce the legacy adapters exactly
   row the adapter cannot map does: absent or `"fail"` makes the scanner
   `malformed`; `"unmeasured-case"` makes the fixture the row names unmeasured
   and keeps the scan `complete` ([ADR 0003](decisions/0003-unmappable-findings-leave-the-case-unmeasured.md)).
-- **TruffleHog**: the AWS `RawV2` pair yields both the key id and the
+  In an evaluation-methods run the unmeasured unit is the generated variant,
+  which has no assertion or comparison for that scanner and is in no
+  denominator ([ADR 0004](decisions/0004-per-case-unmeasured-handling-in-methods-and-trufflehog.md)).
+- **TruffleHog**: the optional scanner configuration key
+  `unmappable_findings` works as for Gitleaks (`"fail"` default, or
+  `"unmeasured-case"`): a row the adapter cannot map, such as an ambiguous or
+  unmappable percent-encoded finding, leaves the fixture it names unmeasured
+  ([ADR 0004](decisions/0004-per-case-unmeasured-handling-in-methods-and-trufflehog.md)).
+  The AWS `RawV2` pair yields both the key id and the
   secret. A Shopify `Raw` is token + shop domain, and only the token is
   kept (the domain must exist in the file). Postgres (`DetectorType` 968) is
   recovered by re-parsing URIs with WHATWG URL semantics and a strict

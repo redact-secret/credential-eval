@@ -110,22 +110,7 @@ impl Adapter for Gitleaks {
                 network_controls: &[],
             },
         )?;
-        let per_case = match spec.configuration.get(UNMAPPABLE_FINDINGS_KEY) {
-            None => false,
-            Some(Value::String(v)) if v == "fail" => false,
-            Some(Value::String(v)) if v == UNMEASURED_CASE => true,
-            Some(_) => {
-                return Err(Box::new(PrepareFailure {
-                    result: ObservationResult::Error {
-                        reason: format!("invalid scanner configuration: {UNMAPPABLE_FINDINGS_KEY}"),
-                    },
-                    version: prepared.version,
-                    provenance: prepared.provenance,
-                    processes: prepared.processes,
-                    process_time: prepared.process_time,
-                }));
-            }
-        };
+        let per_case = per_case_policy(spec, &mut prepared)?;
         prepared.settings = json!({ "per_case": per_case });
         Ok(prepared)
     }
@@ -161,6 +146,30 @@ impl Adapter for Gitleaks {
                 unmeasured: Vec::new(),
             })
         }
+    }
+}
+
+/// Read [`UNMAPPABLE_FINDINGS_KEY`] from a scanner configuration: `false` when
+/// absent or `"fail"`, `true` for [`UNMEASURED_CASE`], and an `error`
+/// observation (a configuration mistake, never a measurement) for any other
+/// value. Shared by every adapter that implements per-case handling.
+pub(crate) fn per_case_policy(
+    spec: &ScannerSpec,
+    prepared: &mut Prepared,
+) -> Result<bool, Box<PrepareFailure>> {
+    match spec.configuration.get(UNMAPPABLE_FINDINGS_KEY) {
+        None => Ok(false),
+        Some(Value::String(v)) if v == "fail" => Ok(false),
+        Some(Value::String(v)) if v == UNMEASURED_CASE => Ok(true),
+        Some(_) => Err(Box::new(PrepareFailure {
+            result: ObservationResult::Error {
+                reason: format!("invalid scanner configuration: {UNMAPPABLE_FINDINGS_KEY}"),
+            },
+            version: prepared.version.clone(),
+            provenance: prepared.provenance.clone(),
+            processes: prepared.processes,
+            process_time: prepared.process_time,
+        })),
     }
 }
 
