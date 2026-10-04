@@ -203,6 +203,22 @@ fn findings_by_path(
         .collect()
 }
 
+/// The variant paths each complete scanner could not map (ADR 0004).
+fn unmeasured_by_scanner(
+    observations: &ObservationSet,
+) -> BTreeMap<&ScannerId, BTreeSet<&FixturePath>> {
+    observations
+        .observations
+        .iter()
+        .filter_map(|o| match &o.result {
+            ObservationResult::Complete { unmeasured, .. } if !unmeasured.is_empty() => {
+                Some((&o.scanner.id, unmeasured.iter().map(|u| &u.path).collect()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// Evaluate a plan against observations recorded over its variant corpus.
 pub fn evaluate(
     plan: &EvaluationPlan,
@@ -214,6 +230,7 @@ pub fn evaluate(
     let corpus = plan.variant_corpus(base);
     observations.validate_against(&corpus)?;
     let by_path = findings_by_path(observations);
+    let gaps = unmeasured_by_scanner(observations);
     let mut ordered: Vec<&credential_eval_contracts::observation::ScannerObservation> =
         observations.observations.iter().collect();
     ordered.sort_by(|a, b| a.scanner.id.cmp(&b.scanner.id));
@@ -223,6 +240,7 @@ pub fn evaluate(
             id: &o.scanner.id,
             status: o.result.status(),
             findings: by_path.get(&o.scanner.id),
+            unmeasured: gaps.get(&o.scanner.id),
         })
         .collect();
     let identities: BTreeMap<&ScannerId, &ScannerIdentity> = ordered
@@ -483,11 +501,18 @@ impl EvaluationReport {
             .flat_map(|g| g.variants.iter().map(|v| (&v.fixture.path, v)))
             .collect();
         let by_path = findings_by_path(observations);
+        let gaps = unmeasured_by_scanner(observations);
         let mut scanners = Vec::with_capacity(observations.observations.len());
         for o in &observations.observations {
             let mut run = crate::score::score_scanner(&corpus, o);
             if let Some(found) = by_path.get(&o.scanner.id) {
+                let gaps = gaps.get(&o.scanner.id);
                 for case in &mut run.cases {
+                    // An unmeasured variant keeps the `not_measured` row the
+                    // scoring pass gave it (ADR 0004).
+                    if gaps.is_some_and(|set| set.contains(&case.path)) {
+                        continue;
+                    }
                     let v = variants[&case.path];
                     let on = found.get(&case.path).cloned().unwrap_or_default();
                     *case = assertions::observe(v, &on);

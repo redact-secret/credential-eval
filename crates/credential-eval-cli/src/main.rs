@@ -342,6 +342,36 @@ fn method_inputs(args: &RunArgs, config: &mut RunConfig) -> Result<Option<Method
     }))
 }
 
+/// ` (method: n, ...)` for an evaluation-method run: the unmeasured variants
+/// of one scanner by the method that generated them (ADR 0004). Empty for a
+/// plain run, whose cases are not variants.
+fn unmeasured_by_method(
+    artifact: &RunArtifact,
+    run: &credential_eval_contracts::artifact::ScannerRun,
+) -> String {
+    if artifact.variants.is_empty() {
+        return String::new();
+    }
+    let path_of: std::collections::BTreeMap<_, _> =
+        run.cases.iter().map(|c| (&c.case_id, &c.path)).collect();
+    let method_of: std::collections::BTreeMap<_, _> = artifact
+        .variants
+        .iter()
+        .map(|v| (&v.path, v.method.id.as_str()))
+        .collect();
+    let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for u in &run.unmeasured_cases {
+        let method = path_of
+            .get(&u.case_id)
+            .and_then(|p| method_of.get(p))
+            .copied()
+            .unwrap_or("unknown");
+        *counts.entry(method).or_default() += 1;
+    }
+    let parts: Vec<String> = counts.iter().map(|(m, n)| format!("{m}: {n}")).collect();
+    format!(" (variants by method: {})", parts.join(", "))
+}
+
 /// Print a sanitized summary (identities, statuses and counts only). Returns
 /// whether a scanner did not complete.
 fn summarize(artifact: &RunArtifact) -> bool {
@@ -361,10 +391,11 @@ fn summarize(artifact: &RunArtifact) -> bool {
         );
         if !run.unmeasured_cases.is_empty() {
             eprintln!(
-                "{} unmeasured: {} of {} cases could not be mapped to ranges and are in no denominator",
+                "{} unmeasured: {} of {} cases could not be mapped to ranges and are in no denominator{}",
                 identity.id,
                 run.unmeasured_cases.len(),
-                run.cases.len()
+                run.cases.len(),
+                unmeasured_by_method(artifact, run)
             );
         }
     }
