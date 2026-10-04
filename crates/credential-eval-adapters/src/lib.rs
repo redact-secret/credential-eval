@@ -40,7 +40,7 @@ use std::time::Duration;
 use credential_eval_contracts::config::{
     AdapterIdentity, NetworkPolicy, ScannerLimits, ScannerSpec,
 };
-use credential_eval_contracts::ids::{ComponentId, ScannerId};
+use credential_eval_contracts::ids::{ComponentId, FixturePath, ScannerId};
 pub use credential_eval_contracts::observation::{
     NormalizedFinding, ObservationResult, ProvenanceComponent, ProvenanceKind, ScannerBuild,
     ScannerIdentity, ScannerObservation, ScannerProvenance,
@@ -166,12 +166,41 @@ pub trait Adapter: Send + Sync {
         fixtures: &Fixtures<'_>,
     ) -> Result<Vec<NormalizedFinding>, MapError>;
 
+    /// Like [`Adapter::normalize`], for a run configuration that chose to
+    /// report an unmappable finding as an unmeasured fixture instead of
+    /// failing the whole scanner. The default never reports one: it fails
+    /// closed exactly as `normalize` does. An adapter that overrides this
+    /// attributes a failure to a known fixture path only; anything it cannot
+    /// attribute (unparseable output, an unknown path) still fails closed.
+    fn normalize_measured(
+        &self,
+        prepared: &Prepared,
+        stdout: &[u8],
+        fixtures: &Fixtures<'_>,
+    ) -> Result<Measured, MapError> {
+        self.normalize(prepared, stdout, fixtures)
+            .map(|findings| Measured {
+                findings,
+                unmeasured: Vec::new(),
+            })
+    }
+
     /// The result for a process that exited with a non-zero status.
     fn exit_failure(&self, _code: Option<i32>) -> ObservationResult {
         ObservationResult::Error {
             reason: "scanner exited with a non-zero status; output suppressed".into(),
         }
     }
+}
+
+/// Findings of one scan plus the fixtures whose output could not be mapped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Measured {
+    /// Normalized findings, none of them on an unmeasured path.
+    pub findings: Vec<NormalizedFinding>,
+    /// Fixture paths that could not be mapped, sorted, unique, each with the
+    /// adapter's fixed reason.
+    pub unmeasured: Vec<(FixturePath, &'static str)>,
 }
 
 /// Every built-in adapter, sorted by id.

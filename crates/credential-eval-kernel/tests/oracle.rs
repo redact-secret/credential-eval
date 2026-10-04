@@ -254,6 +254,7 @@ fn complete(findings: Vec<NormalizedFinding>) -> ScannerObservation {
     ScannerObservation {
         scanner: identity("sc", Some("1"), &json!({})),
         result: ObservationResult::Complete {
+            unmeasured: Vec::new(),
             findings,
             replays: Replays {
                 count: 2,
@@ -952,6 +953,7 @@ fn evaluation_matches_legacy() {
             .map(|o| {
                 let result = match s(&o["status"]) {
                     "complete" => ObservationResult::Complete {
+                        unmeasured: Vec::new(),
                         findings: o["findings"]
                             .as_array()
                             .unwrap()

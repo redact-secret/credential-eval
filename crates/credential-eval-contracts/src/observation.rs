@@ -152,6 +152,14 @@ pub enum ObservationResult {
         findings: Vec<NormalizedFinding>,
         /// Stability replay record.
         replays: Replays,
+        /// Fixture paths the adapter could not map to ranges, under a run
+        /// configuration that explicitly chose per-case handling (v1.2). The
+        /// scanner's findings on these paths are discarded and the cases are
+        /// not measured: never a `MISS`, never a zero detection. Empty (and
+        /// absent from the document) for a scanner that mapped every finding.
+        /// Sorted by path, unique.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        unmeasured: Vec<UnmeasuredPath>,
     },
     /// Replays over identical input disagreed; findings are discarded.
     Unstable {
@@ -265,6 +273,18 @@ impl NormalizedFinding {
     }
 }
 
+/// A fixture path whose scanner output could not be mapped to ranges.
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(deny_unknown_fields)]
+pub struct UnmeasuredPath {
+    /// Fixture path.
+    pub path: FixturePath,
+    /// Fixed, sanitized reason (an adapter constant). Never raw output.
+    pub reason: String,
+}
+
 impl ObservationSet {
     /// Validate that these observations belong to `corpus` and that every
     /// finding names a known path with a valid range (legacy `score`
@@ -288,8 +308,29 @@ impl ObservationSet {
                     observation.scanner.id.to_string(),
                 ));
             }
-            if let ObservationResult::Complete { findings, .. } = &observation.result {
+            if let ObservationResult::Complete {
+                findings,
+                unmeasured,
+                ..
+            } = &observation.result
+            {
+                let mut previous: Option<&FixturePath> = None;
+                for entry in unmeasured {
+                    let known = content.contains_key(&entry.path);
+                    let ordered = previous.is_none_or(|p| p < &entry.path);
+                    if !known || !ordered {
+                        return Err(ContractError::InvalidUnmeasured {
+                            path: entry.path.to_string(),
+                        });
+                    }
+                    previous = Some(&entry.path);
+                }
                 for finding in findings {
+                    if unmeasured.iter().any(|u| u.path == finding.path) {
+                        return Err(ContractError::InvalidUnmeasured {
+                            path: finding.path.to_string(),
+                        });
+                    }
                     let valid = content
                         .get(&finding.path)
                         .is_some_and(|text| finding.range().is_valid_in(text));

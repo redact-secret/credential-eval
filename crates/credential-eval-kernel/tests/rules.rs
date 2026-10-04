@@ -483,6 +483,7 @@ fn exact(
         })
         .collect();
     ObservationResult::Complete {
+        unmeasured: Vec::new(),
         findings,
         replays: Replays {
             count: 2,
@@ -593,6 +594,7 @@ fn scanner_aggregates_fill_groups_and_targets_only_when_complete() {
     let observation = ScannerObservation {
         scanner: identity("s", "1"),
         result: ObservationResult::Complete {
+            unmeasured: Vec::new(),
             findings,
             replays: Replays {
                 count: 2,
@@ -646,6 +648,7 @@ fn differential_reference_is_a_run_parameter() {
     let cases = build_cases(&snap, &[MethodId::Differential], &case_id_seed).unwrap();
     let plan = plan_evaluation(cases, &evidence(), &GenerationLimits::default()).unwrap();
     let empty = ObservationResult::Complete {
+        unmeasured: Vec::new(),
         findings: vec![],
         replays: Replays {
             count: 2,

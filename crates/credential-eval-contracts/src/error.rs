@@ -35,6 +35,9 @@ pub enum ContractError {
     StaleObservations { expected: String, found: String },
     /// A normalized finding names an unknown path or an invalid range.
     InvalidFinding { path: String, start: u64, end: u64 },
+    /// An unmeasured path is unknown, unsorted or duplicated, or a finding is
+    /// reported on a path the same observation declares unmeasured.
+    InvalidUnmeasured { path: String },
     /// Scanner ids are duplicated or empty.
     DuplicateScanner(String),
 }
@@ -77,6 +80,9 @@ impl fmt::Display for ContractError {
             ),
             Self::InvalidFinding { path, start, end } => {
                 write!(f, "invalid normalized finding {path}:[{start}, {end})")
+            }
+            Self::InvalidUnmeasured { path } => {
+                write!(f, "invalid unmeasured path {path}")
             }
             Self::DuplicateScanner(id) => write!(f, "duplicate or empty scanner id: {id}"),
         }

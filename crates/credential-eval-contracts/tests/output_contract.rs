@@ -202,6 +202,7 @@ fn sample() -> RunArtifact {
                 by_target: BTreeMap::new(),
                 resolution_by_target: BTreeMap::new(),
             },
+            unmeasured_cases: vec![],
         }],
         variants: vec![VariantRecord {
             case_id: case_id.clone(),

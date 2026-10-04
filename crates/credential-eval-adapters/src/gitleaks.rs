@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 
 use credential_eval_contracts::config::{AdapterIdentity, ScannerSpec};
 use credential_eval_contracts::ids::FixturePath;
+use credential_eval_contracts::observation::ObservationResult;
 use regex::Regex;
 use serde_json::{Value, json};
 
@@ -14,9 +15,17 @@ use crate::families::{FAMILY_MAPPING_VERSION, LabelTable, finding_family};
 use crate::locate::{Claims, Fixtures, Line, Located, MapError, locate, utf16_prefix_bytes};
 use crate::process::CancelToken;
 use crate::{
-    Adapter, AdapterEnv, Invocation, NormalizedFinding, PrepareFailure, Prepared, ScannerBuild,
-    adapter_identity, default_limits, spec,
+    Adapter, AdapterEnv, Invocation, Measured, NormalizedFinding, PrepareFailure, Prepared,
+    ScannerBuild, adapter_identity, default_limits, spec,
 };
+
+/// Optional configuration key choosing what an unmappable finding does.
+/// Absent or `"fail"`: the whole scanner is `malformed` (the default). The
+/// value [`UNMEASURED_CASE`]: the fixture the finding is in is reported
+/// unmeasured and the scan stays complete (ADR 0003).
+pub const UNMAPPABLE_FINDINGS_KEY: &str = "unmappable_findings";
+/// The per-case value of [`UNMAPPABLE_FINDINGS_KEY`].
+pub const UNMEASURED_CASE: &str = "unmeasured-case";
 
 /// Adapter id.
 pub const ID: &str = "gitleaks";
@@ -77,7 +86,7 @@ impl Adapter for Gitleaks {
         env: &AdapterEnv,
         cancel: &CancelToken,
     ) -> Result<Prepared, Box<PrepareFailure>> {
-        crate::binary::prepare(
+        let mut prepared = crate::binary::prepare(
             spec,
             env,
             cancel,
@@ -89,6 +98,7 @@ impl Adapter for Gitleaks {
                     "environment_rule_overrides",
                     "family_mapping_version",
                     "required_version",
+                    UNMAPPABLE_FINDINGS_KEY,
                 ],
                 fixed: &[
                     ("arguments", json!(ARGUMENTS)),
@@ -99,7 +109,25 @@ impl Adapter for Gitleaks {
                 version_args: &["version"],
                 network_controls: &[],
             },
-        )
+        )?;
+        let per_case = match spec.configuration.get(UNMAPPABLE_FINDINGS_KEY) {
+            None => false,
+            Some(Value::String(v)) if v == "fail" => false,
+            Some(Value::String(v)) if v == UNMEASURED_CASE => true,
+            Some(_) => {
+                return Err(Box::new(PrepareFailure {
+                    result: ObservationResult::Error {
+                        reason: format!("invalid scanner configuration: {UNMAPPABLE_FINDINGS_KEY}"),
+                    },
+                    version: prepared.version,
+                    provenance: prepared.provenance,
+                    processes: prepared.processes,
+                    process_time: prepared.process_time,
+                }));
+            }
+        };
+        prepared.settings = json!({ "per_case": per_case });
+        Ok(prepared)
     }
 
     fn scan_invocation(&self, prepared: &Prepared, root: &Path, _paths: &[&str]) -> Invocation {
@@ -117,6 +145,22 @@ impl Adapter for Gitleaks {
         fixtures: &Fixtures<'_>,
     ) -> Result<Vec<NormalizedFinding>, MapError> {
         normalize(stdout, fixtures)
+    }
+
+    fn normalize_measured(
+        &self,
+        prepared: &Prepared,
+        stdout: &[u8],
+        fixtures: &Fixtures<'_>,
+    ) -> Result<Measured, MapError> {
+        if prepared.settings.get("per_case") == Some(&Value::Bool(true)) {
+            normalize_per_case(stdout, fixtures)
+        } else {
+            normalize(stdout, fixtures).map(|findings| Measured {
+                findings,
+                unmeasured: Vec::new(),
+            })
+        }
     }
 }
 
@@ -141,28 +185,89 @@ pub fn normalize(
     stdout: &[u8],
     fixtures: &Fixtures<'_>,
 ) -> Result<Vec<NormalizedFinding>, MapError> {
+    let rows = canonical_rows(stdout)?;
+    let mut claims = Claims::default();
+    let rows = without_decoded_duplicates(&rows);
+    rows.into_iter()
+        .map(|row| map_row(fixtures, row, &mut claims))
+        .collect()
+}
+
+/// [`normalize`] where a row that cannot be mapped makes its fixture
+/// unmeasured instead of failing the scan (ADR 0003).
+///
+/// A failure is attributed to the fixture the row names, and only when that
+/// names a known fixture; otherwise it still fails closed. Every finding on an
+/// unmeasured fixture is discarded, so the fixture reads as not measured and
+/// never as a zero detection. Other fixtures are mapped exactly as in
+/// [`normalize`]. Rows are processed in the same canonical order, so the
+/// result does not depend on report order.
+pub fn normalize_per_case(stdout: &[u8], fixtures: &Fixtures<'_>) -> Result<Measured, MapError> {
+    let rows = canonical_rows(stdout)?;
+    let mut claims = Claims::default();
+    let rows = without_decoded_duplicates(&rows);
+    let mut findings: Vec<(String, NormalizedFinding)> = Vec::new();
+    let mut unmeasured: std::collections::BTreeMap<String, &'static str> =
+        std::collections::BTreeMap::new();
+    for row in rows {
+        match map_row(fixtures, row, &mut claims) {
+            Ok(finding) => findings.push((finding.path.to_string(), finding)),
+            Err(error) => {
+                let reason = error.0;
+                let file = row
+                    .get("File")
+                    .and_then(Value::as_str)
+                    .ok_or(MapError(reason))?;
+                let (path, _) = fixtures.resolve(file).map_err(|_| MapError(reason))?;
+                unmeasured.entry(path.to_owned()).or_insert(reason);
+            }
+        }
+    }
+    let findings = findings
+        .into_iter()
+        .filter(|(path, _)| !unmeasured.contains_key(path))
+        .map(|(_, finding)| finding)
+        .collect();
+    let unmeasured = unmeasured
+        .into_iter()
+        .map(|(path, reason)| {
+            FixturePath::new(path)
+                .map(|p| (p, reason))
+                .map_err(|_| MapError("Unknown scanner path"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Measured {
+        findings,
+        unmeasured,
+    })
+}
+
+/// Parse the report and put its rows in canonical (serialized) order.
+fn canonical_rows(stdout: &[u8]) -> Result<Vec<Value>, MapError> {
     let parsed: Value =
         serde_json::from_slice(stdout).map_err(|_| MapError("Invalid scanner output"))?;
-    let Value::Array(rows) = parsed else {
+    let Value::Array(mut rows) = parsed else {
         return Err(MapError("Invalid scanner output"));
     };
-    let mut claims = Claims::default();
     // Gitleaks scans files concurrently and its report order varies between
     // runs. Map rows in a canonical order so claim resolution and the
     // kernel's last-duplicate-wins classification are deterministic.
-    let mut rows = without_decoded_duplicates(&rows);
-    rows.sort_by_cached_key(|row| row.to_string());
-    rows.into_iter()
-        .map(|row| {
-            let located = normalize_row(fixtures, row, &mut claims)?;
-            let family = finding_family(
-                LabelTable::Gitleaks,
-                row.get("RuleID").and_then(Value::as_str),
-                None,
-            );
-            finding(located, family)
-        })
-        .collect()
+    rows.sort_by_cached_key(ToString::to_string);
+    Ok(rows)
+}
+
+fn map_row(
+    fixtures: &Fixtures<'_>,
+    row: &Value,
+    claims: &mut Claims,
+) -> Result<NormalizedFinding, MapError> {
+    let located = normalize_row(fixtures, row, claims)?;
+    let family = finding_family(
+        LabelTable::Gitleaks,
+        row.get("RuleID").and_then(Value::as_str),
+        None,
+    );
+    finding(located, family)
 }
 
 pub(crate) fn finding(
@@ -512,6 +617,34 @@ mod tests {
             normalize(&out, &fixtures).unwrap_err().0,
             "Unsupported decoded Gitleaks finding"
         );
+    }
+
+    #[test]
+    fn per_case_handling_drops_only_the_unmappable_fixture() {
+        let fixtures = fx(&[("ok.txt", "key = AAAA1111\n"), ("enc.txt", "x")]);
+        let out = report(json!([
+            {"RuleID": "generic-api-key", "File": "ok.txt", "Secret": "AAAA1111", "StartLine": 1, "Tags": []},
+            {"RuleID": "r", "File": "enc.txt", "Secret": "x", "StartLine": 1,
+             "Tags": ["decoded:base64", "decode-depth:2"]},
+            {"RuleID": "generic-api-key", "File": "enc.txt", "Secret": "x", "StartLine": 1, "Tags": []}
+        ]));
+        // The whole-scan reading still fails closed.
+        assert!(normalize(&out, &fixtures).is_err());
+        let measured = normalize_per_case(&out, &fixtures).unwrap();
+        assert_eq!(measured.findings.len(), 1);
+        assert_eq!(measured.findings[0].path.as_str(), "ok.txt");
+        assert_eq!(measured.unmeasured.len(), 1);
+        assert_eq!(measured.unmeasured[0].0.as_str(), "enc.txt");
+        assert_eq!(
+            measured.unmeasured[0].1,
+            "Unsupported decoded Gitleaks finding"
+        );
+        // A failure that names no known fixture, or unparseable output, still fails closed.
+        let unknown = report(
+            json!([{"RuleID": "r", "File": "nope.txt", "Secret": "x", "StartLine": 1, "Tags": []}]),
+        );
+        assert!(normalize_per_case(&unknown, &fixtures).is_err());
+        assert!(normalize_per_case(b"not json", &fixtures).is_err());
     }
 
     #[test]
