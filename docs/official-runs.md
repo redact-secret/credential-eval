@@ -105,8 +105,12 @@ Pins are fixed in the run configuration, never on the command line. Each
   (`manifest.scanners[].version`).
 - `sha256` (optional) must equal the digest of the scanner's executable (the
   provenance component of kind `executable`). It applies to executable
-  scanners. npm-package scanners are bound by their version, the shim
-  lockfile and the package integrity recorded in provenance.
+  scanners.
+- `integrity` and `resolved` (optional, revision v1.4,
+  [ADR 0006](decisions/0006-pin-the-product-build-by-registry-integrity.md)) apply
+  to npm-package scanners: the registry `sha512-` integrity of the package
+  and the registry tarball URL it resolves from. See
+  [npm package pins](#npm-package-pins).
 
 An official run refuses a configuration with an unpinned scanner (exit 2).
 After preparing every scanner, and before any scan, it checks each one
@@ -114,6 +118,63 @@ against its pin. A different version (for example, a TruffleHog that
 updated itself from 3.97.4 to 3.97.6), a different executable digest, or a
 version that could not be resolved (an uninstalled scanner) is refused with
 exit code 4 and no artifact. The check never warns and continues.
+
+### npm package pins
+
+Every npm scanner in the official configurations pins its exact `version`,
+registry `integrity` (`sha512-<base64>`, the tarball's content address) and
+`resolved` tarball URL, for example:
+
+```json
+"pin": {
+  "version": "0.1.0-beta.13",
+  "integrity": "sha512-qZkqRN7CIJ+pc0IteRCXSucr1l9KtTc/nJaM5wPL0NvCiZ4AGWLCyrLy8KD95a2MBgxo8vuUJ/UaKhrny7gMJQ==",
+  "resolved": "https://registry.npmjs.org/@redact-secret/core/-/core-0.1.0-beta.13.tgz"
+}
+```
+
+After preparing every scanner and before any scan, an official run compares
+the pin with three independent records of the installed package:
+
+1. the lockfile entry in the `--node-dir` (`package-lock.json`);
+2. the entry npm wrote about what it extracted
+   (`node_modules/.package-lock.json`, written by `npm ci`; npm checks the
+   downloaded tarball against the lockfile `sha512` before extracting it). A
+   `node_modules` that was not installed by npm from this lockfile has no such
+   record or a different one, and is refused;
+3. the `npm-package` provenance component the run is about to write
+   (`version`, `integrity`).
+
+Any difference is refused with exit code 4, before any scan and with no
+artifact, naming the source, the found value and the pinned one. An npm pin
+applies to `package_source: published` only: a candidate build has no registry
+identity and is never `public` anyway.
+
+What the artifact records for an npm scanner (`manifest.scanners[].provenance`,
+unchanged by v1.4): the package `version` and registry `integrity`, the SHA-256
+tree digest of the installed package bytes, the same for every package in its
+dependency closure installed on the host (the `@redact-secret/wasm` and
+platform `node-*` packages), the SHA-256 of `package-lock.json`, the Node
+runtime, and the shim digest. The pin itself enters `config_hash`.
+
+### Which `@redact-secret/core` a run scans
+
+The shim directory (`--node-dir`) decides which lockfile `npm ci` installs and
+the configuration pins what that lockfile must contain. They go together:
+
+| Configuration (`configs/official/`) | `--node-dir` | `@redact-secret/core` |
+|---|---|---|
+| `credential-public-v1.json`, `credential-public-v1.darwin-arm64.json` | `adapters/node` | 0.1.0-beta.13 |
+| `credential-public-v1.core-beta.12.json`, `credential-public-v1.core-beta.12.darwin-arm64.json` | `adapters/node-core-beta.12` | 0.1.0-beta.12 |
+
+`adapters/node-core-beta.12` carries the `package.json` and `package-lock.json`
+of `v0.1.0-alpha.4` byte for byte and links `shim.mjs` to the shim of
+`adapters/node`, so both run one shim. Its configurations differ from their
+beta.13 counterparts only in the `redact-secret` pin (a test enforces it). A
+mismatched pair, for example the beta.13 configuration with the beta.12 shim
+directory, is refused by the version pin. Use the beta.12 pair to attribute
+a difference to the product build: run the same engine, evidence,
+platform and peers once with each pair.
 
 The adapter-level `required_version` key of the Gitleaks and TruffleHog
 configurations is separate. In any run class it marks a mismatched scanner
@@ -130,7 +191,8 @@ configuration:
 | [`configs/official/credential-public-v1.json`](../configs/official/credential-public-v1.json) | linux-x64, the `redact-secret-benchmarks` CI platform (canonical) |
 | [`configs/official/credential-public-v1.darwin-arm64.json`](../configs/official/credential-public-v1.darwin-arm64.json) | darwin-arm64, for local reproduction |
 
-Both are `tools/parity/run-config.json` (the configuration parity was proven
+Both are (and, from `v0.1.0-alpha.5`, the two `core-beta.12` files below are
+variants of) `tools/parity/run-config.json` (the configuration parity was proven
 with: same adapters, scanner configurations, bounds and accounting) plus a
 `pin` on every scanner, with `execution.jobs` 4 and no `methods`. Every
 scanner has `network: disabled`.
@@ -139,7 +201,7 @@ scanner has `network: disabled`.
 |---|---|---|---|
 | `gitleaks` | 8.30.1 | `sha256:88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509` | `sha256:ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f` |
 | `trufflehog` | 3.97.4 | `sha256:95c2a42bce979fce6dd73cc629b37ae4d72731b0dc16e047fba41a77bc765620` | `sha256:8c7af13e84f217bffd10aec09780fb7bbe59892187c99006291cef9c6f001beb` |
-| `redact-secret` | 0.1.0-beta.12 | n/a (npm) | n/a (npm) |
+| `redact-secret` | 0.1.0-beta.13 | n/a (npm) | n/a (npm) |
 | `flare-redact` | 1.6.1 | n/a (npm) | n/a (npm) |
 | `openredaction` | 1.1.5 | n/a (npm) | n/a (npm) |
 
@@ -155,11 +217,13 @@ the upstream checksum file before extraction:
 | `trufflehog_3.97.4_darwin_arm64.tar.gz` | `57e2a41c1e196cf96cae49ca2151f5e9207be2f5c41349b5ea49cb5dcfc606b7` | same file as linux |
 
 The darwin archive digests also equal the legacy `scanners/peer-checksums.json`
-that parity used. The npm scanners are pinned by version here. Their
-`sha512` integrity is pinned by `adapters/node/package-lock.json`
-(`@redact-secret/core` `sha512-fDVwt2U7VFSK…`, `flare-redact`
-`sha512-13Htu6VPk2tt…`, `@openredaction/core` `sha512-SpQTBhVV4p3r…`), and
-the run records the integrity and an installed-tree digest in provenance.
+that parity used. The npm scanners are pinned by version, `sha512` integrity and tarball URL in
+the configuration ([npm package pins](#npm-package-pins)) and by
+`adapters/node/package-lock.json` (`@redact-secret/core` `sha512-qZkqRN7CIJ+p…`,
+`flare-redact` `sha512-13Htu6VPk2tt…`, `@openredaction/core`
+`sha512-SpQTBhVV4p3r…`; `v0.1.0-alpha.4` pinned beta.12,
+`sha512-fDVwt2U7VFSK…`). The run records the integrity and an installed-tree
+digest in provenance.
 The lockfile also pins the platform packages of `@redact-secret/core`
 (`node-linux-x64-gnu`, `node-darwin-arm64`, ...). npm installs the one for
 the host.
@@ -174,6 +238,11 @@ only when they come from the same file. The CI steps are in
 [consumers/benchmarks-quickstart.md](consumers/benchmarks-quickstart.md).
 
 ## Verified official run
+
+The run below is the first verification, made with `v0.1.0-alpha.1` and
+`@redact-secret/core` 0.1.0-beta.12; it is kept as a historical receipt. The
+alpha.5 verification is in
+[ADR 0006](decisions/0006-pin-the-product-build-by-registry-integrity.md).
 
 One end-to-end official run of the committed configuration, made before
 `redact-secret-benchmarks` started its official-run phase. It is a local

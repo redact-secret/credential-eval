@@ -130,10 +130,21 @@ pub struct ScannerPin {
     pub version: String,
     /// Required SHA-256 of the scanner executable (the provenance component
     /// of kind `executable`). Only for executable scanners; npm-package
-    /// scanners are bound by their lockfile and package integrity in
-    /// provenance.
+    /// scanners are bound by `integrity` and `resolved` below.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<Sha256Digest>,
+    /// Required npm registry integrity of the scanner package (revision
+    /// v1.4): a `sha512-<base64>` Subresource Integrity string. It must equal
+    /// the integrity of the package's lockfile entry, of the entry npm
+    /// recorded when it installed the package, and of the `npm-package`
+    /// provenance component. Only for npm-package scanners.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integrity: Option<String>,
+    /// Required resolved tarball of the scanner package (revision v1.4): the
+    /// `resolved` URL of its lockfile entry and of the entry npm recorded when
+    /// it installed the package. Only for npm-package scanners.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<String>,
 }
 
 impl ScannerSpec {

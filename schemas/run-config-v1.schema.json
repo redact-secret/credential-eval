@@ -273,8 +273,22 @@
       "description": "The pinned identity of a scanner for an official run.",
       "type": "object",
       "properties": {
+        "integrity": {
+          "description": "Required npm registry integrity of the scanner package (revision\nv1.4): a `sha512-<base64>` Subresource Integrity string. It must equal\nthe integrity of the package's lockfile entry, of the entry npm\nrecorded when it installed the package, and of the `npm-package`\nprovenance component. Only for npm-package scanners.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolved": {
+          "description": "Required resolved tarball of the scanner package (revision v1.4): the\n`resolved` URL of its lockfile entry and of the entry npm recorded when\nit installed the package. Only for npm-package scanners.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "sha256": {
-          "description": "Required SHA-256 of the scanner executable (the provenance component\nof kind `executable`). Only for executable scanners; npm-package\nscanners are bound by their lockfile and package integrity in\nprovenance.",
+          "description": "Required SHA-256 of the scanner executable (the provenance component\nof kind `executable`). Only for executable scanners; npm-package\nscanners are bound by `integrity` and `resolved` below.",
           "anyOf": [
             {
               "$ref": "#/$defs/Sha256Digest"

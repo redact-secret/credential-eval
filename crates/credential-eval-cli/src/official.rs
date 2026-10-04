@@ -5,6 +5,7 @@
 //! Nothing here measures. These checks decide whether a run may proceed and
 //! how its artifact may be consumed; they never change an outcome.
 
+use credential_eval_adapters::provenance::npm_records;
 use credential_eval_contracts::artifact::{Publication, RunArtifact, RunClass};
 use credential_eval_contracts::canonical::sha256_bytes;
 use credential_eval_contracts::config::{RunConfig, ScannerSpec};
@@ -14,6 +15,7 @@ use credential_eval_contracts::observation::{
     ProvenanceKind, ScannerBuild, ScannerIdentity, ScannerProvenance,
 };
 use serde_json::Value;
+use std::path::Path;
 
 /// Path of the corpus snapshot inside an evidence release.
 pub const SNAPSHOT_ENTRY: &str = "credential-eval/corpus-snapshot.json";
@@ -175,6 +177,105 @@ pub fn check_pin(
     Ok(())
 }
 
+/// Check an npm scanner's registry pin (revision v1.4): the exact version, the
+/// registry `sha512` integrity and the resolved tarball. `node_dir` is the
+/// directory the published package is installed under (`--node-dir`).
+///
+/// Three records must agree with the pin: the lockfile entry, the entry npm
+/// wrote when it installed the package (so a `node_modules` that was not
+/// installed from this lockfile is refused), and the `npm-package` provenance
+/// component the artifact carries. A pin without `integrity` and `resolved`
+/// (an executable scanner) is not checked here. Failures name only versions,
+/// integrity strings and URLs.
+pub fn check_package_pin(
+    spec: &ScannerSpec,
+    node_dir: &Path,
+    provenance: &ScannerProvenance,
+) -> Result<(), String> {
+    let id = spec.id.as_str();
+    let Some(pin) = spec.pin.as_ref() else {
+        return Ok(());
+    };
+    if pin.integrity.is_none() && pin.resolved.is_none() {
+        return Ok(());
+    }
+    let package = spec
+        .configuration
+        .get("package")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("scanner {id}: an npm pin needs a package scanner"))?;
+    if spec
+        .configuration
+        .get("package_source")
+        .and_then(Value::as_str)
+        != Some("published")
+    {
+        return Err(format!(
+            "scanner {id}: an npm pin applies to package_source published only"
+        ));
+    }
+    let (locked, installed) = npm_records(node_dir, package);
+    let locked = locked.ok_or_else(|| format!("scanner {id}: {package} is not in the lockfile"))?;
+    let installed = installed.ok_or_else(|| {
+        format!("scanner {id}: {package} has no install record (node_modules/.package-lock.json); install with npm ci")
+    })?;
+    let recorded = provenance
+        .components
+        .iter()
+        .find(|c| c.kind == ProvenanceKind::NpmPackage && c.name == package)
+        .ok_or_else(|| format!("scanner {id}: {package} is not in the run provenance"))?;
+    let records = [
+        (
+            "lockfile",
+            &locked.version,
+            &locked.integrity,
+            &locked.resolved,
+        ),
+        (
+            "install record",
+            &installed.version,
+            &installed.integrity,
+            &installed.resolved,
+        ),
+    ];
+    for (source, version, integrity, resolved) in records {
+        if version.as_deref() != Some(pin.version.as_str()) {
+            return Err(format!(
+                "scanner {id}: {source} version {} does not match pin {}",
+                version.as_deref().unwrap_or("(none)"),
+                pin.version
+            ));
+        }
+        if let Some(expected) = &pin.integrity {
+            if integrity.as_ref() != Some(expected) {
+                return Err(format!(
+                    "scanner {id}: {source} integrity {} does not match pin {expected}",
+                    integrity.as_deref().unwrap_or("(none)")
+                ));
+            }
+        }
+        if let Some(expected) = &pin.resolved {
+            if resolved.as_ref() != Some(expected) {
+                return Err(format!(
+                    "scanner {id}: {source} resolved {} does not match pin {expected}",
+                    resolved.as_deref().unwrap_or("(none)")
+                ));
+            }
+        }
+    }
+    if let Some(expected) = &pin.integrity {
+        if recorded.integrity.as_ref() != Some(expected)
+            || recorded.version.as_deref() != Some(pin.version.as_str())
+        {
+            return Err(format!(
+                "scanner {id}: provenance integrity {} does not match pin {expected}",
+                recorded.integrity.as_deref().unwrap_or("(none)")
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// The publication class: `public` only for an official run in which every
 /// scanner reports a released build.
 pub fn publication(run_class: RunClass, scanners: &[ScannerIdentity]) -> Publication {
@@ -327,6 +428,8 @@ mod tests {
             spec(Some(ScannerPin {
                 version: "8.30.1".into(),
                 sha256,
+                integrity: None,
+                resolved: None,
             }))
         };
         let with_sha = pinned(Some(digest.clone()));
@@ -362,6 +465,8 @@ mod tests {
         config.scanners[0].pin = Some(ScannerPin {
             version: "8.30.1".into(),
             sha256: None,
+            integrity: None,
+            resolved: None,
         });
         assert!(check_official_config(&config).is_ok());
     }

@@ -191,6 +191,16 @@ const ALLOWLIST: &[(&str, &[&str], &str)] = &[
         "run configuration: the version an official run requires (v1.1)",
     ),
     (
+        "ScannerPin.integrity",
+        CONFIG,
+        "run configuration: the npm registry integrity an official run requires (v1.4; a digest)",
+    ),
+    (
+        "ScannerPin.resolved",
+        CONFIG,
+        "run configuration: the npm registry tarball URL an official run requires (v1.4)",
+    ),
+    (
         "ScannerIdentity.mode",
         OBSERVATIONS_AND_ARTIFACT,
         "copied from run configuration ScannerSpec.mode",

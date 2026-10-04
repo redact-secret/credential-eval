@@ -202,7 +202,7 @@ the bytes.
 |---|---|---|---|
 | `gitleaks` | 2 | 8.30.1 (`required_version`) | `gitleaks dir <root> --no-banner --no-color --exit-code 0 --report-format json --report-path -`; 64 MiB stdout cap |
 | `trufflehog` | 2 | **3.97.4** (`required_version`; 3.97.6 re-keys results) | `trufflehog filesystem <root> --json --no-verification --no-update --results=verified,unknown,unverified` |
-| `redact-secret` | 3 | `@redact-secret/core` 0.1.0-beta.12 (lockfile) | shim, `initialize()` + `scan(text)` |
+| `redact-secret` | 3 | `@redact-secret/core` 0.1.0-beta.13 (lockfile, `sha512` integrity and tarball pinned in the official config) | shim, `initialize()` + `scan(text)` |
 | `flare-redact` | 1 | `flare-redact` 1.6.1 (lockfile) | shim, `scan(text, {disable:['pii','generic_assignment'], includeValues:false})` |
 | `openredaction` | 1 | `@openredaction/core` 1.1.5 (lockfile) | shim, `new OpenRedaction({}).detect(text)` |
 
