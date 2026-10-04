@@ -241,6 +241,39 @@ pub fn npm_package(root: &Path, name: &str) -> Result<Vec<ProvenanceComponent>, 
     Ok(components)
 }
 
+/// What one npm lockfile entry records about a package.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NpmRecord {
+    /// Locked version.
+    pub version: Option<String>,
+    /// Resolved tarball URL.
+    pub resolved: Option<String>,
+    /// Registry Subresource Integrity string.
+    pub integrity: Option<String>,
+}
+
+/// The lockfile record of `name` under `root`, and the record npm wrote about
+/// the package it installed (`node_modules/.package-lock.json`, the hidden
+/// lockfile). Either is `None` when absent. The second is what makes the
+/// check an install check: npm fetched the tarball, verified its bytes against
+/// the lockfile integrity, and recorded what it extracted.
+pub fn npm_records(root: &Path, name: &str) -> (Option<NpmRecord>, Option<NpmRecord>) {
+    let key = format!("node_modules/{name}");
+    let record = |path: PathBuf| {
+        let entry = read_json(&path)?.get("packages")?.get(&key)?.clone();
+        let text = |field: &str| entry.get(field).and_then(Value::as_str).map(str::to_owned);
+        Some(NpmRecord {
+            version: text("version"),
+            resolved: text("resolved"),
+            integrity: text("integrity"),
+        })
+    };
+    (
+        record(root.join("package-lock.json")),
+        record(root.join("node_modules").join(".package-lock.json")),
+    )
+}
+
 fn package_dir(root: &Path, name: &str) -> PathBuf {
     let mut dir = root.join("node_modules");
     for part in name.split('/') {

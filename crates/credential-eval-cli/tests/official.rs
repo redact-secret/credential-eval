@@ -80,6 +80,8 @@ impl Setup {
         Some(ScannerPin {
             version: version.into(),
             sha256: Some(self.scanner_digest()),
+            integrity: None,
+            resolved: None,
         })
     }
 
@@ -234,6 +236,8 @@ fn official_run_refuses_a_mismatched_scanner() {
         Some(ScannerPin {
             version: "8.30.1".into(),
             sha256: Some(sha256_bytes(b"the released binary")),
+            integrity: None,
+            resolved: None,
         }),
     );
     let (output, out) = s.run("checksum", &config, &evidence);

@@ -338,6 +338,8 @@ fn scan(
             };
             crate::official::check_pin(&scanner.spec, version, provenance)
                 .map_err(RunError::Refused)?;
+            crate::official::check_package_pin(&scanner.spec, &request.env.node_dir, provenance)
+                .map_err(RunError::Refused)?;
         }
     }
 
