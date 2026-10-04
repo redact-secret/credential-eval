@@ -47,17 +47,82 @@
         "version"
       ]
     },
+    "Codec": {
+      "description": "A decoding or encoding codec of the bounded vocabulary.",
+      "oneOf": [
+        {
+          "description": "Base64 (standard or URL-safe alphabet).",
+          "type": "string",
+          "const": "base64"
+        },
+        {
+          "description": "Hexadecimal.",
+          "type": "string",
+          "const": "hex"
+        }
+      ]
+    },
     "ComponentId": {
       "type": "string",
       "maxLength": 128,
       "minLength": 1,
       "pattern": "^[a-z0-9][a-z0-9.-]*$"
     },
+    "FindingMapping": {
+      "description": "What an adapter did to place a finding that was reported in decoded\ncoordinates. Carried on the finding and on its artifact row so a consumer\ncan see which ranges are mapped, and how, and which are plain.",
+      "type": "object",
+      "properties": {
+        "bound": {
+          "description": "What the mapped range is, relative to the decoded finding.",
+          "$ref": "#/$defs/MappingBound"
+        },
+        "codecs": {
+          "description": "The codecs of those layers, sorted and unique.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Codec"
+          }
+        },
+        "layers": {
+          "description": "Decode layers between the original bytes and the finding (one to four).",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "bound",
+        "layers",
+        "codecs"
+      ]
+    },
     "FixturePath": {
       "type": "string",
       "maxLength": 512,
       "minLength": 1,
       "pattern": "^(?!/)(?!.*/$)(?!.*//)(?!(.*/)?\\.{1,2}(/|$))[A-Za-z0-9_./-]+$"
+    },
+    "MappingBound": {
+      "description": "The bound a mapped range gives for a decoded finding.",
+      "oneOf": [
+        {
+          "description": "The range is the whole encoded segment of the original input; the\nfinding lies somewhere inside its decoded text. Proved by re-deriving\nthe decode from the original bytes (never by trusting the scanner).",
+          "type": "string",
+          "const": "source-segment"
+        },
+        {
+          "description": "The range is an encoded segment extended over the adjacent literal\nbytes the finding also matched (the depth-one base64 rule that\npredates this contract).",
+          "type": "string",
+          "const": "source-segment-extended"
+        },
+        {
+          "description": "The range is a whole block whose body is encoded (a PEM block with a\nbase64 body), by the rule that predates this contract.",
+          "type": "string",
+          "const": "source-block"
+        }
+      ]
     },
     "NetworkPolicy": {
       "description": "Network permission for a scanner.",
@@ -96,6 +161,17 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "mapping": {
+          "description": "Set when the scanner reported the finding in decoded coordinates and\nthe adapter placed it on the original bytes (revision v1.3): the range\nis then a bound ([`FindingMapping`]), not the finding's own bytes.\nAbsent for a finding located directly in the original input.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FindingMapping"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "path": {

@@ -15,7 +15,8 @@ use crate::ContractError;
 use crate::canonical::sha256_canonical;
 use crate::ids::{CaseId, FixturePath, ReleaseTag, Sha256Digest};
 use crate::range::{ByteRange, Envelope};
-use crate::schema::CorpusSnapshotSchema;
+use crate::representation::{DecodedFact, Representation, case_has_facts, check_case};
+use crate::schema::{CorpusSnapshotSchema, RepresentationContract};
 
 /// A complete, immutable evaluation corpus.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -48,6 +49,12 @@ pub struct SnapshotIdentity {
     /// snapshot input must not declare it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release: Option<EvidenceRelease>,
+    /// The representation contract the snapshot uses (revision v1.3). Required
+    /// when any case carries a representation fact; absent otherwise, so a
+    /// snapshot without facts is byte-for-byte what it was. Declaring it with
+    /// no facts is allowed and means the exporter supports the contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub representation: Option<RepresentationContract>,
 }
 
 /// Identity of a verified evidence release: the tag a consumer pinned and the
@@ -80,6 +87,10 @@ pub struct Case {
     /// Present when this case is an authored negative twin of a positive case.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub twin: Option<TwinLineage>,
+    /// Facts about the input as a whole (revision v1.3): validity, derivation,
+    /// transformation lineage and chunking. Absent for an ordinary raw input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub representation: Option<Representation>,
 }
 
 /// An authored expected span.
@@ -95,6 +106,35 @@ pub struct ExpectedSpan {
     /// Optional wider acceptable range with an authored reason.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub envelope: Option<Envelope>,
+    /// The authored base this span's value comes from (revision v1.3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<CaseId>,
+    /// The secret bytes inside `[start, end)` when the value is not
+    /// contiguous (revision v1.3). At least two, sorted, disjoint, separated
+    /// by at least one byte, the first starting at `start` and the last ending
+    /// at `end`. Bytes of the range outside them are separators.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fragments: Option<Vec<ByteRange>>,
+    /// How the source bytes decode to the value (revision v1.3): the decode
+    /// steps, the decoded length and its digest. Never the decoded value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decoded: Option<DecodedFact>,
+}
+
+impl Case {
+    /// This case without any representation fact (revision v1.3): the same
+    /// bytes, spans and grouping as before the facts existed. A generated
+    /// variant starts from this, because its bytes differ from the original's.
+    pub fn without_representation(&self) -> Self {
+        let mut out = self.clone();
+        out.representation = None;
+        for span in &mut out.expected {
+            span.base = None;
+            span.fragments = None;
+            span.decoded = None;
+        }
+        out
+    }
 }
 
 impl ExpectedSpan {
@@ -240,6 +280,7 @@ impl CorpusSnapshot {
                 evidence_schema,
                 corpus_digest,
                 release: None,
+                representation: None,
             },
             cases,
         }
@@ -271,6 +312,10 @@ impl CorpusSnapshot {
                 });
             }
             validate_spans(case)?;
+            check_case(case)?;
+        }
+        if self.identity.representation.is_none() && self.cases.iter().any(case_has_facts) {
+            return Err(ContractError::RepresentationUndeclared);
         }
         for case in &self.cases {
             let Some(twin) = &case.twin else { continue };

@@ -74,6 +74,13 @@ schema_tag!(
 );
 
 schema_tag!(
+    /// Tag of the representation contract (revision v1.3): the version of the
+    /// representation facts a corpus snapshot carries and a run artifact
+    /// reports. A snapshot that carries any representation fact must declare it.
+    RepresentationContract = "credential-eval/representation/1"
+);
+
+schema_tag!(
     /// Tag of [`crate::performance::PerformanceConfig`] documents (ADR 0002).
     PerformanceConfigSchema = "credential-eval/performance-config/v1"
 );

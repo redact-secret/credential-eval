@@ -394,6 +394,7 @@ pub fn normalize(
             end: end as u64,
             family: finding_family(table, label, kind),
             action,
+            mapping: None,
         });
     }
     if done != Some(findings.len() as u64) {

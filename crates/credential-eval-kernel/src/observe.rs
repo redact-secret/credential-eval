@@ -93,6 +93,7 @@ mod tests {
             end: start + 1,
             family: family.map(str::to_owned),
             action: None,
+            mapping: None,
         }
     }
 

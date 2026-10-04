@@ -338,6 +338,9 @@ fn corpus_case(
                     end: e,
                     role: SpanRole::Secret,
                     envelope: None,
+                    base: None,
+                    fragments: None,
+                    decoded: None,
                 }]
             })
             .unwrap_or_default(),
@@ -355,6 +358,7 @@ fn corpus_case(
             taxonomy: secret.is_none().then(|| "placeholder".into()),
         },
         twin: None,
+        representation: None,
     }
 }
 
@@ -479,6 +483,7 @@ fn exact(
                     end: e.end,
                     family: family.map(str::to_owned),
                     action: None,
+                    mapping: None,
                 })
         })
         .collect();
@@ -590,6 +595,7 @@ fn scanner_aggregates_fill_groups_and_targets_only_when_complete() {
         end: 16,
         family: Some("seg".into()),
         action: None,
+        mapping: None,
     }];
     let observation = ScannerObservation {
         scanner: identity("s", "1"),
@@ -853,6 +859,7 @@ fn assertions_follow_the_protocol() {
         end: 1,
         family: None,
         action: None,
+        mapping: None,
     };
 }
 

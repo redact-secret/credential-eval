@@ -762,6 +762,7 @@ mod tests {
             end: start + 1,
             family: None,
             action: None,
+            mapping: None,
         }
     }
 

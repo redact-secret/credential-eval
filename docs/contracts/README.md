@@ -41,6 +41,7 @@ Related documents:
 - [identity.md](identity.md): ids, digests and reproduction identities.
 - [outcomes.md](outcomes.md): the outcome lattice, per-case measurements and failure states.
 - [determinism.md](determinism.md): ordering and the semantic digest.
+- [representation.md](representation.md): the representation contract (v1.3): facts about encoded, transformed and fragmented inputs, how a decoded finding is placed on the original bytes, and what the artifact reports.
 
 ## Input contract
 
@@ -52,6 +53,7 @@ Related documents:
 | `identity.revision` | The immutable revision (commit or tag) of the source. |
 | `identity.evidence_schema` | The format label of the source evidence. |
 | `identity.corpus_digest` | `sha256:` digest of the cases ([identity.md](identity.md)). |
+| `identity.representation` | v1.3, optional. The string `credential-eval/representation/1`; required when any case carries a representation fact ([representation.md](representation.md)). |
 | `identity.release` | v1.1, optional. The verified evidence release `{tag, manifest_digest}`. Only the evaluator writes it, after verifying the snapshot file against the release manifest; a snapshot input that declares it is rejected ([../official-runs.md](../official-runs.md)). |
 | `cases[]` | The evaluation cases. Their order carries no meaning. |
 
@@ -69,6 +71,10 @@ Each `Case` has these fields:
   `family`, `evidence_class`, `targets[]` and `taxonomy`. Grouping never
   changes an outcome. A twin's `family` scopes its false-alarm reading.
 - `twin`: optional lineage of an authored negative twin, `{twin_of, mutation, mutation_kind}`.
+- `representation` (v1.3, optional): facts about the input as a whole,
+  `{input_validity?, derivation?, transformation?, chunking?}`. Each `expected[]`
+  span of role `secret` may also carry `base`, `fragments` and `decoded`. See
+  [representation.md](representation.md).
 
 `CorpusSnapshot::validate` enforces the legacy corpus rules: unique ids and
 safe unique paths, and valid UTF-8 ranges, sorted and disjoint. An envelope
@@ -124,8 +130,11 @@ Each `ScannerObservation` has:
   `unsupported`, `unavailable`, `timeout`, `malformed` and `error`.
 - `duration_ms`: optional and non-semantic.
 
-A `NormalizedFinding` is `{path, start, end, family?, action?}`. It never
-contains the matched value. Reasons are fixed, sanitized strings and never
+A `NormalizedFinding` is `{path, start, end, family?, action?, mapping?}`.
+`mapping` (v1.3) is present when an adapter placed a finding the scanner
+reported in decoded coordinates on the original bytes; the range is then a bound
+([representation.md](representation.md#mapping-a-decoded-finding-to-the-original-bytes)).
+It never contains the matched value. Reasons are fixed, sanitized strings and never
 raw scanner output.
 
 ## Output contract: `RunArtifact`
@@ -223,6 +232,7 @@ the legacy engine are listed in
 | v1.1 | Official-run inputs ([../official-runs.md](../official-runs.md)), all optional: `SnapshotIdentity.release {tag, manifest_digest}` (the verified evidence release, written only by the evaluator), `ScannerSpec.pin {version, sha256?}`, `ScannerIdentity.build` (`released` \| `candidate`), `RunManifest.run_class` (`official` \| `exploratory`) and `RunManifest.publication` (`public` \| `internal`). Absent `run_class`/`publication` read as `exploratory`/`internal`; absent `build` is never `released`. | #14 |
 
 | v1.2 | Per-case unmeasured handling ([ADR 0003](../decisions/0003-unmappable-findings-leave-the-case-unmeasured.md)), all optional: `ObservationResult.complete.unmeasured[] {path, reason}` and `ScannerRun.unmeasured_cases[] {case_id, reason}`. Absent reads as every case measured. Written only when a scanner's configuration chose `unmappable_findings: unmeasured-case` (Gitleaks, and TruffleHog since [ADR 0004](../decisions/0004-per-case-unmeasured-handling-in-methods-and-trufflehog.md)); in a methods run the unmeasured cases are variants, which carry no assertion or comparison. | credential-evidence#150, redact-secret-benchmarks#680 |
+| v1.3 | Representation contract ([ADR 0005](../decisions/0005-representation-contract.md), [representation.md](representation.md)), all optional: `SnapshotIdentity.representation`, `Case.representation` (`input_validity`, `derivation`, `transformation`, `chunking`), `ExpectedSpan.{base, fragments, decoded}`, `NormalizedFinding.mapping` and `ObservedRange.mapping` (`{bound, layers, codecs}`), and `RunManifest.representation` (what the snapshot carried: a facts digest and counts). Absent reads as an ordinary raw input: every earlier document keeps its meaning, corpus digest and semantic digest. A snapshot that carries a fact declares `identity.representation`; `credential-eval capabilities` prints the revision. Adapters place decoded findings only under the opt-in scanner configuration key `decoded_mapping: "source-segment"` (Gitleaks, TruffleHog). | #34, credential-evidence#150 |
 | (new documents) | `PerformanceConfig` and `PerformanceArtifact`, frozen at their first revision ([ADR 0002](../decisions/0002-performance-measurement-kinds.md)). Not a revision of the four documents above. | #23 |
 | (new document) | `DirectionConfirmation`, frozen at its first revision. | #25 |
 | (revision of `PerformanceArtifact`) | Optional `HostDiagnostics.cpu_model` (sanitized CPU model name). | #25 |
@@ -251,7 +261,7 @@ fall into five groups:
 
 | Source | Properties | Why they are safe |
 |---|---|---|
-| Evidence input (corpus snapshot only) | `Case.content`, `Envelope.reason`, `TwinLineage.mutation`, `TwinLineage.mutation_kind`, `Grouping.{group, family, targets, taxonomy, evidence_class}`, `SnapshotIdentity.{source, revision, evidence_schema}` | Synthetic or documented public-test evidence owned by `credential-evidence`. Fixture text (`content`) and authored reasons never reach observations or artifacts; a test checks that no `content` property exists outside the input schemas. |
+| Evidence input (corpus snapshot only) | `TransformStep.line_break` (an enum of line-break kinds; a name hit on `line`), `Case.content`, `Envelope.reason`, `TwinLineage.mutation`, `TwinLineage.mutation_kind`, `Grouping.{group, family, targets, taxonomy, evidence_class}`, `SnapshotIdentity.{source, revision, evidence_schema}` | Synthetic or documented public-test evidence owned by `credential-evidence`. Fixture text (`content`) and authored reasons never reach observations or artifacts; a test checks that no `content` property exists outside the input schemas. |
 | Evidence labels copied into the artifact | `CaseResult.{group, family, targets, taxonomy, evidence_class, twin_mutation_kind}` (P1) | Copies of the grouping labels above. |
 | Run configuration | `ScannerSpec.{configuration, mode}`, `ScannerIdentity.mode`, `AdapterIdentity.version`, `ScannerLimits.{max_stdout_bytes, max_stderr_bytes}` | Operator input. A configuration must not contain credentials, and only its digest reaches observations and artifacts. The two limits are byte counts. |
 | Engine and adapter code | `EngineIdentity.{name, version}`, `RunManifest.protocol_version`, `ObservationResult.reason`, `UnmeasuredPath.reason`, `UnmeasuredCase.reason`, `ScannerRun.detail`, `Assertion.reason`, `VariantRecord.{property, parameters}`, `ScannerProvenance.network_controls`, `ProvenanceComponent.{name, version, integrity}`, `ScannerIdentity.version`, `NonSemantic.{run_id, started_at, finished_at, host}`, `GroupAggregate.secret_bytes`, `VariantRecord.content_digest` | Fixed sanitized strings, identifiers, versions, timestamps, digests and counts. Operator parameters keep boolean and number values only. A scanner version is the first semantic-version match of the version probe, never the probe output. |

@@ -562,6 +562,7 @@ impl EvaluationReport {
                     .collect(),
                 run_class: None,
                 publication: None,
+                representation: base.representation_report(),
             },
             scanners,
             variants: parts.variants,

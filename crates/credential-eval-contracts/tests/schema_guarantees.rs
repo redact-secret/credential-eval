@@ -100,6 +100,11 @@ const ALLOWLIST: &[(&str, &[&str], &str)] = &[
         "evidence input: authored mutation-kind label",
     ),
     (
+        "TransformStep.line_break",
+        CORPUS,
+        "evidence input: an enum naming the line break a fragmentation used (lf, crlf, cr, none); a name hit on `line`, not a value",
+    ),
+    (
         "Grouping.group",
         CORPUS,
         "evidence input: corpus group label",

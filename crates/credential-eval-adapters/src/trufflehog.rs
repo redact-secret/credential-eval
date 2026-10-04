@@ -15,7 +15,12 @@ use regex::Regex;
 use serde_json::{Value, json};
 
 use crate::families::{FAMILY_MAPPING_VERSION, LabelTable, finding_family};
-use crate::gitleaks::{UNMAPPABLE_FINDINGS_KEY, finding, per_case_policy, substitute};
+use credential_eval_contracts::representation::Codec;
+
+use crate::decode::{DECODED_MAPPING_KEY, Depth, MAX_DEPTH, decoded_policy, map_decoded};
+use crate::gitleaks::{
+    Options, UNMAPPABLE_FINDINGS_KEY, finding, finding_with, per_case_policy, substitute,
+};
 use crate::locate::{
     Claims, Fixtures, Line, Located, MapError, has_percent_escape, line_of, locate,
     locate_percent_encoded,
@@ -93,6 +98,7 @@ impl Adapter for Trufflehog {
                     "family_mapping_version",
                     "required_version",
                     UNMAPPABLE_FINDINGS_KEY,
+                    DECODED_MAPPING_KEY,
                 ],
                 fixed: &[
                     ("arguments", json!(ARGUMENTS)),
@@ -105,7 +111,8 @@ impl Adapter for Trufflehog {
             },
         )?;
         let per_case = per_case_policy(spec, &mut prepared)?;
-        prepared.settings = json!({ "per_case": per_case });
+        let decoded = decoded_policy(spec, &prepared)?;
+        prepared.settings = json!({ "per_case": per_case, "decoded": decoded });
         Ok(prepared)
     }
 
@@ -132,10 +139,13 @@ impl Adapter for Trufflehog {
         stdout: &[u8],
         fixtures: &Fixtures<'_>,
     ) -> Result<Measured, MapError> {
+        let options = Options {
+            decoded: prepared.settings.get("decoded") == Some(&Value::Bool(true)),
+        };
         if prepared.settings.get("per_case") == Some(&Value::Bool(true)) {
-            normalize_per_case(stdout, fixtures)
+            normalize_per_case_with(stdout, fixtures, options)
         } else {
-            normalize(stdout, fixtures).map(|findings| Measured {
+            normalize_with(stdout, fixtures, options).map(|findings| Measured {
                 findings,
                 unmeasured: Vec::new(),
             })
@@ -150,6 +160,15 @@ impl Adapter for Trufflehog {
 pub fn normalize(
     stdout: &[u8],
     fixtures: &Fixtures<'_>,
+) -> Result<Vec<NormalizedFinding>, MapError> {
+    normalize_with(stdout, fixtures, Options::default())
+}
+
+/// [`normalize`] with explicit [`Options`].
+pub fn normalize_with(
+    stdout: &[u8],
+    fixtures: &Fixtures<'_>,
+    options: Options,
 ) -> Result<Vec<NormalizedFinding>, MapError> {
     let text = std::str::from_utf8(stdout).map_err(|_| MapError("Invalid scanner output"))?;
     let mut claims = Claims::default();
@@ -167,9 +186,7 @@ pub fn normalize(
             row.get("DetectorName").and_then(Value::as_str),
             None,
         );
-        for located in normalize_findings(fixtures, &row, &mut claims)? {
-            out.push(finding(located, family.clone())?);
-        }
+        out.extend(row_findings(fixtures, &row, &family, &mut claims, options)?);
     }
     Ok(out)
 }
@@ -185,6 +202,15 @@ pub fn normalize(
 /// not measured and never as a zero detection. Lines are processed in the same
 /// byte order as [`normalize`].
 pub fn normalize_per_case(stdout: &[u8], fixtures: &Fixtures<'_>) -> Result<Measured, MapError> {
+    normalize_per_case_with(stdout, fixtures, Options::default())
+}
+
+/// [`normalize_per_case`] with explicit [`Options`].
+pub fn normalize_per_case_with(
+    stdout: &[u8],
+    fixtures: &Fixtures<'_>,
+    options: Options,
+) -> Result<Measured, MapError> {
     let text = std::str::from_utf8(stdout).map_err(|_| MapError("Invalid scanner output"))?;
     let mut claims = Claims::default();
     let mut found: Vec<(String, NormalizedFinding)> = Vec::new();
@@ -200,12 +226,7 @@ pub fn normalize_per_case(stdout: &[u8], fixtures: &Fixtures<'_>) -> Result<Meas
             row.get("DetectorName").and_then(Value::as_str),
             None,
         );
-        let mapped = normalize_findings(fixtures, &row, &mut claims).and_then(|located| {
-            located
-                .into_iter()
-                .map(|l| finding(l, family.clone()))
-                .collect::<Result<Vec<_>, _>>()
-        });
+        let mapped = row_findings(fixtures, &row, &family, &mut claims, options);
         match mapped {
             Ok(rows) => found.extend(rows.into_iter().map(|f| (f.path.to_string(), f))),
             Err(error) => {
@@ -233,6 +254,52 @@ pub fn normalize_per_case(stdout: &[u8], fixtures: &Fixtures<'_>) -> Result<Meas
         findings,
         unmeasured,
     })
+}
+
+/// The findings of one row. With `decoded_mapping` chosen, a row TruffleHog
+/// reports through its BASE64 decoder is placed by the contract's rule first
+/// ([`map_decoded`]; TruffleHog does not report the depth, so one to
+/// [`MAX_DEPTH`] layers are tried) and the rules that predate it are the
+/// fallback, so opting in only ever adds mappings. Composite detectors (AWS,
+/// Shopify, Postgres) keep their own rules.
+fn row_findings(
+    fixtures: &Fixtures<'_>,
+    row: &Value,
+    family: &Option<String>,
+    claims: &mut Claims,
+    options: Options,
+) -> Result<Vec<NormalizedFinding>, MapError> {
+    if options.decoded && row.get("DecoderName").and_then(Value::as_str) == Some("BASE64") {
+        let detector = row.get("DetectorName").and_then(Value::as_str);
+        let composite = matches!(detector, Some("AWS" | "Shopify"))
+            || row.get("DetectorType").and_then(Value::as_f64) == Some(968.0);
+        if let (false, Some(file), Some(raw)) = (
+            composite,
+            meta_file(row),
+            row.get("Raw").and_then(Value::as_str),
+        ) {
+            let mapped = map_decoded(
+                fixtures,
+                file,
+                raw,
+                meta_line(row),
+                &std::collections::BTreeSet::from([Codec::Base64]),
+                Depth::UpTo(MAX_DEPTH),
+                claims,
+            );
+            if let Ok(mapped) = mapped {
+                return Ok(vec![finding_with(
+                    mapped.located,
+                    family.clone(),
+                    Some(mapped.mapping),
+                )?]);
+            }
+        }
+    }
+    normalize_findings(fixtures, row, claims)?
+        .into_iter()
+        .map(|l| finding(l, family.clone()))
+        .collect()
 }
 
 fn filesystem(row: &Value) -> Option<&Value> {
@@ -580,6 +647,59 @@ mod tests {
             &content[f[0].start as usize..f[0].end as usize],
             "https://fakeuser:p!ss@example.invalid"
         );
+    }
+
+    fn decoded_row(detector: &str, decoder: &str, raw: &str, file: &str, line: u64) -> Value {
+        json!({"DetectorName": detector, "DetectorType": 8, "DecoderName": decoder, "Raw": raw,
+               "SourceMetadata": {"Data": {"Filesystem": {"file": file, "line": line}}}})
+    }
+
+    #[test]
+    fn base64_decoder_rows_are_placed_only_with_the_choice() {
+        let secret = "FAKE_DECODED_TOKEN_EXAMPLE_0123456789";
+        let once = crate::gitleaks::base64_encode(secret.as_bytes());
+        let twice = crate::gitleaks::base64_encode(once.as_bytes());
+        let content = format!("DATA={once}\nMORE={twice}\n");
+        let fixtures = fx(&[("f.txt", content.as_str())]);
+        let out = ndjson(&[
+            decoded_row("Github", "BASE64", secret, "f.txt", 1),
+            decoded_row("Github", "BASE64", secret, "f.txt", 2),
+        ]);
+        // Off: the decoded value is absent from the file.
+        assert!(normalize(&out, &fixtures).is_err());
+        let off = normalize_per_case(&out, &fixtures).unwrap();
+        assert_eq!((off.findings.len(), off.unmeasured.len()), (0, 1));
+        // On: each line's row maps to its own segment; TruffleHog does not
+        // report the depth, so one and two layers are both found.
+        let options = Options { decoded: true };
+        let on = normalize_with(&out, &fixtures, options).unwrap();
+        assert_eq!(on.len(), 2);
+        let layers: Vec<u8> = on
+            .iter()
+            .map(|f| f.mapping.as_ref().unwrap().layers)
+            .collect();
+        assert!(layers.contains(&1) && layers.contains(&2));
+        let first = on.iter().find(|f| f.start == 5).unwrap();
+        assert_eq!(first.end as usize, 5 + once.len());
+        // A PLAIN row is never touched by the choice, and the AWS and
+        // Shopify composites keep their own rules.
+        let plain = ndjson(&[decoded_row("Github", "PLAIN", secret, "f.txt", 1)]);
+        assert!(normalize_with(&plain, &fixtures, options).is_err());
+        let aws = ndjson(&[decoded_row("AWS", "BASE64", secret, "f.txt", 1)]);
+        assert_eq!(
+            normalize_with(&aws, &fixtures, options).unwrap_err().0,
+            "Unsupported AWS composite finding"
+        );
+        // An unprovable row is still unmeasured, never guessed.
+        let wrong = ndjson(&[decoded_row(
+            "Github",
+            "BASE64",
+            "NOT_IN_THE_FILE_AT_ALL",
+            "f.txt",
+            1,
+        )]);
+        let m = normalize_per_case_with(&wrong, &fixtures, options).unwrap();
+        assert_eq!((m.findings.len(), m.unmeasured.len()), (0, 1));
     }
 
     #[test]

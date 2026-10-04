@@ -31,6 +31,16 @@ The acceptable range of a span is its envelope, or the span itself when it
 has no envelope. Companion spans are acceptable coverage and are never scored
 as spans.
 
+## Original bytes, and decoded text
+
+Ranges always index the **original** `content`, never decoded text. A scanner
+that reports a finding in decoded coordinates (a decoded base64 or hex value,
+which is absent from the file) is placed on the original bytes by its adapter
+only when the placement can be re-derived, and then as a bound: the whole
+encoded segment. `fragments` of a span are ranges of the same kind, and a
+`decoded` fact describes the bytes of `[start, end)` (or the fragments
+concatenated); see [representation.md](representation.md).
+
 ## Adapter boundary
 
 Scanners report positions in many conventions: 1-based lines and columns,

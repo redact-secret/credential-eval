@@ -28,6 +28,44 @@
     "cases"
   ],
   "$defs": {
+    "Alphabet": {
+      "description": "Base64 alphabet.",
+      "oneOf": [
+        {
+          "description": "`A-Za-z0-9+/`.",
+          "type": "string",
+          "const": "standard"
+        },
+        {
+          "description": "`A-Za-z0-9-_`.",
+          "type": "string",
+          "const": "url-safe"
+        }
+      ]
+    },
+    "ByteRange": {
+      "description": "Half-open UTF-8 byte range `[start, end)`.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "description": "Exclusive end byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "start": {
+          "description": "Inclusive start byte offset.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ]
+    },
     "Case": {
       "description": "One evaluation case: a fixture file plus its authored expectations.",
       "type": "object",
@@ -54,6 +92,17 @@
         "path": {
           "description": "Relative path the fixture is materialized at, unique within the snapshot.",
           "$ref": "#/$defs/FixturePath"
+        },
+        "representation": {
+          "description": "Facts about the input as a whole (revision v1.3): validity, derivation,\ntransformation lineage and chunking. Absent for an ordinary raw input.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Representation"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "twin": {
           "description": "Present when this case is an authored negative twin of a positive case.",
@@ -102,9 +151,238 @@
         }
       ]
     },
+    "ChunkUnit": {
+      "description": "Unit of chunk boundaries.",
+      "oneOf": [
+        {
+          "description": "UTF-8 bytes. A boundary may fall inside a multibyte sequence and the\ninput is still valid for a byte stream.",
+          "type": "string",
+          "const": "utf8-byte"
+        },
+        {
+          "description": "UTF-16 code units. A boundary between the halves of a surrogate pair\nmakes that chunk an invalid string.",
+          "type": "string",
+          "const": "utf16-code-unit"
+        }
+      ]
+    },
+    "Chunking": {
+      "description": "Chunk boundaries of an input.",
+      "type": "object",
+      "properties": {
+        "boundaries": {
+          "description": "Boundary offsets: strictly increasing and inside the content.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "unit": {
+          "description": "What the boundaries count.",
+          "$ref": "#/$defs/ChunkUnit"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "boundaries"
+      ]
+    },
+    "CodePoint": {
+      "type": "string",
+      "maxLength": 8,
+      "minLength": 1,
+      "pattern": "^U\\+[0-9A-F]{4,6}$"
+    },
+    "Codec": {
+      "description": "A decoding or encoding codec of the bounded vocabulary.",
+      "oneOf": [
+        {
+          "description": "Base64 (standard or URL-safe alphabet).",
+          "type": "string",
+          "const": "base64"
+        },
+        {
+          "description": "Hexadecimal.",
+          "type": "string",
+          "const": "hex"
+        }
+      ]
+    },
     "CorpusSnapshotSchema": {
       "type": "string",
       "const": "credential-eval/corpus-snapshot/v1"
+    },
+    "DecodeStep": {
+      "description": "One decode step.",
+      "oneOf": [
+        {
+          "description": "Decode base64.",
+          "type": "object",
+          "properties": {
+            "alphabet": {
+              "description": "Alphabet.",
+              "$ref": "#/$defs/Alphabet"
+            },
+            "codec": {
+              "type": "string",
+              "const": "base64"
+            },
+            "padding": {
+              "description": "Padding.",
+              "$ref": "#/$defs/Padding"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "codec",
+            "alphabet",
+            "padding"
+          ]
+        },
+        {
+          "description": "Decode hexadecimal.",
+          "type": "object",
+          "properties": {
+            "case": {
+              "description": "Letter case of the encoded text.",
+              "$ref": "#/$defs/HexCase"
+            },
+            "codec": {
+              "type": "string",
+              "const": "hex"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "codec",
+            "case"
+          ]
+        },
+        {
+          "description": "Remove every occurrence of these code points.",
+          "type": "object",
+          "properties": {
+            "code_points": {
+              "description": "The code points removed.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CodePoint"
+              }
+            },
+            "codec": {
+              "type": "string",
+              "const": "strip-codepoints"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "codec",
+            "code_points"
+          ]
+        },
+        {
+          "description": "Unicode normalization (declared; this build does not verify it).",
+          "type": "object",
+          "properties": {
+            "codec": {
+              "type": "string",
+              "const": "normalize"
+            },
+            "form": {
+              "description": "The form.",
+              "$ref": "#/$defs/NormalizationForm"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "codec",
+            "form"
+          ]
+        }
+      ]
+    },
+    "DecodedFact": {
+      "description": "How the source bytes of a span decode to the credential value. The value is\nnever repeated: only its length and digest.",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "description": "Length of the decoded value in bytes (non-zero).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sha256": {
+          "description": "Digest of the decoded value.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "via": {
+          "description": "Decode steps in decode order, from the source bytes (the fragments\nconcatenated, else `[start, end)`) to the value. At most\n[`MAX_DECODE_STEPS`].",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DecodeStep"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "via",
+        "sha256",
+        "bytes"
+      ]
+    },
+    "Derivation": {
+      "description": "How an input relates to the authored bases.",
+      "type": "object",
+      "properties": {
+        "bases": {
+          "description": "The authored base fixtures a projection derives from (evidence ids,\nwhich need not be cases of this snapshot). Empty for an authored base.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CaseId"
+          }
+        },
+        "kind": {
+          "description": "`authored-base` or `projection`.",
+          "$ref": "#/$defs/DerivationKind"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ]
+    },
+    "DerivationKind": {
+      "description": "Kind of a [`Derivation`].",
+      "oneOf": [
+        {
+          "description": "A hand-written base value.",
+          "type": "string",
+          "const": "authored-base"
+        },
+        {
+          "description": "An input derived from one or more authored bases.",
+          "type": "string",
+          "const": "projection"
+        }
+      ]
+    },
+    "EmbedMode": {
+      "description": "Whole-value or embedded.",
+      "oneOf": [
+        {
+          "description": "The whole input is the value.",
+          "type": "string",
+          "const": "whole-value"
+        },
+        {
+          "description": "The value is embedded in other text.",
+          "type": "string",
+          "const": "embedded"
+        }
+      ]
     },
     "Envelope": {
       "description": "An authored acceptable envelope around a span: a wider range a finding may\ncover without being `OVERBROAD`. The reason is authored evidence.",
@@ -182,6 +460,28 @@
       "description": "An authored expected span.",
       "type": "object",
       "properties": {
+        "base": {
+          "description": "The authored base this span's value comes from (revision v1.3).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CaseId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decoded": {
+          "description": "How the source bytes decode to the value (revision v1.3): the decode\nsteps, the decoded length and its digest. Never the decoded value.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecodedFact"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "end": {
           "description": "Exclusive end byte offset.",
           "type": "integer",
@@ -198,6 +498,16 @@
               "type": "null"
             }
           ]
+        },
+        "fragments": {
+          "description": "The secret bytes inside `[start, end)` when the value is not\ncontiguous (revision v1.3). At least two, sorted, disjoint, separated\nby at least one byte, the first starting at `start` and the last ending\nat `end`. Bytes of the range outside them are separators.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ByteRange"
+          }
         },
         "role": {
           "description": "Whether the span is the credential itself or an acceptable companion.",
@@ -275,17 +585,241 @@
         "group"
       ]
     },
+    "HexCase": {
+      "description": "Hex letter case.",
+      "oneOf": [
+        {
+          "description": "Only lower-case letters.",
+          "type": "string",
+          "const": "lower"
+        },
+        {
+          "description": "Only upper-case letters.",
+          "type": "string",
+          "const": "upper"
+        },
+        {
+          "description": "Both cases occur.",
+          "type": "string",
+          "const": "mixed"
+        }
+      ]
+    },
+    "InputValidity": {
+      "description": "Whether an input is a valid string for the interface that receives it.",
+      "oneOf": [
+        {
+          "description": "A valid input (the default; never written).",
+          "type": "string",
+          "const": "valid"
+        },
+        {
+          "description": "The bytes are not valid UTF-8. A snapshot case holds its input as a\nJSON string, so it cannot carry these bytes: the value is part of the\nvocabulary, and a snapshot that uses it is refused.",
+          "type": "string",
+          "const": "invalid-utf8"
+        },
+        {
+          "description": "A UTF-16 chunk boundary falls between the two halves of a surrogate\npair, so that chunk is not a valid string. The content itself is valid.",
+          "type": "string",
+          "const": "unpaired-surrogate-split"
+        }
+      ]
+    },
+    "LineBreak": {
+      "description": "Line break used by a fragmentation.",
+      "oneOf": [
+        {
+          "description": "`\\n`.",
+          "type": "string",
+          "const": "lf"
+        },
+        {
+          "description": "`\\r\\n`.",
+          "type": "string",
+          "const": "crlf"
+        },
+        {
+          "description": "`\\r`.",
+          "type": "string",
+          "const": "cr"
+        },
+        {
+          "description": "None.",
+          "type": "string",
+          "const": "none"
+        }
+      ]
+    },
+    "NormalizationForm": {
+      "description": "Unicode normalization form.",
+      "oneOf": [
+        {
+          "description": "NFC.",
+          "type": "string",
+          "const": "nfc"
+        },
+        {
+          "description": "NFD.",
+          "type": "string",
+          "const": "nfd"
+        },
+        {
+          "description": "NFKC.",
+          "type": "string",
+          "const": "nfkc"
+        },
+        {
+          "description": "NFKD.",
+          "type": "string",
+          "const": "nfkd"
+        }
+      ]
+    },
+    "Padding": {
+      "description": "Base64 padding.",
+      "oneOf": [
+        {
+          "description": "Padded with `=` to a multiple of four.",
+          "type": "string",
+          "const": "padded"
+        },
+        {
+          "description": "No `=`.",
+          "type": "string",
+          "const": "unpadded"
+        }
+      ]
+    },
+    "Placement": {
+      "description": "Placement in filler text.",
+      "oneOf": [
+        {
+          "description": "At the head.",
+          "type": "string",
+          "const": "head"
+        },
+        {
+          "description": "In the middle.",
+          "type": "string",
+          "const": "middle"
+        },
+        {
+          "description": "At the tail.",
+          "type": "string",
+          "const": "tail"
+        }
+      ]
+    },
+    "Positions": {
+      "description": "Where code points were inserted.",
+      "oneOf": [
+        {
+          "description": "At the start.",
+          "type": "string",
+          "const": "start"
+        },
+        {
+          "description": "Inside the value.",
+          "type": "string",
+          "const": "inside"
+        },
+        {
+          "description": "At the end.",
+          "type": "string",
+          "const": "end"
+        },
+        {
+          "description": "Between every character.",
+          "type": "string",
+          "const": "between-every-character"
+        }
+      ]
+    },
+    "Reconstruction": {
+      "description": "What a fragmentation means to the surrounding language. A fact about the\ninput, never a claim about a scanner or a product.",
+      "oneOf": [
+        {
+          "description": "The language or serialization rebuilds the original value.",
+          "type": "string",
+          "const": "reconstructs-original"
+        },
+        {
+          "description": "Separator text was inserted into a different value.",
+          "type": "string",
+          "const": "inserts-separator"
+        },
+        {
+          "description": "The reading depends on the consumer.",
+          "type": "string",
+          "const": "unresolved"
+        }
+      ]
+    },
     "ReleaseTag": {
       "type": "string",
       "maxLength": 128,
       "minLength": 1,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
     },
+    "Representation": {
+      "description": "Facts about a case's input as a whole. Present only when it carries at\nleast one fact.",
+      "type": "object",
+      "properties": {
+        "chunking": {
+          "description": "Chunk boundaries the input is delivered in.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Chunking"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "derivation": {
+          "description": "Whether the input is an authored base or derives from authored bases.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Derivation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_validity": {
+          "description": "Input validity. Any value but `valid` makes the case an *expected\nrejection*: it has no spans and is tier `T0`, so it is never a true\npositive, a false negative or a false alarm.",
+          "$ref": "#/$defs/InputValidity"
+        },
+        "transformation": {
+          "description": "The input-level steps from the base to this content, in forward order.\nDescriptive: the evaluator checks the shape of each step, not that the\ncontent was produced by it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transformation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RepresentationContract": {
+      "type": "string",
+      "const": "credential-eval/representation/1"
+    },
     "Sha256Digest": {
       "type": "string",
       "maxLength": 71,
       "minLength": 1,
       "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Slug": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
     },
     "SnapshotIdentity": {
       "description": "Identity of the evidence a snapshot was taken from.",
@@ -304,6 +838,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/EvidenceRelease"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "representation": {
+          "description": "The representation contract the snapshot uses (revision v1.3). Required\nwhen any case carries a representation fact; absent otherwise, so a\nsnapshot without facts is byte-for-byte what it was. Declaring it with\nno facts is allowed and means the exporter supports the contract.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepresentationContract"
             },
             {
               "type": "null"
@@ -340,6 +885,266 @@
           "type": "string",
           "const": "companion"
         }
+      ]
+    },
+    "TransformStep": {
+      "description": "One input-level transformation step.",
+      "oneOf": [
+        {
+          "description": "Encode the value. `base64` needs `alphabet` and `padding`; `hex` needs\n`case`; the other fields are refused.",
+          "type": "object",
+          "properties": {
+            "alphabet": {
+              "description": "Base64 alphabet.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Alphabet"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "case": {
+              "description": "Hex letter case.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HexCase"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "codec": {
+              "description": "The codec.",
+              "$ref": "#/$defs/Codec"
+            },
+            "op": {
+              "type": "string",
+              "const": "encode"
+            },
+            "padding": {
+              "description": "Base64 padding.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Padding"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "codec"
+          ]
+        },
+        {
+          "description": "Insert code points (zero-width characters, no-break spaces, a BOM).",
+          "type": "object",
+          "properties": {
+            "code_points": {
+              "description": "The inserted code points.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CodePoint"
+              }
+            },
+            "op": {
+              "type": "string",
+              "const": "insert-codepoints"
+            },
+            "positions": {
+              "description": "Where they were inserted.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Positions"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "code_points"
+          ]
+        },
+        {
+          "description": "Unicode normalization.",
+          "type": "object",
+          "properties": {
+            "form": {
+              "description": "The normalization form.",
+              "$ref": "#/$defs/NormalizationForm"
+            },
+            "op": {
+              "type": "string",
+              "const": "normalize"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "form"
+          ]
+        },
+        {
+          "description": "Split the value across the input.",
+          "type": "object",
+          "properties": {
+            "line_break": {
+              "description": "The line break the fragmentation used.",
+              "$ref": "#/$defs/LineBreak"
+            },
+            "mechanism": {
+              "description": "Short label of the mechanism (`shell-line-continuation`).",
+              "$ref": "#/$defs/Slug"
+            },
+            "op": {
+              "type": "string",
+              "const": "fragment"
+            },
+            "reconstruction": {
+              "description": "Whether the surrounding language rebuilds the value.",
+              "$ref": "#/$defs/Reconstruction"
+            },
+            "width": {
+              "description": "Column width of a wrap, when it is one.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "mechanism",
+            "line_break",
+            "reconstruction"
+          ]
+        },
+        {
+          "description": "Place the value in a carrier.",
+          "type": "object",
+          "properties": {
+            "carrier": {
+              "description": "Short label of the carrier (`json`, `url-query`).",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Slug"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "mode": {
+              "description": "Whole value or embedded in other text.",
+              "$ref": "#/$defs/EmbedMode"
+            },
+            "op": {
+              "type": "string",
+              "const": "embed"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "mode"
+          ]
+        },
+        {
+          "description": "Escape the value.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "escape"
+            },
+            "style": {
+              "description": "Short label of the escape style.",
+              "$ref": "#/$defs/Slug"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "style"
+          ]
+        },
+        {
+          "description": "Place the value in filler text.",
+          "type": "object",
+          "properties": {
+            "filler_bytes": {
+              "description": "Filler size in bytes.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "place"
+            },
+            "placement": {
+              "description": "Head, middle or tail.",
+              "$ref": "#/$defs/Placement"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "placement",
+            "filler_bytes"
+          ]
+        },
+        {
+          "description": "Repeat the value.",
+          "type": "object",
+          "properties": {
+            "count": {
+              "description": "Occurrence count (at least one).",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "op": {
+              "type": "string",
+              "const": "repeat"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "count"
+          ]
+        }
+      ]
+    },
+    "Transformation": {
+      "description": "Input-level transformation lineage.",
+      "type": "object",
+      "properties": {
+        "steps": {
+          "description": "Steps in forward order (base to input), at most [`MAX_TRANSFORM_STEPS`].",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TransformStep"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "steps"
       ]
     },
     "TwinLineage": {

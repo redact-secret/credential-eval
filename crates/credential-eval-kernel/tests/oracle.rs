@@ -177,6 +177,9 @@ fn expected_spans(v: &Value) -> Vec<ExpectedSpan> {
                 end: u(&en["end"]),
                 reason: en["reason"].as_str().unwrap_or("synthetic").to_owned(),
             }),
+            base: None,
+            fragments: None,
+            decoded: None,
         })
         .collect()
 }
@@ -213,6 +216,7 @@ fn case_of(f: &Value, prefix: Option<&str>) -> Case {
             mutation: s(&f["mutation"]).to_owned(),
             mutation_kind: s(&f["mutationKind"]).to_owned(),
         }),
+        representation: None,
     }
 }
 
@@ -232,6 +236,7 @@ fn finding(v: &Value) -> NormalizedFinding {
         end: u(&v["end"]),
         family: v.get("family").map(|x| s(x).to_owned()),
         action: v.get("action").map(|x| s(x).to_owned()),
+        mapping: None,
     }
 }
 
@@ -277,6 +282,7 @@ fn assert_row(ours: &CaseResult, row: &Value, context: &str) {
             end: u(&a["end"]),
             family: a.get("family").map(|x| s(x).to_owned()),
             action: a.get("action").map(|x| s(x).to_owned()),
+            mapping: None,
         })
         .collect();
     actual.sort();
@@ -434,6 +440,7 @@ fn lattice_rows_match_legacy() {
                 end: u(&a["end"]),
                 family: a.get("family").map(|x| s(x).to_owned()),
                 action: a.get("action").map(|x| s(x).to_owned()),
+                mapping: None,
             })
             .collect();
         let ranges: Vec<ByteRange> = actual
