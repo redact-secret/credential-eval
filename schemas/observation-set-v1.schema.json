@@ -137,6 +137,13 @@
             "status": {
               "type": "string",
               "const": "complete"
+            },
+            "unmeasured": {
+              "description": "Fixture paths the adapter could not map to ranges, under a run\nconfiguration that explicitly chose per-case handling (v1.2). The\nscanner's findings on these paths are discarded and the cases are\nnot measured: never a `MISS`, never a zero detection. Empty (and\nabsent from the document) for a scanner that mapped every finding.\nSorted by path, unique.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/UnmeasuredPath"
+              }
             }
           },
           "additionalProperties": false,
@@ -512,6 +519,25 @@
       "maxLength": 71,
       "minLength": 1,
       "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "UnmeasuredPath": {
+      "description": "A fixture path whose scanner output could not be mapped to ranges.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Fixture path.",
+          "$ref": "#/$defs/FixturePath"
+        },
+        "reason": {
+          "description": "Fixed, sanitized reason (an adapter constant). Never raw output.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "reason"
+      ]
     }
   }
 }

@@ -259,6 +259,16 @@ const ALLOWLIST: &[(&str, &[&str], &str)] = &[
         "adapter code: fixed sanitized reason strings; raw output is dropped before a reason is chosen",
     ),
     (
+        "UnmeasuredPath.reason",
+        &["observation-set-v1.schema.json"],
+        "adapter code: the fixed sanitized MapError constant of the finding that could not be mapped; the row, its secret and its raw text are dropped before it is chosen",
+    ),
+    (
+        "UnmeasuredCase.reason",
+        ARTIFACT,
+        "engine code: a copy of the adapter's fixed sanitized reason for an unmeasured fixture",
+    ),
+    (
         "ScannerRun.detail",
         ARTIFACT,
         "engine code: the fixed sanitized reason of a non-complete scanner",

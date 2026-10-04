@@ -26,7 +26,7 @@ use credential_eval_contracts::artifact::{ExecutionDiagnostics, RunArtifact};
 use credential_eval_contracts::config::{RunConfig, ScannerSpec, SeedConvention};
 use credential_eval_contracts::corpus::CorpusSnapshot;
 use credential_eval_contracts::ids::FixturePath;
-use credential_eval_contracts::observation::{ObservationSet, Replays};
+use credential_eval_contracts::observation::{ObservationSet, Replays, UnmeasuredPath};
 use credential_eval_contracts::schema::ObservationSetSchema;
 use credential_eval_kernel::evaluation::cases::build_cases;
 use credential_eval_kernel::evaluation::{
@@ -193,8 +193,9 @@ fn create_private_dirs(path: &Path) -> std::io::Result<()> {
 
 /// Outcome of one scan task.
 enum TaskResult {
-    /// Normalized, range-checked findings in adapter emission order.
-    Findings(Vec<NormalizedFinding>),
+    /// Normalized, range-checked findings in adapter emission order, and the
+    /// fixtures the adapter could not map (sorted by path).
+    Findings(Vec<NormalizedFinding>, Vec<UnmeasuredPath>),
     /// Explicit failure.
     Failed(ObservationResult),
     /// Not run: an earlier replay of the same scanner already failed.
@@ -540,7 +541,7 @@ pub fn run_methods(
     let variants = plan.variant_corpus(&request.corpus.identity);
     timing.evaluator += phase.elapsed();
 
-    let observed = scan(request, &variants, &mut timing)?;
+    let observed = fail_closed_on_unmeasured(scan(request, &variants, &mut timing)?);
 
     let phase = Instant::now();
     let observations = match methods.allowlist {
@@ -570,6 +571,26 @@ pub fn run_methods(
     })
 }
 
+/// Evaluation methods score whole scanners, not single fixtures, so they do not
+/// read per-case unmeasured paths (ADR 0003). A scanner that reported any is
+/// `malformed` for the methods run, exactly as it was before per-case handling
+/// existed: nothing is read as a zero detection.
+fn fail_closed_on_unmeasured(mut set: ObservationSet) -> ObservationSet {
+    for observation in &mut set.observations {
+        if matches!(
+            &observation.result,
+            ObservationResult::Complete { unmeasured, .. } if !unmeasured.is_empty()
+        ) {
+            observation.result = ObservationResult::Malformed {
+                reason: "scanner output could not be mapped to ranges for some fixtures; \
+                         evaluation methods do not support per-case unmeasured handling"
+                    .into(),
+            };
+        }
+    }
+    set
+}
+
 fn millis(d: Duration) -> u64 {
     u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
 }
@@ -590,20 +611,34 @@ fn execute(
     let result = match classify(scanner.adapter.as_ref(), run, &scanner.spec.limits) {
         Err(failure) => TaskResult::Failed(failure),
         Ok(stdout) => {
-            let normalized = scanner.adapter.normalize(prepared, &stdout, fixtures);
+            let normalized = scanner
+                .adapter
+                .normalize_measured(prepared, &stdout, fixtures);
             drop(stdout);
             match normalized {
                 Err(error) => TaskResult::Failed(ObservationResult::Malformed {
                     reason: format!("scanner output could not be mapped to ranges: {error}"),
                 }),
-                Ok(findings) => {
+                Ok(credential_eval_adapters::Measured {
+                    findings,
+                    unmeasured,
+                }) => {
+                    let unmeasured: Vec<UnmeasuredPath> = unmeasured
+                        .into_iter()
+                        .map(|(path, reason)| UnmeasuredPath {
+                            path,
+                            reason: format!(
+                                "scanner output could not be mapped to ranges: {reason}"
+                            ),
+                        })
+                        .collect();
                     let valid = findings.iter().all(|f| {
                         fixtures
                             .content(f.path.as_str())
                             .is_some_and(|text| f.range().is_valid_in(text))
                     });
                     if valid {
-                        TaskResult::Findings(findings)
+                        TaskResult::Findings(findings, unmeasured)
                     } else {
                         TaskResult::Failed(ObservationResult::Malformed {
                             reason:
@@ -652,9 +687,13 @@ fn observe(
     };
     let scanner_identity = identity(prepared.version, prepared.provenance);
     let mut runs: Vec<Vec<NormalizedFinding>> = Vec::new();
+    let mut gaps: Vec<Vec<UnmeasuredPath>> = Vec::new();
     for (_, result) in results {
         match result {
-            TaskResult::Findings(findings) => runs.push(findings),
+            TaskResult::Findings(findings, unmeasured) => {
+                runs.push(findings);
+                gaps.push(unmeasured);
+            }
             // The lowest failed replay decides; later replays were skipped.
             TaskResult::Failed(failure) => {
                 return ScannerObservation {
@@ -671,7 +710,17 @@ fn observe(
             reason: "scanner replays did not all run".into(),
         }
     } else {
-        let divergent = divergent_paths(&runs);
+        let mut divergent = divergent_paths(&runs);
+        // Replays must also agree on which fixtures could not be mapped.
+        for other in &gaps[1..] {
+            for entry in gaps[0].iter().chain(other.iter()) {
+                if gaps[0].contains(entry) != other.contains(entry) {
+                    divergent.push(entry.path.clone());
+                }
+            }
+        }
+        divergent.sort();
+        divergent.dedup();
         let record = Replays {
             count: replays,
             agreed: divergent.is_empty(),
@@ -680,6 +729,7 @@ fn observe(
             ObservationResult::Complete {
                 findings: runs.swap_remove(0),
                 replays: record,
+                unmeasured: gaps.swap_remove(0),
             }
         } else {
             ObservationResult::Unstable {

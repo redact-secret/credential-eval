@@ -11,7 +11,7 @@
 //!                     [--run-class official|exploratory]
 //!                     [--evidence-release <tag> --evidence-manifest <file>
 //!                      --evidence-manifest-digest <sha256>]
-//!                     [--require-complete] [--strict]
+//!                     [--require-complete] [--strict] [--require-fully-measured]
 //! credential-eval compat legacy-bench --artifact <artifact.json> --index <legacy-index.json>
 //!                     --out-dir <dir>
 //! credential-eval perf run --config <performance-config.json> --out <performance-artifact.json>
@@ -38,7 +38,9 @@
 //! Exit codes: 0 artifact written; 1 run failed (no artifact); 2 usage or
 //! configuration error; 3 artifact written but `--require-complete`/`--strict`
 //! was given and a scanner did not complete (or, for methods, a generation
-//! error occurred, or an assertion failed under `--fail-on-assertions`);
+//! error occurred, or an assertion failed under `--fail-on-assertions`), or
+//! `--require-fully-measured` was given and a scanner left a case unmeasured
+//! (a configuration that chose per-case handling, ADR 0003);
 //! 4 refused: the evidence snapshot did not verify against the pinned release,
 //! or (official run) a scanner did not match its pin (no artifact);
 //! 130 cancelled.
@@ -78,7 +80,7 @@ usage:
                       [--run-class official|exploratory]
                       [--evidence-release <tag> --evidence-manifest <file>
                        --evidence-manifest-digest <sha256>]
-                      [--require-complete] [--strict]
+                      [--require-complete] [--strict] [--require-fully-measured]
   credential-eval compat legacy-bench --artifact <artifact.json>
                       --index <legacy-index.json> --out-dir <dir>
   credential-eval perf run --config <performance-config.json>
@@ -109,6 +111,7 @@ struct RunArgs {
     candidate_roots: BTreeMap<String, PathBuf>,
     work_dir: Option<PathBuf>,
     require_complete: bool,
+    require_fully_measured: bool,
     methods: Option<Vec<MethodId>>,
     reference: Option<ScannerId>,
     evidence: Option<PathBuf>,
@@ -181,6 +184,7 @@ fn parse(args: &[OsString]) -> Result<RunArgs, Usage> {
                     .insert(id.to_owned(), PathBuf::from(dir));
             }
             "--require-complete" | "--strict" => parsed.require_complete = true,
+            "--require-fully-measured" => parsed.require_fully_measured = true,
             "--fail-on-assertions" => parsed.fail_on_assertions = true,
             "--methods" => {
                 let list = value()?
@@ -355,6 +359,14 @@ fn summarize(artifact: &RunArtifact) -> bool {
                 .unwrap_or_default(),
             run.findings.len()
         );
+        if !run.unmeasured_cases.is_empty() {
+            eprintln!(
+                "{} unmeasured: {} of {} cases could not be mapped to ranges and are in no denominator",
+                identity.id,
+                run.unmeasured_cases.len(),
+                run.cases.len()
+            );
+        }
     }
     if !artifact.variants.is_empty() {
         let assertions: usize = artifact.scanners.iter().map(|s| s.assertions.len()).sum();
@@ -583,7 +595,12 @@ fn run(args: &[OsString]) -> ExitCode {
         return ExitCode::from(1);
     }
     let incomplete = summarize(&artifact);
-    if (args.require_complete && incomplete)
+    let gaps = artifact
+        .scanners
+        .iter()
+        .any(|s| !s.unmeasured_cases.is_empty());
+    if (args.require_fully_measured && gaps)
+        || (args.require_complete && incomplete)
         || ((args.require_complete || args.fail_on_assertions) && method_failure)
     {
         return ExitCode::from(3);

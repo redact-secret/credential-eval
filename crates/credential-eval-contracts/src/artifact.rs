@@ -153,6 +153,23 @@ pub struct ScannerRun {
     pub assertions: Vec<Assertion>,
     /// Aggregates over `cases` and `assertions`.
     pub aggregates: Aggregates,
+    /// Completeness report (v1.2): the cases a `complete` scanner could not
+    /// map to ranges, when the run configuration chose per-case handling.
+    /// Each also appears in `cases` as `not_measured`. Excluded from every
+    /// aggregate and denominator, and never a `MISS`. Sorted by case id.
+    /// Absent when every case was measured.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unmeasured_cases: Vec<UnmeasuredCase>,
+}
+
+/// A case a scanner observed but whose output could not be mapped to ranges.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UnmeasuredCase {
+    /// Case id.
+    pub case_id: CaseId,
+    /// Fixed, sanitized reason (an adapter constant). Never raw output.
+    pub reason: String,
 }
 
 /// The outcome of one case for one scanner. Self-verifying: `expected` and

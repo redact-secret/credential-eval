@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 
 use credential_eval_contracts::artifact::{
     Aggregates, CaseMeasurement, CaseResult, EngineIdentity, NonSemantic, ObservedRange,
-    RunArtifact, RunManifest, ScannerRun, ScoredSpan,
+    RunArtifact, RunManifest, ScannerRun, ScoredSpan, UnmeasuredCase,
 };
 use credential_eval_contracts::config::{AccountingConfig, RunConfig};
 use credential_eval_contracts::corpus::{Case, CorpusSnapshot, EvidenceTier};
@@ -84,9 +84,9 @@ pub fn score_scanner(corpus: &CorpusSnapshot, observation: &ScannerObservation) 
     let mut cases: Vec<&Case> = corpus.cases.iter().collect();
     cases.sort_by(|a, b| a.id.cmp(&b.id));
     let (findings, replays, detail) = match &observation.result {
-        ObservationResult::Complete { findings, replays } => {
-            (dedupe(findings), Some(*replays), None)
-        }
+        ObservationResult::Complete {
+            findings, replays, ..
+        } => (dedupe(findings), Some(*replays), None),
         ObservationResult::Unstable { replays, .. } => (
             Vec::new(),
             Some(*replays),
@@ -112,12 +112,30 @@ pub fn score_scanner(corpus: &CorpusSnapshot, observation: &ScannerObservation) 
         });
     }
     let complete = matches!(observation.result, ObservationResult::Complete { .. });
+    // Paths a complete scanner could not map (per-case handling chosen by the
+    // run configuration). Their cases are not measured, never a miss.
+    let unmeasured: BTreeMap<&FixturePath, &str> = match &observation.result {
+        ObservationResult::Complete { unmeasured, .. } => unmeasured
+            .iter()
+            .map(|u| (&u.path, u.reason.as_str()))
+            .collect(),
+        _ => BTreeMap::new(),
+    };
+    let mut unmeasured_cases = Vec::new();
     let results = cases
         .into_iter()
         .map(|case| {
             let actual = by_path.get(&case.path).cloned().unwrap_or_default();
             let measurement = if !complete {
                 CaseMeasurement::NotMeasured { status }
+            } else if let Some(reason) = unmeasured.get(&case.path) {
+                unmeasured_cases.push(UnmeasuredCase {
+                    case_id: case.id.clone(),
+                    reason: (*reason).to_owned(),
+                });
+                CaseMeasurement::NotMeasured {
+                    status: ScannerStatus::Malformed,
+                }
             } else if case.grouping.tier == EvidenceTier::T0 {
                 CaseMeasurement::Pending
             } else {
@@ -136,6 +154,7 @@ pub fn score_scanner(corpus: &CorpusSnapshot, observation: &ScannerObservation) 
         cases: results,
         assertions: Vec::new(),
         aggregates: Aggregates::default(),
+        unmeasured_cases,
     }
 }
 
@@ -151,17 +170,23 @@ pub fn scanner_aggregates(
     if run.status != ScannerStatus::Complete {
         return Ok(Aggregates::default());
     }
-    let groups = account_groups(&run.cases, config)?;
-    let suites: Vec<SuiteCase<'_>> = run
+    // Cases a complete scanner could not map are not measured: they are in no
+    // group, denominator or target. `unmeasured_cases` reports them.
+    let measured: Vec<CaseResult> = run
         .cases
+        .iter()
+        .filter(|c| !matches!(c.measurement, CaseMeasurement::NotMeasured { .. }))
+        .cloned()
+        .collect();
+    let groups = account_groups(&measured, config)?;
+    let suites: Vec<SuiteCase<'_>> = measured
         .iter()
         .map(|case| SuiteCase {
             suite: &case.group,
             case,
         })
         .collect();
-    let assignments: BTreeMap<CaseId, Vec<String>> = run
-        .cases
+    let assignments: BTreeMap<CaseId, Vec<String>> = measured
         .iter()
         .filter(|c| !c.targets.is_empty())
         .map(|c| (c.case_id.clone(), c.targets.clone()))

@@ -38,7 +38,10 @@ fn complete_scan_maps_ranges_families_and_provenance() {
     let bin = fake_gitleaks(dir.path(), "gitleaks", "8.30.1", TWO_ROWS);
     let corpus = smoke_corpus();
     let out = run(&corpus, &config(vec![gitleaks_spec("gitleaks", &bin)], 2));
-    let ObservationResult::Complete { findings, replays } = status_of(&out, "gitleaks") else {
+    let ObservationResult::Complete {
+        findings, replays, ..
+    } = status_of(&out, "gitleaks")
+    else {
         panic!("expected complete");
     };
     assert_eq!((replays.count, replays.agreed), (2, true));
@@ -493,5 +496,113 @@ fn invalid_configurations_fail_before_running() {
     assert!(matches!(
         status_of(&out, "g"),
         ObservationResult::Unsupported { .. }
+    ));
+}
+
+/// One mappable row and one decoded row the adapter cannot map (depth 2), on
+/// two different fixtures (ADR 0003).
+const ONE_GOOD_ONE_DECODED: &str = r#"echo "[{\"RuleID\":\"generic-api-key\",\"File\":\"$root/contracts-smoke/positive-exact.txt\",\"Secret\":\"EXAMPLE_FAKE_KEY_0123456789abcdef\",\"StartLine\":2,\"StartColumn\":1,\"Tags\":[]},{\"RuleID\":\"generic-api-key\",\"File\":\"$root/contracts-smoke/positive-partial.txt\",\"Secret\":\"x\",\"StartLine\":1,\"Tags\":[\"decoded:base64\",\"decode-depth:2\"]}]""#;
+
+fn per_case(spec: &mut credential_eval_contracts::config::ScannerSpec) {
+    spec.configuration
+        .insert("unmappable_findings".into(), json!("unmeasured-case"));
+}
+
+#[test]
+fn unmappable_finding_fails_the_scanner_unless_the_config_chose_per_case_handling() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = fake_gitleaks(dir.path(), "gitleaks", "8.30.1", ONE_GOOD_ONE_DECODED);
+    let corpus = smoke_corpus();
+    let out = run(&corpus, &config(vec![gitleaks_spec("gitleaks", &bin)], 2));
+    assert!(matches!(
+        status_of(&out, "gitleaks"),
+        ObservationResult::Malformed { .. }
+    ));
+}
+
+#[test]
+fn per_case_handling_leaves_the_fixture_unmeasured_and_the_rest_measured() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = fake_gitleaks(dir.path(), "gitleaks", "8.30.1", ONE_GOOD_ONE_DECODED);
+    let corpus = smoke_corpus();
+    let mut spec = gitleaks_spec("gitleaks", &bin);
+    per_case(&mut spec);
+    let out = run(&corpus, &config(vec![spec], 2));
+    let ObservationResult::Complete {
+        findings,
+        unmeasured,
+        ..
+    } = status_of(&out, "gitleaks")
+    else {
+        panic!("expected complete");
+    };
+    assert_eq!(findings.len(), 1);
+    assert_eq!(unmeasured.len(), 1);
+    assert_eq!(
+        unmeasured[0].path.as_str(),
+        "contracts-smoke/positive-partial.txt"
+    );
+    assert!(
+        unmeasured[0]
+            .reason
+            .ends_with("Unsupported decoded Gitleaks finding")
+    );
+
+    let run = &out.artifact.scanners[0];
+    assert_eq!(run.status, ScannerStatus::Complete);
+    // The unmeasured case is reported, never a miss, and in no group.
+    assert_eq!(run.unmeasured_cases.len(), 1);
+    let case = run
+        .cases
+        .iter()
+        .find(|c| c.path.as_str() == "contracts-smoke/positive-partial.txt")
+        .unwrap();
+    assert_eq!(run.unmeasured_cases[0].case_id, case.case_id);
+    assert!(matches!(
+        case.measurement,
+        CaseMeasurement::NotMeasured {
+            status: ScannerStatus::Malformed
+        }
+    ));
+    assert!(case.actual.is_empty());
+    let measured = run
+        .cases
+        .iter()
+        .filter(|c| !matches!(c.measurement, CaseMeasurement::NotMeasured { .. }))
+        .count();
+    assert_eq!(measured, run.cases.len() - 1);
+    assert_schema_valid(&out.artifact);
+    // Raw output never reaches the artifact.
+    let text = serde_json::to_string(&out.artifact).unwrap();
+    assert!(!text.contains("decoded:base64"));
+}
+
+#[test]
+fn per_case_handling_still_fails_closed_on_an_unattributable_row() {
+    let dir = tempfile::tempdir().unwrap();
+    let scan = r#"echo "[{\"RuleID\":\"generic-api-key\",\"File\":\"$root/not-a-fixture.txt\",\"Secret\":\"x\",\"StartLine\":1,\"Tags\":[]}]""#;
+    let bin = fake_gitleaks(dir.path(), "gitleaks", "8.30.1", scan);
+    let corpus = smoke_corpus();
+    let mut spec = gitleaks_spec("gitleaks", &bin);
+    per_case(&mut spec);
+    let out = run(&corpus, &config(vec![spec], 2));
+    assert!(matches!(
+        status_of(&out, "gitleaks"),
+        ObservationResult::Malformed { .. }
+    ));
+}
+
+#[test]
+fn an_invalid_per_case_value_is_a_configuration_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = fake_gitleaks(dir.path(), "gitleaks", "8.30.1", "echo '[]'");
+    let corpus = smoke_corpus();
+    let mut spec = gitleaks_spec("gitleaks", &bin);
+    spec.configuration
+        .insert("unmappable_findings".into(), json!("ignore"));
+    let out = run(&corpus, &config(vec![spec], 1));
+    assert!(matches!(
+        status_of(&out, "gitleaks"),
+        ObservationResult::Error { .. }
     ));
 }

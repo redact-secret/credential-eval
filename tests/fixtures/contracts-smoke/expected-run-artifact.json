@@ -3,7 +3,7 @@
   "manifest": {
     "engine": {
       "name": "credential-eval",
-      "version": "0.1.0-alpha.1"
+      "version": "0.1.0-alpha.2"
     },
     "protocol_version": "credential-eval-protocol/1",
     "evidence": {

@@ -1963,6 +1963,13 @@
         "status": {
           "description": "Execution status. Anything but `complete` means not measured.",
           "$ref": "#/$defs/ScannerStatus"
+        },
+        "unmeasured_cases": {
+          "description": "Completeness report (v1.2): the cases a `complete` scanner could not\nmap to ranges, when the run configuration chose per-case handling.\nEach also appears in `cases` as `not_measured`. Excluded from every\naggregate and denominator, and never a `MISS`. Sorted by case id.\nAbsent when every case was measured.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/UnmeasuredCase"
+          }
         }
       },
       "additionalProperties": false,
@@ -2171,6 +2178,25 @@
         "pairs",
         "discriminated",
         "co_detected"
+      ]
+    },
+    "UnmeasuredCase": {
+      "description": "A case a scanner observed but whose output could not be mapped to ranges.",
+      "type": "object",
+      "properties": {
+        "case_id": {
+          "description": "Case id.",
+          "$ref": "#/$defs/CaseId"
+        },
+        "reason": {
+          "description": "Fixed, sanitized reason (an adapter constant). Never raw output.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "reason"
       ]
     },
     "VariantRecord": {
