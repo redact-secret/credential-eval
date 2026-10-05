@@ -1,0 +1,56 @@
+{
+ "profile": "default",
+ "case": "dense",
+ "kib": 256,
+ "total_ms": 3021,
+ "top": [
+  {
+   "name": "processPatterns presets-Dh9j6Xo-.js",
+   "share": 30.1
+  },
+  {
+   "name": "detect presets-Dh9j6Xo-.js",
+   "share": 15.3
+  },
+  {
+   "name": "overlapsWithExisting presets-Dh9j6Xo-.js",
+   "share": 6.9
+  },
+  {
+   "name": "(garbage collector)",
+   "share": 4.4
+  },
+  {
+   "name": "RegExp: Bearer",
+   "share": 1.5
+  },
+  {
+   "name": "detectDomains presets-Dh9j6Xo-.js",
+   "share": 1.4
+  },
+  {
+   "name": "safeExec presets-Dh9j6Xo-.js",
+   "share": 1.3
+  },
+  {
+   "name": "(anonymous) presets-Dh9j6Xo-.js",
+   "share": 1
+  },
+  {
+   "name": "extractContext presets-Dh9j6Xo-.js",
+   "share": 0.7
+  },
+  {
+   "name": "RegExp: \\b(from|to|subject|dear|regards|sincerely|cc|bcc):",
+   "share": 0.5
+  },
+  {
+   "name": "RegExp: \\b(function|const|let|var|class|import|export|return|if|else|for|while)\\b",
+   "share": 0.5
+  },
+  {
+   "name": "RegExp: (?:aws.{0,20})?(?:secret.{0,20})?([a-zA-Z0-9/+=]{40})",
+   "share": 0.4
+  }
+ ]
+}

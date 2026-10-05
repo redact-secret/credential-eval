@@ -1,0 +1,56 @@
+{
+ "profile": "default",
+ "case": "padding",
+ "kib": 256,
+ "total_ms": 1040,
+ "top": [
+  {
+   "name": "RegExp: The quick brown fox",
+   "share": 52.9
+  },
+  {
+   "name": "checkProximity presets-Dh9j6Xo-.js",
+   "share": 6.4
+  },
+  {
+   "name": "safeExec presets-Dh9j6Xo-.js",
+   "share": 3.3
+  },
+  {
+   "name": "overlapsWithExisting presets-Dh9j6Xo-.js",
+   "share": 3
+  },
+  {
+   "name": "RegExp: \\s+",
+   "share": 2.8
+  },
+  {
+   "name": "detectDomains presets-Dh9j6Xo-.js",
+   "share": 2.4
+  },
+  {
+   "name": "(anonymous) presets-Dh9j6Xo-.js",
+   "share": 2.3
+  },
+  {
+   "name": "extractContext presets-Dh9j6Xo-.js",
+   "share": 1.8
+  },
+  {
+   "name": "(garbage collector)",
+   "share": 1.6
+  },
+  {
+   "name": "processPatterns presets-Dh9j6Xo-.js",
+   "share": 0.9
+  },
+  {
+   "name": "RegExp: \\b(?:TNT[-\\s]?)?(?:TRACK(?:ING)?|NO|NUM|NUMBER)?[-\\s]?[:#]?\\s*([A-Z0-9]{9}|[A-Z0-9]{13})\\b",
+   "share": 0.8
+  },
+  {
+   "name": "RegExp: \\b(from|to|subject|dear|regards|sincerely|cc|bcc):",
+   "share": 0.8
+  }
+ ]
+}

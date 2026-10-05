@@ -218,10 +218,22 @@ pub fn builtin() -> Vec<Box<dyn Adapter>> {
     ]
 }
 
-/// Look up a built-in adapter by id.
+/// Diagnostic profiles of a built-in scanner. They are selectable by id like a
+/// built-in adapter but are never part of the default scanner set, so a
+/// default run, an official configuration and the default-options result are
+/// unaffected (ADR 0013). Sorted by id.
+pub fn diagnostic() -> Vec<Box<dyn Adapter>> {
+    vec![
+        Box::new(node::NodeAdapter::openredaction_credentials()),
+        Box::new(node::NodeAdapter::openredaction_mapped()),
+    ]
+}
+
+/// Look up a built-in or diagnostic adapter by id.
 pub fn find(adapter_id: &str) -> Option<Box<dyn Adapter>> {
     builtin()
         .into_iter()
+        .chain(diagnostic())
         .find(|a| a.identity().id.as_str() == adapter_id)
 }
 

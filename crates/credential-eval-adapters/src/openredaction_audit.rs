@@ -177,3 +177,57 @@ fn recorded_probe_spans_agree_with_the_dispositions() {
             .any(|t| t == "STRIPE_API_KEY")
     );
 }
+
+#[test]
+fn diagnostic_profiles_are_separate_identities_outside_the_default_set() {
+    use crate::{builtin, diagnostic, find};
+
+    let default_ids: Vec<String> = builtin()
+        .iter()
+        .map(|a| a.identity().id.to_string())
+        .collect();
+    let default = find("openredaction").unwrap().default_spec();
+    for id in ["openredaction-credentials", "openredaction-mapped"] {
+        assert!(
+            !default_ids.contains(&id.to_owned()),
+            "{id} must not be a default scanner"
+        );
+        let adapter = find(id).unwrap();
+        let spec = adapter.default_spec();
+        assert_eq!(spec.id.as_str(), id);
+        // A new configuration identity: neither the id, the options nor the
+        // hash can be confused with the default-options scanner's.
+        assert_ne!(spec.configuration_hash(), default.configuration_hash());
+        assert_eq!(spec.configuration["package"], "@openredaction/core");
+        assert_ne!(
+            spec.configuration["options"],
+            default.configuration["options"]
+        );
+    }
+    assert_eq!(diagnostic().len(), 2);
+    assert_eq!(default.configuration["options"], serde_json::json!({}));
+}
+
+#[test]
+fn the_mapped_allowlist_is_exactly_the_mapped_dispositions() {
+    let spec = crate::find("openredaction-mapped").unwrap().default_spec();
+    let listed: Vec<&str> = spec.configuration["options"]["patterns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let mapped: Vec<String> = dispositions()
+        .iter()
+        .filter(|d| text(d, "status") == "mapped")
+        .map(|d| text(d, "type").to_owned())
+        .collect();
+    assert_eq!(listed, mapped);
+    let credentials = crate::find("openredaction-credentials")
+        .unwrap()
+        .default_spec();
+    assert_eq!(
+        credentials.configuration["options"],
+        serde_json::json!({"categories": ["credentials"]})
+    );
+}

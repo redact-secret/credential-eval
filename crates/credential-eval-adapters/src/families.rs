@@ -399,6 +399,19 @@ pub fn finding_family(
     family.map(str::to_owned)
 }
 
+/// The native types of `table` that map to a family, sorted. Used to build the
+/// explicit allowlist of a diagnostic profile, so the allowlist cannot drift
+/// from the mapping.
+pub fn mapped_types(table: LabelTable) -> Vec<&'static str> {
+    let entries: &[(&str, &str)] = match table {
+        LabelTable::OpenRedaction => OPEN_REDACTION,
+        _ => &[],
+    };
+    let mut types: Vec<&'static str> = entries.iter().map(|(label, _)| *label).collect();
+    types.sort_unstable();
+    types
+}
+
 /// The native labels of `table` that have been reviewed against the exact
 /// published package, or `None` when the table has no reviewed set. Only a
 /// reviewed label is ever recorded (ADR 0011).

@@ -47,6 +47,9 @@ const PROBE_STDOUT: u64 = 64 * 1024;
 #[derive(Debug, Clone)]
 pub struct NodeAdapter {
     id: &'static str,
+    /// The key the Node shim knows the package by (the adapter id, except for
+    /// a diagnostic profile of a package that has its own adapter).
+    shim_key: &'static str,
     version: &'static str,
     package: &'static str,
     mode: &'static str,
@@ -62,6 +65,7 @@ impl NodeAdapter {
     pub fn redact_secret() -> Self {
         Self {
             id: "redact-secret",
+            shim_key: "redact-secret",
             version: "3",
             package: "@redact-secret/core",
             mode: "Published npm package · default detectors",
@@ -75,6 +79,7 @@ impl NodeAdapter {
     pub fn flare_redact() -> Self {
         Self {
             id: "flare-redact",
+            shim_key: "flare-redact",
             version: "1",
             package: "flare-redact",
             mode: "Published npm package · secrets-only (pii, generic_assignment disabled) · JavaScript engine",
@@ -90,12 +95,48 @@ impl NodeAdapter {
     pub fn openredaction() -> Self {
         Self {
             id: "openredaction",
+            shim_key: "openredaction",
             version: "2",
             package: "@openredaction/core",
             mode: "Published npm package · default patterns (PII enabled) · pattern coverage only",
             table: LabelTable::OpenRedaction,
             options: Some(json!({})),
             extra: &[],
+        }
+    }
+
+    /// Diagnostic profile of `@openredaction/core`: only the patterns of the
+    /// `credentials` category (32 of 579; `URL_WITH_AUTH` is outside it). Not
+    /// part of the default scanner set and never a replacement for the
+    /// default-options result (ADR 0013).
+    pub fn openredaction_credentials() -> Self {
+        Self {
+            id: "openredaction-credentials",
+            shim_key: "openredaction",
+            version: "1",
+            package: "@openredaction/core",
+            mode: "Published npm package · categories [credentials] · diagnostic profile",
+            table: LabelTable::OpenRedaction,
+            options: Some(json!({"categories": ["credentials"]})),
+            extra: &[("profile", "credentials-category")],
+        }
+    }
+
+    /// Diagnostic profile of `@openredaction/core`: an explicit allowlist of
+    /// the types the adapter maps to a family today (see ADR 0012). Not part
+    /// of the default scanner set.
+    pub fn openredaction_mapped() -> Self {
+        Self {
+            id: "openredaction-mapped",
+            shim_key: "openredaction",
+            version: "1",
+            package: "@openredaction/core",
+            mode: "Published npm package · explicit allowlist of mapped types · diagnostic profile",
+            table: LabelTable::OpenRedaction,
+            options: Some(
+                json!({"patterns": crate::families::mapped_types(LabelTable::OpenRedaction)}),
+            ),
+            extra: &[("profile", "mapped-allowlist")],
         }
     }
 
@@ -276,7 +317,7 @@ impl Adapter for NodeAdapter {
             let out = probe(vec![
                 shim.clone().into_os_string(),
                 "version".into(),
-                self.id.into(),
+                self.shim_key.into(),
                 package_root.clone().into_os_string(),
             ])?;
             serde_json::from_slice::<Value>(out.trim_ascii_end())
@@ -295,7 +336,7 @@ impl Adapter for NodeAdapter {
                 prefix_args: vec![
                     shim.into_os_string(),
                     "scan".into(),
-                    self.id.into(),
+                    self.shim_key.into(),
                     package_root.into_os_string(),
                 ],
                 settings: json!({"options": self.options}),
