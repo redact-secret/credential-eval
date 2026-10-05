@@ -184,6 +184,12 @@ pub fn score_scanner(corpus: &CorpusSnapshot, observation: &ScannerObservation) 
             case_result(case, actual, measurement)
         })
         .collect();
+    let scope_accounting = if complete {
+        credential_eval_contracts::scope::ScopeTable::for_scanner(&observation.scanner.id)
+            .map(|table| credential_eval_contracts::scope::account(table, &findings))
+    } else {
+        None
+    };
     ScannerRun {
         scanner: observation.scanner.id.clone(),
         status,
@@ -194,6 +200,7 @@ pub fn score_scanner(corpus: &CorpusSnapshot, observation: &ScannerObservation) 
         assertions: Vec::new(),
         aggregates: Aggregates::default(),
         unmeasured_cases,
+        scope_accounting,
     }
 }
 

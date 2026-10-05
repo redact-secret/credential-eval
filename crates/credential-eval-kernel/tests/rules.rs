@@ -652,6 +652,73 @@ fn scanner_aggregates_fill_groups_and_targets_only_when_complete() {
 }
 
 #[test]
+fn scope_accounting_is_attached_only_to_a_complete_scanner_with_a_reviewed_table() {
+    use credential_eval_kernel::score::score_scanner;
+    let snap = snapshot();
+    let finding = |start, end, family: Option<&str>, labels: &[&str]| NormalizedFinding {
+        path: FixturePath::new("g/pos.txt").unwrap(),
+        start,
+        end,
+        family: family.map(str::to_owned),
+        action: None,
+        mapping: None,
+        native_labels: labels
+            .iter()
+            .map(|l| credential_eval_contracts::ids::NativeLabel::new(*l).unwrap())
+            .collect(),
+    };
+    let observe = |id: &str, result| ScannerObservation {
+        scanner: identity(id, "1"),
+        result,
+        duration_ms: None,
+    };
+    let complete = |findings| ObservationResult::Complete {
+        unmeasured: Vec::new(),
+        findings,
+        replays: Replays {
+            count: 2,
+            agreed: true,
+        },
+    };
+    let findings = vec![
+        finding(6, 16, Some("seg"), &["GITHUB_TOKEN"]),
+        finding(0, 2, None, &["EMAIL"]),
+        finding(3, 5, None, &["DOCKER_AUTH"]),
+        finding(20, 22, None, &[]),
+    ];
+    let run = score_scanner(
+        &snap,
+        &observe("openredaction-credentials", complete(findings)),
+    );
+    let acc = run.scope_accounting.expect("reviewed table");
+    assert_eq!(acc.findings as usize, run.findings.len());
+    assert_eq!(acc.by_disposition.total(), acc.findings);
+    assert_eq!(
+        (
+            acc.by_disposition.mapped_credential,
+            acc.by_disposition.out_of_scope,
+            acc.by_disposition.credential_related_unmapped,
+            acc.by_disposition.native_label_unavailable
+        ),
+        (1, 1, 1, 1)
+    );
+    // Zero findings is a measured zero, not an absent accounting.
+    let zero = score_scanner(&snap, &observe("openredaction", complete(Vec::new())));
+    assert_eq!(zero.scope_accounting.unwrap().findings, 0);
+    // No reviewed table, or not measured: not accounted, never zero.
+    let other = score_scanner(&snap, &observe("gitleaks", complete(Vec::new())));
+    assert!(other.scope_accounting.is_none());
+    let failed = score_scanner(
+        &snap,
+        &observe(
+            "openredaction",
+            ObservationResult::Error { reason: "e".into() },
+        ),
+    );
+    assert!(failed.scope_accounting.is_none());
+}
+
+#[test]
 fn differential_reference_is_a_run_parameter() {
     let snap = snapshot();
     let cases = build_cases(&snap, &[MethodId::Differential], &case_id_seed).unwrap();

@@ -32,6 +32,8 @@ pub mod performance;
 pub mod range;
 pub mod representation;
 pub mod schema;
+pub mod scope;
+mod scope_table_openredaction;
 
 pub use error::ContractError;
 
