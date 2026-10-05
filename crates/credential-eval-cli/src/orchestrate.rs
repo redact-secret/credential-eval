@@ -1336,6 +1336,28 @@ mod tests {
         }
     }
 
+    /// Every committed official configuration binds to the adapters built into
+    /// this engine. A scanner adapter whose version moved (OpenRedaction 1 to 2
+    /// with native labels, ADR 0011) must move the configs in the same change,
+    /// or an official run is refused at its first step.
+    #[test]
+    fn every_official_configuration_binds_to_the_built_in_adapters() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../configs/official");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let config: RunConfig = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            if let Err(error) = bind(&config) {
+                panic!("{}: {error}", path.display());
+            }
+            checked += 1;
+        }
+        assert!(checked >= 4, "the official configurations were not found");
+    }
+
     #[test]
     fn replay_comparison_is_order_insensitive_and_names_paths() {
         let a = vec![f("a", 1), f("b", 2), f("a", 3)];
