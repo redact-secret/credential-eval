@@ -13,6 +13,7 @@ use std::process::{Command, Output};
 use common::*;
 use credential_eval_contracts::artifact::RunArtifact;
 use credential_eval_contracts::corpus::CorpusSnapshot;
+use credential_eval_contracts::observation::ScannerStatus;
 use serde_json::Value;
 
 fn bin() -> Command {
@@ -168,6 +169,22 @@ fn method_runs_are_deterministic_schema_valid_and_complete() {
         // Evidence is the base snapshot, not the derived variant corpus.
         let base = CorpusSnapshot::from_json(&fs::read(&s.corpus).unwrap()).unwrap();
         assert_eq!(artifact.manifest.evidence, base.identity);
+        // Telemetry separates generation from scanning, and counts the
+        // variants the scanners saw next to the cases they came from.
+        let execution = artifact.non_semantic.execution.as_ref().unwrap();
+        let phases = execution.phases.as_ref().unwrap();
+        assert_eq!(phases.cases, base.cases.len() as u64);
+        assert_eq!(phases.fixtures, artifact.variants.len() as u64);
+        assert!(phases.fixtures > phases.cases);
+        assert_eq!(execution.scanners.len(), artifact.scanners.len());
+        assert!(
+            execution
+                .scanners
+                .values()
+                .all(|t| t.completion == ScannerStatus::Complete && t.fixtures == phases.fixtures)
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("phase=generate event=end"), "{stderr}");
     }
     assert_eq!(texts[0], texts[1], "jobs must not change a method run");
 

@@ -17,16 +17,22 @@ use std::sync::{Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::progress::{Activity, Event, Kind, Phase, Progress};
+
 use credential_eval_adapters::process::{self, CancelToken};
 use credential_eval_adapters::{
     Adapter, AdapterEnv, Fixtures, NormalizedFinding, ObservationResult, Prepared, ScannerIdentity,
     ScannerObservation, ScannerProvenance, classify, request,
 };
-use credential_eval_contracts::artifact::{ExecutionDiagnostics, RunArtifact};
+use credential_eval_contracts::artifact::{
+    ExecutionDiagnostics, FailedPhase, PhaseTimings, RunArtifact, ScannerTiming,
+};
 use credential_eval_contracts::config::{RunConfig, ScannerSpec, SeedConvention};
 use credential_eval_contracts::corpus::CorpusSnapshot;
 use credential_eval_contracts::ids::FixturePath;
-use credential_eval_contracts::observation::{ObservationSet, Replays, UnmeasuredPath};
+use credential_eval_contracts::observation::{
+    ObservationSet, Replays, ScannerStatus, UnmeasuredPath,
+};
 use credential_eval_contracts::schema::ObservationSetSchema;
 use credential_eval_kernel::evaluation::cases::build_cases;
 use credential_eval_kernel::evaluation::{
@@ -79,6 +85,9 @@ pub struct RunRequest<'a> {
     /// Official run: refuse to scan unless every scanner resolved to its
     /// `pin` ([`crate::official::check_pin`]). Exploratory runs ignore pins.
     pub enforce_pins: bool,
+    /// Operational progress receiver (stderr in the CLI). Progress never
+    /// feeds the artifact's semantic content.
+    pub progress: &'a dyn Progress,
 }
 
 /// Result of a run.
@@ -211,6 +220,25 @@ struct Slot {
     result: TaskResult,
     process: Duration,
     normalize: Duration,
+    /// When the task started and ended (`None` for a skipped task).
+    span: Option<(Instant, Instant)>,
+    /// Scanner stdout bytes received.
+    received_bytes: u64,
+    /// Phase in which the task failed.
+    failed_phase: Option<Phase>,
+}
+
+impl Slot {
+    fn skipped() -> Self {
+        Self {
+            result: TaskResult::Skipped,
+            process: Duration::ZERO,
+            normalize: Duration::ZERO,
+            span: None,
+            received_bytes: 0,
+            failed_phase: None,
+        }
+    }
 }
 
 struct Queue {
@@ -227,6 +255,8 @@ struct Timing {
     evaluator: Duration,
     processes: u64,
     scanner_process: Duration,
+    phases: PhaseTimings,
+    scanners: BTreeMap<String, ScannerTiming>,
 }
 
 impl Timing {
@@ -237,7 +267,26 @@ impl Timing {
             evaluator: Duration::ZERO,
             processes: 0,
             scanner_process: Duration::ZERO,
+            phases: PhaseTimings::default(),
+            scanners: BTreeMap::new(),
         }
+    }
+
+    /// Milliseconds since the run started.
+    fn offset_ms(&self, at: Instant) -> u64 {
+        millis(at.saturating_duration_since(self.wall))
+    }
+
+    /// Emit a run-level or scanner-level progress event.
+    fn emit(
+        &self,
+        progress: &dyn Progress,
+        scanner: Option<&str>,
+        phase: Phase,
+        kind: Kind,
+        since: Option<Instant>,
+    ) {
+        emit(progress, self.wall, scanner, phase, kind, since, None, None);
     }
 
     /// Record the run's non-semantic metadata on `artifact`.
@@ -255,6 +304,8 @@ impl Timing {
             wall_ms: millis(self.wall.elapsed()),
             scanner_process_ms: millis(self.scanner_process),
             evaluator_ms: millis(self.evaluator),
+            phases: Some(self.phases),
+            scanners: self.scanners,
         });
     }
 }
@@ -263,11 +314,22 @@ impl Timing {
 /// legacy `bench` pipeline).
 pub fn run(request: &RunRequest<'_>) -> Result<RunOutput, RunError> {
     let mut timing = Timing::start();
+    timing.phases.cases = request.corpus.cases.len() as u64;
+    timing.emit(
+        request.progress,
+        None,
+        Phase::Materialize,
+        Kind::Start,
+        None,
+    );
+    let phase = Instant::now();
     request
         .corpus
         .validate()
         .map_err(|e| RunError::Corpus(e.to_string()))?;
+    timing.phases.materialize_ms += millis(phase.elapsed());
     let observations = scan(request, request.corpus, &mut timing)?;
+    timing.emit(request.progress, None, Phase::Evaluate, Kind::Start, None);
     let phase = Instant::now();
     let artifact = credential_eval_kernel::score::build_artifact(
         request.corpus,
@@ -276,6 +338,14 @@ pub fn run(request: &RunRequest<'_>) -> Result<RunOutput, RunError> {
     )
     .map_err(|e| RunError::Config(e.to_string()))?;
     timing.evaluator += phase.elapsed();
+    timing.phases.evaluate_ms += millis(phase.elapsed());
+    timing.emit(
+        request.progress,
+        None,
+        Phase::Evaluate,
+        Kind::End,
+        Some(phase),
+    );
     let mut artifact = artifact;
     timing.stamp(&mut artifact, request.config.execution.jobs);
     Ok(RunOutput {
@@ -292,10 +362,46 @@ fn scan(
     corpus: &CorpusSnapshot,
     timing: &mut Timing,
 ) -> Result<ObservationSet, RunError> {
+    let activity = Activity::default();
+    let stop = (Mutex::new(false), Condvar::new());
+    let run_started = timing.wall;
+    thread::scope(|outer| {
+        if let Some(interval) = request.progress.heartbeat_interval() {
+            let (stop, activity) = (&stop, &activity);
+            outer.spawn(move || {
+                let (flag, signal) = stop;
+                let mut done = flag.lock().expect("heartbeat lock");
+                loop {
+                    let (guard, _) = signal
+                        .wait_timeout_while(done, interval, |done| !*done)
+                        .expect("heartbeat lock");
+                    done = guard;
+                    if *done {
+                        return;
+                    }
+                    activity.heartbeat(request.progress, run_started);
+                }
+            });
+        }
+        let result = scan_tasks(request, corpus, timing, &activity);
+        *stop.0.lock().expect("heartbeat lock") = true;
+        stop.1.notify_all();
+        result
+    })
+}
+
+fn scan_tasks(
+    request: &RunRequest<'_>,
+    corpus: &CorpusSnapshot,
+    timing: &mut Timing,
+    activity: &Activity,
+) -> Result<ObservationSet, RunError> {
     let mut evaluator = Duration::ZERO;
     let mut processes = 0u64;
     let mut scanner_process = Duration::ZERO;
 
+    let progress = request.progress;
+    let run_started = timing.wall;
     let phase = Instant::now();
     let scanners = bind(request.config)?;
     let (guard, root) = materialize(corpus, request.work_dir)?;
@@ -309,25 +415,75 @@ fn scan(
             .map(|c| (c.path.as_str(), c.content.as_str())),
     );
     evaluator += phase.elapsed();
+    timing.phases.materialize_ms += millis(phase.elapsed());
+    timing.phases.fixtures = corpus.cases.len() as u64;
+    emit(
+        progress,
+        run_started,
+        None,
+        Phase::Materialize,
+        Kind::End,
+        Some(phase),
+        Some((corpus.cases.len() as u64, corpus.cases.len() as u64)),
+        None,
+    );
 
     // Prepare every scanner (bounded version probes).
+    let prepare_phase = Instant::now();
     let mut prepared: Vec<Result<Prepared, Box<credential_eval_adapters::PrepareFailure>>> =
         Vec::new();
     for scanner in &scanners {
         if request.cancel.is_cancelled() {
             return Err(RunError::Cancelled);
         }
+        let id = scanner.spec.id.as_str();
+        let id_activity = activity.begin(id, Phase::Prepare, None);
+        emit(
+            progress,
+            run_started,
+            Some(id),
+            Phase::Prepare,
+            Kind::Start,
+            None,
+            None,
+            None,
+        );
+        let started = Instant::now();
         let result = scanner
             .adapter
             .prepare(&scanner.spec, request.env, request.cancel);
+        activity.end(id_activity);
         let (count, time) = match &result {
             Ok(p) => (p.processes, p.process_time),
             Err(f) => (f.processes, f.process_time),
         };
+        match &result {
+            Ok(_) => emit(
+                progress,
+                run_started,
+                Some(id),
+                Phase::Prepare,
+                Kind::End,
+                Some(started),
+                None,
+                None,
+            ),
+            Err(f) => emit(
+                progress,
+                run_started,
+                Some(id),
+                Phase::Prepare,
+                Kind::Failed,
+                Some(started),
+                None,
+                Some(status_name(&f.result)),
+            ),
+        }
         processes += count;
         scanner_process += time;
         prepared.push(result);
     }
+    timing.phases.prepare_ms += millis(prepare_phase.elapsed());
     if request.enforce_pins {
         // Before any scan runs: an official run never measures an unpinned
         // or mismatched scanner.
@@ -362,6 +518,7 @@ fn scan(
         .unwrap_or(usize::MAX)
         .min(tasks.len().max(1));
 
+    let scan_started = Instant::now();
     thread::scope(|scope| {
         for _ in 0..jobs {
             scope.spawn(|| {
@@ -378,11 +535,7 @@ fn scan(
                             let t = &tasks[i];
                             let moot = failed[t.scanner].is_some_and(|f| t.replay > f);
                             if moot {
-                                *slots[i].lock().expect("slot lock") = Some(Slot {
-                                    result: TaskResult::Skipped,
-                                    process: Duration::ZERO,
-                                    normalize: Duration::ZERO,
-                                });
+                                *slots[i].lock().expect("slot lock") = Some(Slot::skipped());
                             }
                             !moot
                         });
@@ -414,7 +567,21 @@ fn scan(
                     let task = &tasks[index];
                     let scanner = &scanners[task.scanner];
                     let ready = prepared[task.scanner].as_ref().expect("prepared scanner");
-                    let slot = execute(scanner, ready, &root, &paths, &fixtures, request.cancel);
+                    let context = TaskContext {
+                        progress,
+                        activity,
+                        run_started,
+                        replay: (u64::from(task.replay) + 1, u64::from(replays)),
+                    };
+                    let slot = execute(
+                        scanner,
+                        ready,
+                        &root,
+                        &paths,
+                        &fixtures,
+                        request.cancel,
+                        &context,
+                    );
                     let failed = matches!(slot.result, TaskResult::Failed(_));
                     *slots[index].lock().expect("slot lock") = Some(slot);
                     let mut state = queue.lock().expect("queue lock");
@@ -429,6 +596,7 @@ fn scan(
             });
         }
     });
+    timing.phases.scan_ms += millis(scan_started.elapsed());
     if request.cancel.is_cancelled() {
         return Err(RunError::Cancelled);
     }
@@ -444,18 +612,59 @@ fn scan(
             Err(f) => f.process_time,
         })
         .collect();
+    let mut shapes: Vec<ScannerTiming> = scanners
+        .iter()
+        .zip(&prepared)
+        .map(|(_, p)| ScannerTiming {
+            prepare_ms: millis(match p {
+                Ok(p) => p.process_time,
+                Err(f) => f.process_time,
+            }),
+            queue_ms: 0,
+            start_ms: 0,
+            end_ms: 0,
+            process_ms: 0,
+            normalize_ms: 0,
+            tasks: 0,
+            fixtures: corpus.cases.len() as u64,
+            received_bytes: 0,
+            findings: 0,
+            // Replaced from the observation once collated.
+            completion: ScannerStatus::Error,
+            failed_phase: None,
+        })
+        .collect();
+    let mut spans: Vec<Option<(Instant, Instant)>> = vec![None; scanners.len()];
+    let mut failed_phase: Vec<Option<Phase>> = vec![None; scanners.len()];
     for (task, slot) in tasks.iter().zip(slots) {
-        let slot = slot.into_inner().expect("slot lock").unwrap_or(Slot {
-            result: TaskResult::Skipped,
-            process: Duration::ZERO,
-            normalize: Duration::ZERO,
-        });
+        let slot = slot
+            .into_inner()
+            .expect("slot lock")
+            .unwrap_or_else(Slot::skipped);
         if !matches!(slot.result, TaskResult::Skipped) {
             processes += 1;
         }
         scanner_process += slot.process;
         durations[task.scanner] += slot.process;
         evaluator += slot.normalize;
+        let shape = &mut shapes[task.scanner];
+        shape.process_ms += millis(slot.process);
+        shape.normalize_ms += millis(slot.normalize);
+        shape.received_bytes += slot.received_bytes;
+        if let Some((start, end)) = slot.span {
+            shape.tasks += 1;
+            let span = spans[task.scanner].get_or_insert((start, end));
+            span.0 = span.0.min(start);
+            span.1 = span.1.max(end);
+        }
+        if let TaskResult::Findings(findings, _) = &slot.result {
+            if task.replay == 0 {
+                shape.findings = findings.len() as u64;
+            }
+        }
+        if failed_phase[task.scanner].is_none() {
+            failed_phase[task.scanner] = slot.failed_phase;
+        }
         per_scanner[task.scanner].push((task.replay, slot.result));
     }
     let observations: Vec<ScannerObservation> = scanners
@@ -467,6 +676,26 @@ fn scan(
             observe(scanner, prepared, results, replays, duration)
         })
         .collect();
+    for (index, (scanner, observation)) in scanners.iter().zip(&observations).enumerate() {
+        let shape = &mut shapes[index];
+        if let Some((start, end)) = spans[index] {
+            shape.queue_ms = millis(start.saturating_duration_since(scan_started));
+            shape.start_ms = timing.offset_ms(start);
+            shape.end_ms = timing.offset_ms(end);
+        }
+        shape.completion = observation.result.status();
+        // No task ran: the scanner failed in `prepare`. Replay disagreement
+        // (or missing replays) is the only other failure without a task phase.
+        shape.failed_phase = match (&observation.result, failed_phase[index]) {
+            (ObservationResult::Complete { .. }, _) => None,
+            (_, Some(phase)) => Some(failed_phase_of(phase)),
+            (_, None) if shape.tasks == 0 => Some(FailedPhase::Prepare),
+            (_, None) => Some(FailedPhase::Replay),
+        };
+        timing
+            .scanners
+            .insert(scanner.spec.id.to_string(), shape.clone());
+    }
     let observations = ObservationSet {
         schema: ObservationSetSchema,
         corpus_digest: corpus.identity.corpus_digest.clone(),
@@ -527,11 +756,22 @@ pub fn run_methods(
             )));
         }
     }
+    timing.phases.cases = request.corpus.cases.len() as u64;
+    timing.emit(
+        request.progress,
+        None,
+        Phase::Materialize,
+        Kind::Start,
+        None,
+    );
     let phase = Instant::now();
     request
         .corpus
         .validate()
         .map_err(|e| RunError::Corpus(e.to_string()))?;
+    timing.phases.materialize_ms += millis(phase.elapsed());
+    timing.emit(request.progress, None, Phase::Generate, Kind::Start, None);
+    let phase = Instant::now();
     let seed: &dyn Fn(&credential_eval_contracts::corpus::Case) -> String = match settings.seed {
         SeedConvention::CaseId => &credential_eval_kernel::evaluation::cases::case_id_seed,
         SeedConvention::LegacyCategory => &credential_eval_kernel::compat::legacy_seed,
@@ -542,9 +782,21 @@ pub fn run_methods(
         .map_err(|e| RunError::Corpus(e.to_string()))?;
     let variants = plan.variant_corpus(&request.corpus.identity);
     timing.evaluator += phase.elapsed();
+    timing.phases.generate_ms += millis(phase.elapsed());
+    emit(
+        request.progress,
+        timing.wall,
+        None,
+        Phase::Generate,
+        Kind::End,
+        Some(phase),
+        Some((variants.cases.len() as u64, variants.cases.len() as u64)),
+        None,
+    );
 
     let observed = scan(request, &variants, &mut timing)?;
 
+    timing.emit(request.progress, None, Phase::Evaluate, Kind::Start, None);
     let phase = Instant::now();
     let observations = match methods.allowlist {
         Some(allowlist) => restrict_observations(&observed, allowlist),
@@ -564,6 +816,14 @@ pub fn run_methods(
         .artifact(&plan, request.corpus, request.config, &observations)
         .map_err(|e| RunError::Config(e.to_string()))?;
     timing.evaluator += phase.elapsed();
+    timing.phases.evaluate_ms += millis(phase.elapsed());
+    timing.emit(
+        request.progress,
+        None,
+        Phase::Evaluate,
+        Kind::End,
+        Some(phase),
+    );
     timing.stamp(&mut artifact, request.config.execution.jobs);
     Ok(MethodOutput {
         plan,
@@ -573,8 +833,61 @@ pub fn run_methods(
     })
 }
 
+/// Send one event to `progress`.
+#[allow(clippy::too_many_arguments)]
+fn emit(
+    progress: &dyn Progress,
+    run_started: Instant,
+    scanner: Option<&str>,
+    phase: Phase,
+    kind: Kind,
+    since: Option<Instant>,
+    processed: Option<(u64, u64)>,
+    status: Option<&'static str>,
+) {
+    progress.event(&Event {
+        scanner,
+        phase,
+        kind,
+        run_elapsed: run_started.elapsed(),
+        elapsed: since.map(|s| s.elapsed()),
+        processed,
+        status,
+    });
+}
+
+/// The artifact's name for the phase a scan task failed in.
+fn failed_phase_of(phase: Phase) -> FailedPhase {
+    match phase {
+        Phase::Normalize => FailedPhase::Normalize,
+        _ => FailedPhase::Scan,
+    }
+}
+
+fn status_name(result: &ObservationResult) -> &'static str {
+    use credential_eval_contracts::observation::ScannerStatus as S;
+    match result.status() {
+        S::Complete => "complete",
+        S::Unstable => "unstable",
+        S::Unsupported => "unsupported",
+        S::Unavailable => "unavailable",
+        S::Timeout => "timeout",
+        S::Malformed => "malformed",
+        S::Error => "error",
+    }
+}
+
 fn millis(d: Duration) -> u64 {
     u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
+}
+
+/// Progress plumbing of one scan task.
+struct TaskContext<'a> {
+    progress: &'a dyn Progress,
+    activity: &'a Activity,
+    run_started: Instant,
+    /// `(replay number from 1, replays)`.
+    replay: (u64, u64),
 }
 
 /// Run one scan and normalize its output. Raw stdout never leaves here.
@@ -585,22 +898,55 @@ fn execute(
     paths: &[&str],
     fixtures: &Fixtures<'_>,
     cancel: &CancelToken,
+    context: &TaskContext<'_>,
 ) -> Slot {
+    let id = scanner.spec.id.as_str();
+    let emit = |phase, kind, since, status| {
+        emit(
+            context.progress,
+            context.run_started,
+            Some(id),
+            phase,
+            kind,
+            since,
+            Some(context.replay),
+            status,
+        );
+    };
+    let task_started = Instant::now();
+    let handle = context
+        .activity
+        .begin(id, Phase::Scan, Some(context.replay));
+    emit(Phase::Scan, Kind::Start, None, None);
     let invocation = scanner.adapter.scan_invocation(prepared, root, paths);
     let run = process::run(&request(invocation, root, &scanner.spec.limits), cancel);
     let process = run.elapsed;
+    let received_bytes = match &run.outcome {
+        process::ProcessOutcome::Exited { stdout, .. } => stdout.len() as u64,
+        _ => 0,
+    };
     let started = Instant::now();
+    let mut failed_phase = None;
     let result = match classify(scanner.adapter.as_ref(), run, &scanner.spec.limits) {
-        Err(failure) => TaskResult::Failed(failure),
+        Err(failure) => {
+            failed_phase = Some(Phase::Scan);
+            TaskResult::Failed(failure)
+        }
         Ok(stdout) => {
+            context.activity.advance(handle, Phase::Normalize);
+            emit(Phase::Scan, Kind::End, Some(task_started), None);
+            emit(Phase::Normalize, Kind::Start, None, None);
             let normalized = scanner
                 .adapter
                 .normalize_measured(prepared, &stdout, fixtures);
             drop(stdout);
             match normalized {
-                Err(error) => TaskResult::Failed(ObservationResult::Malformed {
-                    reason: format!("scanner output could not be mapped to ranges: {error}"),
-                }),
+                Err(error) => {
+                    failed_phase = Some(Phase::Normalize);
+                    TaskResult::Failed(ObservationResult::Malformed {
+                        reason: format!("scanner output could not be mapped to ranges: {error}"),
+                    })
+                }
                 Ok(credential_eval_adapters::Measured {
                     findings,
                     unmeasured,
@@ -622,6 +968,7 @@ fn execute(
                     if valid {
                         TaskResult::Findings(findings, unmeasured)
                     } else {
+                        failed_phase = Some(Phase::Normalize);
                         TaskResult::Failed(ObservationResult::Malformed {
                             reason:
                                 "scanner finding is not a valid UTF-8 byte range of its fixture"
@@ -632,10 +979,26 @@ fn execute(
             }
         }
     };
+    context.activity.end(handle);
+    match (&result, failed_phase) {
+        (TaskResult::Failed(failure), Some(phase)) => {
+            // A scan failure never ended its scan phase above.
+            emit(
+                phase,
+                Kind::Failed,
+                Some(task_started),
+                Some(status_name(failure)),
+            );
+        }
+        _ => emit(Phase::Normalize, Kind::End, Some(started), None),
+    }
     Slot {
         result,
         process,
         normalize: started.elapsed(),
+        span: Some((task_started, Instant::now())),
+        received_bytes,
+        failed_phase,
     }
 }
 

@@ -12,6 +12,7 @@
 //!                     [--evidence-release <tag> --evidence-manifest <file>
 //!                      --evidence-manifest-digest <sha256>]
 //!                     [--require-complete] [--strict] [--require-fully-measured]
+//!                     [--progress-interval <seconds>] [--no-progress]
 //! credential-eval compat legacy-bench --artifact <artifact.json> --index <legacy-index.json>
 //!                     --out-dir <dir>
 //! credential-eval perf run --config <performance-config.json> --out <performance-artifact.json>
@@ -36,6 +37,12 @@
 //! release flags may also be given to an exploratory run; a mismatch is then
 //! refused as well.
 //!
+//! Progress: unless `--no-progress`, `run` writes bounded `progress ...` lines
+//! to stderr (scanner, phase, elapsed time, processed count) and, every
+//! `--progress-interval` seconds (default 10, 0 disables), one heartbeat line
+//! per running scanner task. Lines hold fixed vocabulary and numbers only.
+//! stdout is untouched. See `docs/performance-measurement.md`.
+//!
 //! Exit codes: 0 artifact written; 1 run failed (no artifact); 2 usage or
 //! configuration error; 3 artifact written but `--require-complete`/`--strict`
 //! was given and a scanner did not complete (or, for methods, a generation
@@ -54,6 +61,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::{Duration, Instant};
 
 use credential_eval_adapters::AdapterEnv;
 use credential_eval_adapters::process::CancelToken;
@@ -61,6 +69,7 @@ use credential_eval_cli::evidence;
 use credential_eval_cli::official;
 use credential_eval_cli::orchestrate::{self, MethodRequest, RunError, RunRequest};
 use credential_eval_cli::perf;
+use credential_eval_cli::progress::{Event, Kind, Phase, Progress, Silent, StderrProgress};
 use credential_eval_contracts::artifact::{RunArtifact, RunClass};
 use credential_eval_contracts::config::{EvaluationSettings, RunConfig, SeedConvention};
 use credential_eval_contracts::corpus::CorpusSnapshot;
@@ -82,6 +91,7 @@ usage:
                       [--evidence-release <tag> --evidence-manifest <file>
                        --evidence-manifest-digest <sha256>]
                       [--require-complete] [--strict] [--require-fully-measured]
+                      [--progress-interval <seconds>] [--no-progress]
   credential-eval compat legacy-bench --artifact <artifact.json>
                       --index <legacy-index.json> --out-dir <dir>
   credential-eval perf run --config <performance-config.json>
@@ -124,7 +134,14 @@ struct RunArgs {
     evidence_release: Option<String>,
     evidence_manifest: Option<PathBuf>,
     evidence_manifest_digest: Option<String>,
+    no_progress: bool,
+    progress_interval: Option<u64>,
 }
+
+/// Default seconds between heartbeat lines.
+const DEFAULT_PROGRESS_INTERVAL: u64 = 10;
+/// Longest accepted heartbeat interval, in seconds (bounds the silence).
+const MAX_PROGRESS_INTERVAL: u64 = 3600;
 
 fn parse_methods(list: &str) -> Result<Vec<MethodId>, Usage> {
     if list == "all" {
@@ -188,6 +205,20 @@ fn parse(args: &[OsString]) -> Result<RunArgs, Usage> {
             "--require-complete" | "--strict" => parsed.require_complete = true,
             "--require-fully-measured" => parsed.require_fully_measured = true,
             "--fail-on-assertions" => parsed.fail_on_assertions = true,
+            "--no-progress" => parsed.no_progress = true,
+            "--progress-interval" => {
+                parsed.progress_interval = Some(
+                    value()?
+                        .to_str()
+                        .and_then(|s| s.parse().ok())
+                        .filter(|n| *n <= MAX_PROGRESS_INTERVAL)
+                        .ok_or_else(|| {
+                            usage(format!(
+                                "--progress-interval takes 0..={MAX_PROGRESS_INTERVAL} seconds"
+                            ))
+                        })?,
+                );
+            }
             "--methods" => {
                 let list = value()?
                     .into_string()
@@ -421,6 +452,35 @@ fn summarize(artifact: &RunArtifact) -> bool {
             execution.evaluator_ms
         );
     }
+    if let Some(execution) = &artifact.non_semantic.execution {
+        if let Some(p) = &execution.phases {
+            eprintln!(
+                "phases: materialize {} ms · generate {} ms · prepare {} ms · scan {} ms · evaluate {} ms ({} cases, {} fixtures)",
+                p.materialize_ms,
+                p.generate_ms,
+                p.prepare_ms,
+                p.scan_ms,
+                p.evaluate_ms,
+                p.cases,
+                p.fixtures
+            );
+        }
+        for (id, t) in &execution.scanners {
+            eprintln!(
+                "timing {id}: queue {} ms · process {} ms · normalize {} ms · {} tasks · {} B received · {} findings · {}{}",
+                t.queue_ms,
+                t.process_ms,
+                t.normalize_ms,
+                t.tasks,
+                t.received_bytes,
+                t.findings,
+                serde_name(&Some(t.completion)),
+                t.failed_phase
+                    .map(|p| format!(" (failed in {})", p.name()))
+                    .unwrap_or_default()
+            );
+        }
+    }
     eprintln!(
         "run class {} · publication {}",
         serde_name(&artifact.manifest.run_class),
@@ -573,6 +633,11 @@ fn run(args: &[OsString]) -> ExitCode {
     if ctrlc::set_handler(move || handler.cancel()).is_err() {
         eprintln!("warning: could not install the interrupt handler");
     }
+    let run_started = Instant::now();
+    let interval = args.progress_interval.unwrap_or(DEFAULT_PROGRESS_INTERVAL);
+    let progress = StderrProgress::new((interval > 0).then(|| Duration::from_secs(interval)));
+    let silent = Silent;
+    let progress: &dyn Progress = if args.no_progress { &silent } else { &progress };
     let request = RunRequest {
         corpus: &corpus,
         config: &config,
@@ -580,6 +645,7 @@ fn run(args: &[OsString]) -> ExitCode {
         work_dir: args.work_dir.as_deref(),
         cancel: &cancel,
         enforce_pins: run_class == RunClass::Official,
+        progress,
     };
     let (observations, artifact, method_failure) = match &methods {
         None => match orchestrate::run(&request) {
@@ -623,9 +689,33 @@ fn run(args: &[OsString]) -> ExitCode {
             return ExitCode::from(1);
         }
     }
-    if let Err(e) = write_atomic(out, &pretty(&artifact)) {
+    let serialize = Instant::now();
+    if !args.no_progress {
+        progress.event(&Event {
+            scanner: None,
+            phase: Phase::Serialize,
+            kind: Kind::Start,
+            run_elapsed: run_started.elapsed(),
+            elapsed: None,
+            processed: None,
+            status: None,
+        });
+    }
+    let artifact_bytes = pretty(&artifact);
+    if let Err(e) = write_atomic(out, &artifact_bytes) {
         eprintln!("error: cannot write --out: {e}");
         return ExitCode::from(1);
+    }
+    if !args.no_progress {
+        progress.event(&Event {
+            scanner: None,
+            phase: Phase::Serialize,
+            kind: Kind::End,
+            run_elapsed: run_started.elapsed(),
+            elapsed: Some(serialize.elapsed()),
+            processed: Some((artifact_bytes.len() as u64, artifact_bytes.len() as u64)),
+            status: None,
+        });
     }
     let incomplete = summarize(&artifact);
     let gaps = artifact

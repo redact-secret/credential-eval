@@ -812,6 +812,99 @@ pub struct ExecutionDiagnostics {
     /// Evaluator-owned time, in milliseconds: corpus loading, materialization,
     /// output normalization, scoring and serialization (summed over jobs).
     pub evaluator_ms: u64,
+    /// Where the wall-clock time of each run phase went (v1.5, additive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phases: Option<PhaseTimings>,
+    /// Per-scanner timings and sizes, by scanner id (v1.5, additive).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub scanners: BTreeMap<String, ScannerTiming>,
+}
+
+/// Wall-clock time of each phase of a run, in milliseconds. Phases run one
+/// after another, so they sum to about `wall_ms`. Never a measurement.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PhaseTimings {
+    /// Cases of the corpus the run was given.
+    pub cases: u64,
+    /// Fixtures materialized and scanned: the cases, or, for an
+    /// evaluation-method run, the generated variants.
+    pub fixtures: u64,
+    /// Validation, binding and fixture materialization.
+    pub materialize_ms: u64,
+    /// Evaluation-method case building and variant generation (0 for a
+    /// plain run).
+    pub generate_ms: u64,
+    /// Version probes of every scanner (sequential).
+    pub prepare_ms: u64,
+    /// Bounded parallel scan tasks, from the first start to the last end.
+    pub scan_ms: u64,
+    /// Observation collation, scoring or method evaluation, and artifact
+    /// construction. Writing the artifact is not included: it happens after
+    /// the artifact exists (the CLI reports it on stderr).
+    pub evaluate_ms: u64,
+}
+
+/// Timing and size of one scanner's work in a run. Never a measurement.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ScannerTiming {
+    /// Time spent on the scanner's version probes, in milliseconds.
+    pub prepare_ms: u64,
+    /// Time the scanner's first scan task waited for a free job, in
+    /// milliseconds, from the start of the scan phase.
+    pub queue_ms: u64,
+    /// Start of the scanner's first scan task, in milliseconds after the run
+    /// started.
+    pub start_ms: u64,
+    /// End of the scanner's last scan task, in milliseconds after the run
+    /// started.
+    pub end_ms: u64,
+    /// Scanner process wall-clock time summed over replays, including the
+    /// transfer of stdout through the bounded pipe.
+    pub process_ms: u64,
+    /// Output parsing, range mapping and normalization, summed over replays.
+    pub normalize_ms: u64,
+    /// Scan tasks that ran (replays; skipped replays are not counted).
+    pub tasks: u32,
+    /// Fixtures the scanner was asked to scan.
+    pub fixtures: u64,
+    /// Scanner stdout bytes received, summed over replays.
+    pub received_bytes: u64,
+    /// Normalized findings of the first replay.
+    pub findings: u64,
+    /// Final scanner status.
+    pub completion: ScannerStatus,
+    /// Phase in which the scanner failed; absent when it completed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed_phase: Option<FailedPhase>,
+}
+
+/// Phase of a run in which a scanner failed. A fixed vocabulary, so a
+/// timing record can never carry scanner output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum FailedPhase {
+    /// The version probe failed (the scanner never ran).
+    Prepare,
+    /// The scan process failed: timeout, output overflow, non-zero exit.
+    Scan,
+    /// The output could not be parsed or mapped to ranges.
+    Normalize,
+    /// The replays disagreed, or did not all run.
+    Replay,
+}
+
+impl FailedPhase {
+    /// The serialized name.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Prepare => "prepare",
+            Self::Scan => "scan",
+            Self::Normalize => "normalize",
+            Self::Replay => "replay",
+        }
+    }
 }
 
 impl RunArtifact {

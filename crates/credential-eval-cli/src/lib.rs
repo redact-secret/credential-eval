@@ -8,6 +8,7 @@ pub mod evidence;
 pub mod official;
 pub mod orchestrate;
 pub mod perf;
+pub mod progress;
 pub mod time;
 
 use std::collections::BTreeMap;

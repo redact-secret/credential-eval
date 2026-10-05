@@ -17,7 +17,7 @@ status. A fact never asserts that a scanner should detect anything.
 
 | Signal | Value | Who reads it |
 |---|---|---|
-| Contract revision | `1.4` (`credential-eval capabilities` → `contract_revision`; the last row of the "Revisions" table) | a consumer pinning an engine |
+| Contract revision | `1.5` (`credential-eval capabilities` → `contract_revision`; the last row of the "Revisions" table) | a consumer pinning an engine |
 | Representation contract | `credential-eval/representation/1` (`identity.representation` in a snapshot; `manifest.representation.contract` in an artifact; `capabilities` → `representation.contract`) | an exporter, a consumer |
 | Engine | a tag at or after `v0.1.0-alpha.4` (alpha.5 adds the v1.4 registry pin, which does not touch representation) | benchmarks pin |
 
