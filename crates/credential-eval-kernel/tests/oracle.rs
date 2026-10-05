@@ -237,6 +237,7 @@ fn finding(v: &Value) -> NormalizedFinding {
         family: v.get("family").map(|x| s(x).to_owned()),
         action: v.get("action").map(|x| s(x).to_owned()),
         mapping: None,
+        native_labels: Vec::new(),
     }
 }
 
@@ -283,6 +284,7 @@ fn assert_row(ours: &CaseResult, row: &Value, context: &str) {
             family: a.get("family").map(|x| s(x).to_owned()),
             action: a.get("action").map(|x| s(x).to_owned()),
             mapping: None,
+            native_labels: Vec::new(),
         })
         .collect();
     actual.sort();
@@ -441,6 +443,7 @@ fn lattice_rows_match_legacy() {
                 family: a.get("family").map(|x| s(x).to_owned()),
                 action: a.get("action").map(|x| s(x).to_owned()),
                 mapping: None,
+                native_labels: Vec::new(),
             })
             .collect();
         let ranges: Vec<ByteRange> = actual

@@ -19,9 +19,10 @@ use credential_eval_contracts::artifact::{
 };
 use credential_eval_contracts::config::{AccountingConfig, RunConfig};
 use credential_eval_contracts::corpus::{Case, CorpusSnapshot, EvidenceTier};
-use credential_eval_contracts::ids::{CaseId, FixturePath};
+use credential_eval_contracts::ids::{CaseId, FixturePath, NativeLabel};
 use credential_eval_contracts::observation::{
-    NormalizedFinding, ObservationResult, ObservationSet, ScannerObservation, ScannerStatus,
+    MAX_NATIVE_LABELS, NormalizedFinding, ObservationResult, ObservationSet, ScannerObservation,
+    ScannerStatus,
 };
 use credential_eval_contracts::schema::RunArtifactSchema;
 use credential_eval_contracts::{ENGINE_NAME, PROTOCOL_VERSION};
@@ -35,6 +36,10 @@ pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Deduplicate findings by `(path, start, end)`; the last duplicate's
 /// classification wins. Output is sorted by `(path, start, end)`.
+///
+/// The native labels of every duplicate are merged into one sorted set (at
+/// most [`MAX_NATIVE_LABELS`], smallest kept), so a range reported under
+/// several labels is still one finding.
 ///
 /// A range that any duplicate reports as a mapped decoded finding keeps that
 /// mapping (the smallest one, so the result does not depend on emission
@@ -52,10 +57,22 @@ pub fn dedupe(findings: &[NormalizedFinding]) -> Vec<NormalizedFinding> {
             (Some(new), None) => Some(new.clone()),
             (None, old) => old.cloned(),
         };
+        // Labels are a set over the range: every duplicate contributes, so the
+        // result does not depend on emission order and the finding count of
+        // the range stays one.
+        let mut native_labels: Vec<NativeLabel> = unique
+            .get(&key)
+            .map(|f| f.native_labels.clone())
+            .unwrap_or_default();
+        native_labels.extend(finding.native_labels.iter().cloned());
+        native_labels.sort();
+        native_labels.dedup();
+        native_labels.truncate(MAX_NATIVE_LABELS);
         unique.insert(
             key,
             NormalizedFinding {
                 mapping,
+                native_labels,
                 ..finding.clone()
             },
         );
@@ -130,6 +147,7 @@ pub fn score_scanner(corpus: &CorpusSnapshot, observation: &ScannerObservation) 
             family: f.family.clone(),
             action: f.action.clone(),
             mapping: f.mapping.clone(),
+            native_labels: f.native_labels.clone(),
         });
     }
     let complete = matches!(observation.result, ObservationResult::Complete { .. });
@@ -276,4 +294,91 @@ pub fn build_artifact(
     };
     artifact.canonicalize();
     Ok(artifact)
+}
+
+#[cfg(test)]
+mod native_label_tests {
+    use super::*;
+
+    fn finding(start: u64, end: u64, family: Option<&str>, labels: &[&str]) -> NormalizedFinding {
+        NormalizedFinding {
+            path: FixturePath::new("a.txt").unwrap(),
+            start,
+            end,
+            family: family.map(str::to_owned),
+            action: None,
+            mapping: None,
+            native_labels: labels
+                .iter()
+                .map(|l| NativeLabel::new(*l).unwrap())
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn same_range_labels_merge_without_changing_multiplicity() {
+        let a = finding(0, 5, None, &["EMAIL"]);
+        let b = finding(0, 5, Some("jwt"), &["JWT_TOKEN"]);
+        let c = finding(0, 5, None, &["EMAIL"]);
+        let elsewhere = finding(6, 9, None, &["PHONE"]);
+        let forward = dedupe(&[a.clone(), b.clone(), c.clone(), elsewhere.clone()]);
+        let backward = dedupe(&[elsewhere, c, b, a]);
+        assert_eq!(forward.len(), 2);
+        assert_eq!(
+            forward[0]
+                .native_labels
+                .iter()
+                .map(|l| l.as_str())
+                .collect::<Vec<_>>(),
+            ["EMAIL", "JWT_TOKEN"]
+        );
+        assert_eq!(forward[0].native_labels, backward[0].native_labels);
+        assert_eq!(forward[1].native_labels, backward[1].native_labels);
+    }
+
+    #[test]
+    fn labels_do_not_change_range_or_family_outcomes() {
+        let plain = vec![finding(0, 5, Some("jwt"), &[]), finding(7, 9, None, &[])];
+        let labelled = vec![
+            finding(0, 5, Some("jwt"), &["JWT_TOKEN"]),
+            finding(7, 9, None, &["EMAIL", "PHONE"]),
+        ];
+        let strip = |v: Vec<NormalizedFinding>| -> Vec<(u64, u64, Option<String>)> {
+            dedupe(&v)
+                .into_iter()
+                .map(|f| (f.start, f.end, f.family))
+                .collect()
+        };
+        assert_eq!(strip(plain), strip(labelled));
+    }
+
+    #[test]
+    fn a_mapped_range_keeps_its_mapping_and_gains_the_labels() {
+        use credential_eval_contracts::representation::FindingMapping;
+        let mut mapped = finding(0, 5, None, &["JWT_TOKEN"]);
+        let sample: FindingMapping = serde_json::from_value(serde_json::json!({
+            "bound": "source-segment", "layers": 1, "codecs": ["base64"],
+        }))
+        .unwrap();
+        mapped.mapping = Some(sample.clone());
+        let plain = finding(0, 5, None, &["EMAIL"]);
+        for order in [[mapped.clone(), plain.clone()], [plain, mapped]] {
+            let merged = dedupe(&order);
+            assert_eq!(merged.len(), 1);
+            assert_eq!(merged[0].mapping, Some(sample.clone()));
+            assert_eq!(merged[0].native_labels.len(), 2);
+        }
+    }
+
+    #[test]
+    fn merged_labels_are_capped_deterministically() {
+        let many: Vec<_> = ["H", "G", "F", "E", "D", "C", "B", "A", "Z"]
+            .iter()
+            .map(|l| finding(0, 1, None, &[l]))
+            .collect();
+        let merged = dedupe(&many);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].native_labels.len(), MAX_NATIVE_LABELS);
+        assert_eq!(merged[0].native_labels[0].as_str(), "A");
+    }
 }

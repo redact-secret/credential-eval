@@ -145,3 +145,90 @@ fn unknown_fields_and_wrong_schema_tags_fail_closed() {
     value["schema"] = "credential-eval/corpus-snapshot/v2".into();
     assert!(serde_json::from_value::<CorpusSnapshot>(value).is_err());
 }
+
+fn labelled(set: &mut ObservationSet, labels: &[&str]) {
+    use credential_eval_contracts::ids::NativeLabel;
+    use credential_eval_contracts::observation::ObservationResult;
+    for observation in &mut set.observations {
+        if let ObservationResult::Complete { findings, .. } = &mut observation.result
+            && let Some(first) = findings.first_mut()
+        {
+            first.native_labels = labels
+                .iter()
+                .map(|l| NativeLabel::new(*l).unwrap())
+                .collect();
+            return;
+        }
+    }
+    panic!("the smoke observations have no finding to label");
+}
+
+#[test]
+fn native_labels_round_trip_and_older_documents_read_as_unavailable() {
+    let corpus = snapshot();
+    let original: ObservationSet =
+        serde_json::from_slice(&fixture("observation-set.json")).expect("observations");
+
+    // A document written before v1.7 has no label field and reads as no labels.
+    let text = serde_json::to_string(&original).unwrap();
+    assert!(!text.contains("native_labels"));
+
+    let mut set = original.clone();
+    labelled(&mut set, &["AWS_SECRET_KEY", "EMAIL"]);
+    set.validate_against(&corpus)
+        .expect("sorted labels are valid");
+    let again: ObservationSet =
+        serde_json::from_str(&serde_json::to_string(&set).unwrap()).unwrap();
+    assert_eq!(again, set);
+    assert_ne!(again, original);
+
+    // The schema accepts the field and rejects an unsafe label.
+    let validator = jsonschema::validator_for(&schema("observation-set-v1.schema.json")).unwrap();
+    let mut instance = serde_json::to_value(&set).unwrap();
+    assert!(validator.is_valid(&instance));
+    let path = (0..2)
+        .map(|i| format!("/observations/{i}/result/findings/0"))
+        .find(|p| instance.pointer(p).is_some())
+        .expect("a finding");
+    instance.pointer_mut(&path).unwrap()["native_labels"] = serde_json::json!(["has space"]);
+    assert!(!validator.is_valid(&instance));
+}
+
+#[test]
+fn unsafe_or_malformed_native_labels_are_rejected() {
+    let corpus = snapshot();
+    let original: ObservationSet =
+        serde_json::from_slice(&fixture("observation-set.json")).expect("observations");
+
+    // Unsorted, duplicated and over-limit sets fail validation.
+    for labels in [
+        vec!["B", "A"],
+        vec!["A", "A"],
+        vec!["A", "B", "C", "D", "E", "F", "G", "H", "I"],
+    ] {
+        let mut set = original.clone();
+        labelled(&mut set, &labels);
+        assert!(
+            matches!(
+                set.validate_against(&corpus),
+                Err(ContractError::InvalidNativeLabels { .. })
+            ),
+            "{labels:?}"
+        );
+    }
+
+    // Unsafe or oversized strings never deserialize.
+    let long = "A".repeat(65);
+    for bad in ["has space", "tab\t", "~other", "é", "", long.as_str()] {
+        let doc = serde_json::json!({
+            "path": "a.txt", "start": 0, "end": 1, "native_labels": [bad],
+        });
+        assert!(
+            serde_json::from_value::<credential_eval_contracts::observation::NormalizedFinding>(
+                doc
+            )
+            .is_err(),
+            "{bad:?}"
+        );
+    }
+}

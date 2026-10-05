@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::ContractError;
 use crate::config::{AdapterIdentity, NetworkPolicy};
 use crate::corpus::CorpusSnapshot;
-use crate::ids::{FixturePath, ScannerId, Sha256Digest};
+use crate::ids::{FixturePath, NativeLabel, ScannerId, Sha256Digest};
 use crate::range::ByteRange;
 use crate::representation::FindingMapping;
 use crate::schema::ObservationSetSchema;
@@ -296,7 +296,19 @@ pub struct NormalizedFinding {
     /// Absent for a finding located directly in the original input.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mapping: Option<FindingMapping>,
+    /// The scanner's own labels for the finding (revision v1.7), kept apart
+    /// from the derived `family`: sorted, unique, at most
+    /// [`MAX_NATIVE_LABELS`]. Empty means the adapter retained no label (never
+    /// a guess); an unreviewed label is the single marker
+    /// [`crate::ids::UNRECOGNIZED_NATIVE_LABEL`]. Several findings on one range
+    /// merge into one finding carrying the union, so labels never change
+    /// multiplicity.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub native_labels: Vec<NativeLabel>,
 }
+
+/// Most native labels one finding may carry.
+pub const MAX_NATIVE_LABELS: usize = 8;
 
 impl NormalizedFinding {
     /// The finding's range.
@@ -382,6 +394,13 @@ impl ObservationSet {
                 for finding in findings {
                     if unmeasured.iter().any(|u| u.path == finding.path) {
                         return Err(ContractError::InvalidUnmeasured {
+                            path: finding.path.to_string(),
+                        });
+                    }
+                    let ordered = finding.native_labels.len() <= MAX_NATIVE_LABELS
+                        && finding.native_labels.windows(2).all(|w| w[0] < w[1]);
+                    if !ordered {
+                        return Err(ContractError::InvalidNativeLabels {
                             path: finding.path.to_string(),
                         });
                     }

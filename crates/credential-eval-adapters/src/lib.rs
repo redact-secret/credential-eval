@@ -29,6 +29,7 @@ pub mod families;
 pub mod gitleaks;
 pub mod locate;
 pub mod node;
+mod openredaction_labels;
 pub mod process;
 pub mod provenance;
 pub mod trufflehog;

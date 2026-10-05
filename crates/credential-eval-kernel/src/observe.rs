@@ -94,6 +94,7 @@ mod tests {
             family: family.map(str::to_owned),
             action: None,
             mapping: None,
+            native_labels: Vec::new(),
         }
     }
 

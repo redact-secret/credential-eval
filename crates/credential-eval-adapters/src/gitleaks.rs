@@ -336,6 +336,7 @@ pub(crate) fn finding_with(
     mapping: Option<FindingMapping>,
 ) -> Result<NormalizedFinding, MapError> {
     Ok(NormalizedFinding {
+        native_labels: Vec::new(),
         path: FixturePath::new(located.path).map_err(|_| MapError("Unknown scanner path"))?,
         start: located.start as u64,
         end: located.end as u64,

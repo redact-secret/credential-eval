@@ -1306,6 +1306,12 @@
         "version"
       ]
     },
+    "NativeLabel": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^(~unrecognized|[A-Za-z0-9][A-Za-z0-9_.:-]*)$"
+    },
     "NetworkPolicy": {
       "description": "Network permission for a scanner.",
       "oneOf": [
@@ -1411,6 +1417,13 @@
             }
           ]
         },
+        "native_labels": {
+          "description": "The scanner's own labels for the finding (revision v1.7), kept apart\nfrom the derived `family`: sorted, unique, at most\n[`MAX_NATIVE_LABELS`]. Empty means the adapter retained no label (never\na guess); an unreviewed label is the single marker\n[`crate::ids::UNRECOGNIZED_NATIVE_LABEL`]. Several findings on one range\nmerge into one finding carrying the union, so labels never change\nmultiplicity.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativeLabel"
+          }
+        },
         "path": {
           "description": "Fixture path the finding is in.",
           "$ref": "#/$defs/FixturePath"
@@ -1478,6 +1491,13 @@
               "type": "null"
             }
           ]
+        },
+        "native_labels": {
+          "description": "The scanner's own labels for the finding (revision v1.7); see\n[`crate::observation::NormalizedFinding::native_labels`].",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NativeLabel"
+          }
         },
         "start": {
           "description": "Inclusive start byte offset.",
