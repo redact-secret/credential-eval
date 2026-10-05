@@ -123,6 +123,24 @@ impl NodeAdapter {
     }
 
     /// Diagnostic profile of `@openredaction/core`: an explicit allowlist of
+    /// the 33 credential-bearing types of the audit (the `credentials` category
+    /// plus `URL_WITH_AUTH`). Not part of the default scanner set (ADR 0015).
+    pub fn openredaction_credential_bearing() -> Self {
+        Self {
+            id: "openredaction-credential-bearing",
+            shim_key: "openredaction",
+            version: "1",
+            package: "@openredaction/core",
+            mode: "Published npm package · explicit allowlist of credential-bearing types · diagnostic profile",
+            table: LabelTable::OpenRedaction,
+            options: Some(
+                json!({"patterns": crate::openredaction_labels::OPEN_REDACTION_1_1_5_CREDENTIAL_BEARING}),
+            ),
+            extra: &[("profile", "credential-bearing-allowlist")],
+        }
+    }
+
+    /// Diagnostic profile of `@openredaction/core`: an explicit allowlist of
     /// the types the adapter maps to a family today (see ADR 0012). Not part
     /// of the default scanner set.
     pub fn openredaction_mapped() -> Self {

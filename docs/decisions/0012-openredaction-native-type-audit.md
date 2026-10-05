@@ -1,6 +1,6 @@
 # ADR 0012: OpenRedaction native-type audit: dispositions, no mapping change
 
-- Status: accepted
+- Status: accepted; decision 1 re-checked and confirmed for `DOCKER_AUTH` by [ADR 0015](0015-openredaction-mapping-recheck-and-credential-bearing-profile.md)
 - Date: 2026-10-05
 - Issue: #49 (parent: redact-secret-benchmarks#723; builds on ADR 0011, #48)
 - Amends: nothing frozen. No contract field, adapter identity, mapping version

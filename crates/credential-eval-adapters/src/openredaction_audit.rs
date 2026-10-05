@@ -187,7 +187,11 @@ fn diagnostic_profiles_are_separate_identities_outside_the_default_set() {
         .map(|a| a.identity().id.to_string())
         .collect();
     let default = find("openredaction").unwrap().default_spec();
-    for id in ["openredaction-credentials", "openredaction-mapped"] {
+    for id in [
+        "openredaction-credentials",
+        "openredaction-mapped",
+        "openredaction-credential-bearing",
+    ] {
         assert!(
             !default_ids.contains(&id.to_owned()),
             "{id} must not be a default scanner"
@@ -204,7 +208,7 @@ fn diagnostic_profiles_are_separate_identities_outside_the_default_set() {
             default.configuration["options"]
         );
     }
-    assert_eq!(diagnostic().len(), 2);
+    assert_eq!(diagnostic().len(), 3);
     assert_eq!(default.configuration["options"], serde_json::json!({}));
 }
 
@@ -230,4 +234,27 @@ fn the_mapped_allowlist_is_exactly_the_mapped_dispositions() {
         credentials.configuration["options"],
         serde_json::json!({"categories": ["credentials"]})
     );
+}
+
+#[test]
+fn the_credential_bearing_profile_is_the_category_plus_url_with_auth() {
+    let spec = crate::find("openredaction-credential-bearing")
+        .unwrap()
+        .default_spec();
+    let listed: Vec<&str> = spec.configuration["options"]["patterns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let mut expected: Vec<String> = dispositions()
+        .iter()
+        .filter(|d| {
+            d["in_credentials_category"] == Value::Bool(true) || text(d, "type") == "URL_WITH_AUTH"
+        })
+        .map(|d| text(d, "type").to_owned())
+        .collect();
+    expected.sort();
+    assert_eq!(listed, expected);
+    assert_eq!(listed.len(), 33);
 }

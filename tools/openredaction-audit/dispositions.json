@@ -1451,7 +1451,7 @@
    "span": "capture",
    "capture": "group-1",
    "status": "unresolved",
-   "reason": "The span is the base64 auth value of an auths entry (the body of the evidence format).",
+   "reason": "The span is the base64 auth value, which fits the auth body of docker:registry-auth-config-entry, but the pattern is not Docker-specific: it matches the auth field of any JSON object. In snapshot-2026.10.01.2 its one finding is on a deepgram case (deepgram--deepgram-api-key-worker-json-log), so a docker family claim would be unsupported. Needs a provider-neutral disposition or a registry-key check, not a mapping.",
    "evidence_family_candidate": "docker:registry-auth-config-entry",
    "current_family": null
   },

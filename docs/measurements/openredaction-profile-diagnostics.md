@@ -148,10 +148,21 @@ Cause found by reading the package and timing real corpus inputs (one trial each
 - The credential in those cases was still reported (the cap is per pattern), but
   the `NAME` findings on prose are truncated at 10,000 per input.
 
-So the default can run on the current snapshot with a task timeout of at least
-15 minutes and a stdout limit of at least 128 MiB (both are scanner-spec limits,
-not code changes), at a cost of about 5 to 6 minutes of scanner time for the two
-replays. The credentials profile avoids the work (see the table above).
+Verified: with the task timeout at 15 minutes and the stdout limit at 256 MiB
+(scanner-spec limits, no code change), the default completed on
+`snapshot-2026.10.05.3`, `--jobs 2`, one trial, host loaded: 360,889 findings,
+105,632,268 bytes received, 760 s of scanner process time over two replays,
+383 s scan wall time, 393 s total. Positive spans EXACT / COVERED / OVERBROAD /
+PARTIAL / MISS: 764 / 28 / 63 / 217 / 1,824; controls flagged 1,129 of 3,652.
+
+`openredaction-credential-bearing` (ADR 0015) on the same snapshot: 1,406
+findings, 7.5 s of scanner time; 757 / 28 / 63 / 125 / 1,923; controls flagged
+123. Against the default: 1,006 control flags disappear, 89 `PARTIAL` become
+`MISS`, 9 `EXACT` become `MISS` (35 `INSTAGRAM_USERNAME` findings, plus
+`BITCOIN_ADDRESS`, `MINECRAFT_UUID`, `GENERIC_SECRET`, `EPIC_GAMES_ID`), 2
+`PARTIAL` become `EXACT`. In the two long-input groups
+(`credential-after-long-input`, `multiple-credentials-per-input`, 37 positives
+each) the outcomes are identical to the default in all 74.
 
 ## Residual cost and bounds
 
