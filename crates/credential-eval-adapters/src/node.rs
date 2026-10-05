@@ -14,7 +14,8 @@
 //! time (`AdapterEnv::candidate_roots`); provenance then records the
 //! candidate's versions, integrity and tree digest.
 
-use std::collections::BTreeMap;
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -24,6 +25,8 @@ use credential_eval_contracts::ids::FixturePath;
 use credential_eval_contracts::observation::{
     ObservationResult, ProvenanceComponent, ProvenanceKind, ScannerProvenance,
 };
+use serde::Deserialize;
+use serde::de::{Deserializer, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde_json::{Value, json};
 
 use crate::families::{FAMILY_MAPPING_VERSION, LabelTable, finding_family};
@@ -344,6 +347,104 @@ impl Adapter for NodeAdapter {
     }
 }
 
+/// One shim output row, read with the semantics of the `serde_json::Value`
+/// accessors it replaces: a field of the wrong JSON type reads as `None`, and
+/// the caller decides, in the original order, which absences are errors.
+/// Unknown keys are ignored; strings borrow from the line unless escaped.
+#[derive(Deserialize)]
+struct Row<'a> {
+    #[serde(default, borrow)]
+    path: Field<'a>,
+    #[serde(default)]
+    start: Field<'a>,
+    #[serde(default)]
+    end: Field<'a>,
+    #[serde(default, borrow)]
+    label: Field<'a>,
+    #[serde(default, borrow, rename = "type")]
+    kind: Field<'a>,
+    #[serde(default)]
+    action: Field<'a>,
+    #[serde(default)]
+    done: Field<'a>,
+    #[serde(default)]
+    findings: Field<'a>,
+}
+
+/// A JSON value reduced to the types the shim protocol reads. A key that is
+/// present with `null` is `Other`, not `Absent`.
+#[derive(Default)]
+enum Field<'a> {
+    #[default]
+    Absent,
+    Text(Cow<'a, str>),
+    Unsigned(u64),
+    Flag(bool),
+    /// Null, negative or fractional numbers, arrays and objects.
+    Other,
+}
+
+impl<'a> Field<'a> {
+    fn text(&'a self) -> Option<&'a str> {
+        match self {
+            Field::Text(text) => Some(text),
+            _ => None,
+        }
+    }
+
+    fn unsigned(&self) -> Option<u64> {
+        match self {
+            Field::Unsigned(n) => Some(*n),
+            _ => None,
+        }
+    }
+}
+
+impl<'de: 'a, 'a> Deserialize<'de> for Field<'a> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Reader;
+        impl<'de> Visitor<'de> for Reader {
+            type Value = Field<'de>;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a JSON value")
+            }
+            fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E> {
+                Ok(Field::Text(Cow::Borrowed(v)))
+            }
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(Field::Text(Cow::Owned(v.to_owned())))
+            }
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
+                Ok(Field::Text(Cow::Owned(v)))
+            }
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(Field::Unsigned(v))
+            }
+            fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> {
+                Ok(Field::Flag(v))
+            }
+            fn visit_i64<E>(self, _: i64) -> Result<Self::Value, E> {
+                Ok(Field::Other)
+            }
+            fn visit_f64<E>(self, _: f64) -> Result<Self::Value, E> {
+                Ok(Field::Other)
+            }
+            fn visit_unit<E>(self) -> Result<Self::Value, E> {
+                Ok(Field::Other)
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                while seq.next_element::<IgnoredAny>()?.is_some() {}
+                Ok(Field::Other)
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
+                Ok(Field::Other)
+            }
+        }
+        deserializer.deserialize_any(Reader)
+    }
+}
+
 /// Normalize shim output: one JSON object per line with UTF-16 `start`/`end`,
 /// a native `label`, optional `type` and `action`, terminated by
 /// `{"done": true, "findings": n}`. Missing or inconsistent termination,
@@ -356,40 +457,54 @@ pub fn normalize(
 ) -> Result<Vec<NormalizedFinding>, MapError> {
     const INVALID: MapError = MapError("Invalid scanner output");
     let text = std::str::from_utf8(stdout).map_err(|_| INVALID)?;
-    let mut offsets: BTreeMap<&str, Utf16Offsets> = BTreeMap::new();
+    // Per distinct reported path: the resolved fixture, its validated path and
+    // its UTF-16 offset table. Resolution and validation are pure functions of
+    // the path string, so a path's first row decides any failure exactly as
+    // repeating them per row would; only the repeated work is skipped.
+    let mut paths: HashMap<String, (FixturePath, Utf16Offsets)> = HashMap::new();
     let mut findings = Vec::new();
     let mut done = None;
     for line in text.split('\n').filter(|l| !l.trim().is_empty()) {
         if done.is_some() {
             return Err(INVALID);
         }
-        let row: Value = serde_json::from_str(line).map_err(|_| INVALID)?;
-        if row.get("done") == Some(&Value::Bool(true)) {
-            done = Some(row.get("findings").and_then(Value::as_u64).ok_or(INVALID)?);
+        // Only objects are rows; a typed read would also accept arrays.
+        if !line.trim_start().starts_with('{') {
+            return Err(INVALID);
+        }
+        let row: Row = serde_json::from_str(line).map_err(|_| INVALID)?;
+        if matches!(row.done, Field::Flag(true)) {
+            done = Some(row.findings.unsigned().ok_or(INVALID)?);
             continue;
         }
-        let path = row.get("path").and_then(Value::as_str).ok_or(INVALID)?;
-        let (path, content) = fixtures.resolve(path)?;
-        let table16 = offsets
-            .entry(path)
-            .or_insert_with(|| Utf16Offsets::new(content));
-        let index = |key| row.get(key).and_then(Value::as_u64).ok_or(INVALID);
-        let (start, end) = (index("start")?, index("end")?);
+        let path = row.path.text().ok_or(INVALID)?;
+        let (fixture_path, table16) = match paths.get_mut(path) {
+            Some(known) => known,
+            None => {
+                let (resolved, content) = fixtures.resolve(path)?;
+                let fixture_path =
+                    FixturePath::new(resolved).map_err(|_| MapError("Unknown scanner path"))?;
+                paths
+                    .entry(path.to_owned())
+                    .or_insert((fixture_path, Utf16Offsets::new(content)))
+            }
+        };
+        let start = row.start.unsigned().ok_or(INVALID)?;
+        let end = row.end.unsigned().ok_or(INVALID)?;
         let unmappable = MapError("Unmappable scanner offset");
         let start = table16.byte(start).ok_or(unmappable.clone())?;
         let end = table16.byte(end).ok_or(unmappable.clone())?;
         if start >= end {
             return Err(unmappable);
         }
-        let label = row.get("label").and_then(Value::as_str);
-        let kind = row.get("type").and_then(Value::as_str);
-        let action = match row.get("action") {
-            None => None,
-            Some(Value::String(action)) => Some(action.clone()),
-            Some(_) => return Err(INVALID),
+        let (label, kind) = (row.label.text(), row.kind.text());
+        let action = match &row.action {
+            Field::Absent => None,
+            Field::Text(action) => Some(action.to_string()),
+            _ => return Err(INVALID),
         };
         findings.push(NormalizedFinding {
-            path: FixturePath::new(path).map_err(|_| MapError("Unknown scanner path"))?,
+            path: fixture_path.clone(),
             start: start as u64,
             end: end as u64,
             family: finding_family(table, label, kind),
@@ -406,6 +521,7 @@ pub fn normalize(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
     fn fx<'a>(files: &[(&'a str, &'a str)]) -> Fixtures<'a> {
         Fixtures::new("/r", files.iter().copied())
@@ -458,5 +574,144 @@ mod tests {
         let out = b"{\"path\":\"a\",\"start\":0,\"end\":99}\n{\"done\":true,\"findings\":1}\n";
         let f = normalize(LabelTable::FlareRedact, out, &fixtures).unwrap();
         assert_eq!(f[0].end, 6);
+    }
+
+    /// The `serde_json::Value` implementation `normalize` replaced, kept as the
+    /// reference: typed reading must produce the same findings or the same
+    /// error for every row, including wrong-typed and malformed ones.
+    fn reference(
+        table: LabelTable,
+        stdout: &[u8],
+        fixtures: &Fixtures<'_>,
+    ) -> Result<Vec<NormalizedFinding>, MapError> {
+        const INVALID: MapError = MapError("Invalid scanner output");
+        let text = std::str::from_utf8(stdout).map_err(|_| INVALID)?;
+        let mut offsets: BTreeMap<&str, Utf16Offsets> = BTreeMap::new();
+        let mut findings = Vec::new();
+        let mut done = None;
+        for line in text.split('\n').filter(|l| !l.trim().is_empty()) {
+            if done.is_some() {
+                return Err(INVALID);
+            }
+            let row: Value = serde_json::from_str(line).map_err(|_| INVALID)?;
+            if row.get("done") == Some(&Value::Bool(true)) {
+                done = Some(row.get("findings").and_then(Value::as_u64).ok_or(INVALID)?);
+                continue;
+            }
+            let path = row.get("path").and_then(Value::as_str).ok_or(INVALID)?;
+            let (path, content) = fixtures.resolve(path)?;
+            let table16 = offsets
+                .entry(path)
+                .or_insert_with(|| Utf16Offsets::new(content));
+            let index = |key| row.get(key).and_then(Value::as_u64).ok_or(INVALID);
+            let (start, end) = (index("start")?, index("end")?);
+            let unmappable = MapError("Unmappable scanner offset");
+            let start = table16.byte(start).ok_or(unmappable.clone())?;
+            let end = table16.byte(end).ok_or(unmappable.clone())?;
+            if start >= end {
+                return Err(unmappable);
+            }
+            let label = row.get("label").and_then(Value::as_str);
+            let kind = row.get("type").and_then(Value::as_str);
+            let action = match row.get("action") {
+                None => None,
+                Some(Value::String(action)) => Some(action.clone()),
+                Some(_) => return Err(INVALID),
+            };
+            findings.push(NormalizedFinding {
+                path: FixturePath::new(path).map_err(|_| MapError("Unknown scanner path"))?,
+                start: start as u64,
+                end: end as u64,
+                family: finding_family(table, label, kind),
+                action,
+                mapping: None,
+            });
+        }
+        if done != Some(findings.len() as u64) {
+            return Err(MapError("Incomplete scanner output"));
+        }
+        Ok(findings)
+    }
+
+    #[test]
+    fn typed_reading_matches_the_value_reference() {
+        let fixtures = fx(&[("a", "x😀y"), ("d/b.txt", "密钥=FAKE")]);
+        let rows = [
+            r#"{"path":"a","start":0,"end":1,"label":"aws_secret_key"}"#,
+            r#"{"path":"a","start":0,"end":1,"label":"aws_secret_key"}"#,
+            r#"{"path":"./d/b.txt","start":0,"end":3,"label":"EMAIL","type":"t","action":"redact"}"#,
+            r#"{"path":"a","start":0,"end":1,"label":7,"type":null}"#,
+            r#"{"path":"a","start":0,"end":1,"action":null}"#,
+            r#"{"path":"a","start":0,"end":1,"action":3}"#,
+            r#"{"path":"a","start":-1,"end":1}"#,
+            r#"{"path":"a","start":0,"end":1.0}"#,
+            r#"{"path":"a","start":"0","end":1}"#,
+            r#"{"path":"a","start":0}"#,
+            r#"{"path":"nope","start":-1}"#,
+            r#"{"path":3,"start":0,"end":1}"#,
+            r#"{"path":"a","start":2,"end":3}"#,
+            r#"{"path":"a","start":1,"end":1}"#,
+            r#"{"path":"a","start":0,"end":99,"extra":{"x":[1,2]}}"#,
+            r#"{"p\u0061th":"a","start":0,"end":1}"#,
+            r#"{"path":"\u0061","start":0,"end":1}"#,
+            r#"{"path":"a","start":0,"end":1,"done":false}"#,
+            r#"{"done":"true","findings":1}"#,
+            r#"{"done":true}"#,
+            r#"{"done":true,"findings":-1}"#,
+            r#"[{"path":"a","start":0,"end":1}]"#,
+            r#"["a",0,1]"#,
+            r#"null"#,
+            r#"{"path":"a","start":0,"end":1"#,
+            "",
+        ];
+        let tables = [
+            LabelTable::RedactSecret,
+            LabelTable::FlareRedact,
+            LabelTable::OpenRedaction,
+        ];
+        // Every single row, then every pair, each with and without a
+        // terminating `done` line (correct, wrong, and absent counts).
+        let mut inputs: Vec<String> = Vec::new();
+        for first in rows {
+            for second in std::iter::once("").chain(rows.iter().copied()) {
+                for tail in [
+                    "",
+                    "{\"done\":true,\"findings\":1}",
+                    "{\"done\":true,\"findings\":2}",
+                ] {
+                    inputs.push(format!("{first}\n{second}\n{tail}\n"));
+                }
+            }
+        }
+        for table in tables {
+            for input in &inputs {
+                let new = normalize(table, input.as_bytes(), &fixtures);
+                let old = reference(table, input.as_bytes(), &fixtures);
+                match (new, old) {
+                    (Ok(new), Ok(old)) => assert_eq!(new, old, "{input}"),
+                    (Err(new), Err(old)) => assert_eq!(new.0, old.0, "{input}"),
+                    (new, old) => panic!("{input}: {new:?} vs {old:?}"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn repeated_ranges_keep_their_multiplicity_and_order() {
+        let fixtures = fx(&[("a", "abcdef"), ("b", "abcdef")]);
+        let row = |path, start| {
+            format!("{{\"path\":\"{path}\",\"start\":{start},\"end\":6,\"label\":\"EMAIL\"}}\n")
+        };
+        let out = format!(
+            "{}{}{}{}{}{{\"done\":true,\"findings\":5}}\n",
+            row("b", 0),
+            row("a", 1),
+            row("b", 0),
+            row("a", 1),
+            row("a", 1)
+        );
+        let f = normalize(LabelTable::OpenRedaction, out.as_bytes(), &fixtures).unwrap();
+        let seen: Vec<_> = f.iter().map(|f| (f.path.as_str(), f.start)).collect();
+        assert_eq!(seen, [("b", 0), ("a", 1), ("b", 0), ("a", 1), ("a", 1)]);
     }
 }

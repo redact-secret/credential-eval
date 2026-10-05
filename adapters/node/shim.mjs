@@ -73,8 +73,42 @@ async function readStdin() {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-function emit(finding) {
-  process.stdout.write(`${JSON.stringify(finding)}\n`);
+// Output is batched and written with backpressure: one write per ~64 KiB
+// instead of one per finding, and no more than one batch queued ahead of a slow
+// reader, so memory stays bounded however many findings a scan reports. The
+// bytes are exactly the one-line-per-finding stream, in the same order.
+const BATCH_BYTES = 64 * 1024;
+let batch = [];
+let batched = 0;
+
+async function flush() {
+  if (batched === 0) return;
+  const chunk = batch.join('');
+  batch = [];
+  batched = 0;
+  if (!process.stdout.write(chunk)) {
+    await new Promise((resolve, reject) => {
+      const done = () => {
+        process.stdout.off('drain', done);
+        process.stdout.off('error', fail);
+        resolve();
+      };
+      const fail = (error) => {
+        process.stdout.off('drain', done);
+        process.stdout.off('error', fail);
+        reject(error);
+      };
+      process.stdout.once('drain', done);
+      process.stdout.once('error', fail);
+    });
+  }
+}
+
+async function emit(finding) {
+  const line = `${JSON.stringify(finding)}\n`;
+  batch.push(line);
+  batched += line.length;
+  if (batched >= BATCH_BYTES) await flush();
 }
 
 async function scan(scanner, root) {
@@ -86,7 +120,7 @@ async function scan(scanner, root) {
     for (const relative of request.paths) {
       const text = await readFile(path.join(request.root, relative), 'utf8');
       for (const finding of await detect(text)) {
-        emit({ path: relative, ...finding });
+        await emit({ path: relative, ...finding });
         count += 1;
       }
     }
@@ -109,7 +143,8 @@ async function scan(scanner, root) {
       start: r.position[0], end: r.position[1], label: r.type,
     })));
   }
-  emit({ done: true, findings: count });
+  await emit({ done: true, findings: count });
+  await flush();
 }
 
 const [command, scanner, root] = process.argv.slice(2);
@@ -118,7 +153,10 @@ if (!['version', 'scan'].includes(command) || !Object.hasOwn(PACKAGES, scanner) 
   process.exit(2);
 }
 try {
-  if (command === 'version') emit({ version: await version(scanner, root) });
+  if (command === 'version') {
+    await emit({ version: await version(scanner, root) });
+    await flush();
+  }
   else await scan(scanner, root);
 } catch (error) {
   // Never echo scanner output or input text; the message is fixed per class.
