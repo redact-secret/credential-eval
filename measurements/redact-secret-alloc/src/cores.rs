@@ -95,6 +95,8 @@ impl Core {
             version: ReleaseTag::new(self.version).expect("constant version"),
             revision: Some(GitRevision::new(self.revision).expect("constant revision")),
             executable_sha256: None,
+            invocation_digest: None,
+            role: None,
         }
     }
 

@@ -199,6 +199,8 @@ mod tests {
                     version: ReleaseTag::new("1").unwrap(),
                     revision: None,
                     executable_sha256: Some(digest(2)),
+                    invocation_digest: None,
+                    role: None,
                 }],
                 toolchain: vec![],
                 schedule: None,

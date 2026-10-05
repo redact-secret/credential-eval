@@ -354,3 +354,32 @@ observation instead of scanning again. A reused scanner ran no scan task in
 that run; its `non_semantic.execution.scanners.<id>` entry is marked
 `origin: reused`, and any duration it carries is the source run's diagnostic.
 None of it supports a latency, instruction or allocation claim.
+
+## Reusing performance evidence: `credential-eval perf plan`
+
+Performance reuse is separate from accuracy reuse
+([ADR 0010](decisions/0010-performance-reuse-identity.md)). A cell (one subject,
+one workload, one shape) is identified by the scanner build and its invocation
+(executable digest, revision, arguments/delivery/exit codes), the workload
+(generator version, id, units, bytes, input digest), the kind, protocol and
+schedule, the toolchain and instrumentation, the target and, for latency, the
+host class. The accuracy corpus, expectations, evidence release, engine version,
+subject names and consumer views are not part of it.
+
+```bash
+credential-eval perf plan --kind latency --config performance-config.json \
+  --store measurements/ [--fresh-all] [--fresh <subject-id>]... [--out plan.json]
+```
+
+The plan launches no measurement process. Per cell it says `reuse-comparison`
+(a stored, qualified comparison of exactly this pair: latency needs two
+independent agreeing runs, instructions one exact run) or `measure-fresh`, with
+the reason, the identity fields that changed (`invalidated_by`), the fresh runs
+and projected process invocations, the stored runs a reuse stands on (digest,
+date, host), and any artifact rejected as evidence (corrupt, inconsistent,
+failed or truncated runs, identity not fully known). A direction is never
+assembled from different origins: a new candidate against an unchanged
+baseline is a new controlled comparison (A/B/A, then independent confirmation),
+and the baseline's older timings appear only as `historical` entries, dated and
+hosted, with `claim: none`. Artifacts written before revision v1.1 (no
+`invocation_digest`/`role`) are readable but not reusable as cells.

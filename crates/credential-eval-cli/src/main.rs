@@ -20,6 +20,9 @@
 //!                     [--work-dir <dir>]
 //! credential-eval perf instructions --config <performance-config.json>
 //!                     --out <performance-artifact.json> [--valgrind <path>] [--work-dir <dir>]
+//! credential-eval perf plan --config <performance-config.json> --kind latency|instructions
+//!                     --store <artifact-or-dir>... [--fresh-all] [--fresh <subject-id>]...
+//!                     [--valgrind <path>] [--out <plan.json>]
 //! credential-eval perf confirm --artifact <performance-artifact.json> --artifact <...>
 //!                     --out <direction-confirmation.json>
 //! credential-eval default-config [--scanner <id>]... [--jobs N]
@@ -107,6 +110,9 @@ usage:
                       --out <performance-artifact.json> [--work-dir <dir>]
   credential-eval perf instructions --config <performance-config.json>
                       --out <performance-artifact.json> [--valgrind <path>] [--work-dir <dir>]
+  credential-eval perf plan --config <performance-config.json> --kind latency|instructions
+                      --store <artifact-or-dir>... [--fresh-all] [--fresh <subject-id>]...
+                      [--valgrind <path>] [--out <plan.json>]
   credential-eval perf confirm --artifact <performance-artifact.json>
                       --artifact <performance-artifact.json>... --out <direction-confirmation.json>
   credential-eval default-config [--scanner <id>]... [--jobs N]
@@ -805,8 +811,9 @@ fn perf_command(args: &[OsString]) -> ExitCode {
         Some("run") => false,
         Some("instructions") => true,
         Some("confirm") => return perf_confirm(&args[1..]),
+        Some("plan") => return perf_plan(&args[1..]),
         _ => {
-            eprintln!("error: perf takes a subcommand: run, instructions, confirm\n{USAGE}");
+            eprintln!("error: perf takes a subcommand: run, instructions, plan, confirm\n{USAGE}");
             return ExitCode::from(2);
         }
     };
@@ -935,6 +942,148 @@ fn perf_command(args: &[OsString]) -> ExitCode {
         );
     }
     eprintln!("semantic digest {}", artifact.semantic_digest());
+    ExitCode::SUCCESS
+}
+
+/// `perf plan`: dry-run reuse planning (ADR 0010). Launches no measurement
+/// process; the only process it may start is `valgrind --version`.
+fn perf_plan(args: &[OsString]) -> ExitCode {
+    use credential_eval_contracts::performance::MeasurementKind;
+    let (mut config_path, mut kind, mut out, mut valgrind) = (None, None, None, None);
+    let mut store = Vec::new();
+    let mut options = credential_eval_perf::reuse::PlanOptions::default();
+    let mut iter = args.iter();
+    while let Some(flag) = iter.next() {
+        if flag.to_str() == Some("--fresh-all") {
+            options.force_fresh = true;
+            continue;
+        }
+        let Some(value) = iter.next() else {
+            eprintln!("error: {flag:?} needs a value");
+            return ExitCode::from(2);
+        };
+        match flag.to_str() {
+            Some("--config") => config_path = Some(PathBuf::from(value)),
+            Some("--kind") => kind = value.to_str().map(str::to_owned),
+            Some("--store") => store.push(PathBuf::from(value)),
+            Some("--out") => out = Some(PathBuf::from(value)),
+            Some("--valgrind") => valgrind = Some(PathBuf::from(value)),
+            Some("--fresh") => {
+                match value
+                    .to_str()
+                    .and_then(|id| credential_eval_contracts::ids::ScannerId::new(id).ok())
+                {
+                    Some(id) => {
+                        options.fresh_subjects.insert(id);
+                    }
+                    None => {
+                        eprintln!("error: --fresh needs a subject id");
+                        return ExitCode::from(2);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("error: unknown argument {flag:?}\n{USAGE}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let kind = match kind.as_deref() {
+        Some("latency") => MeasurementKind::Latency,
+        Some("instructions") => MeasurementKind::Instructions,
+        _ => {
+            eprintln!("error: perf plan needs --kind latency|instructions\n{USAGE}");
+            return ExitCode::from(2);
+        }
+    };
+    let Some(config_path) = config_path else {
+        eprintln!("error: perf plan needs --config\n{USAGE}");
+        return ExitCode::from(2);
+    };
+    let config: PerformanceConfig =
+        match read_bounded(&config_path, 1 << 20, "--config").and_then(|bytes| {
+            serde_json::from_slice(&bytes).map_err(|e| format!("invalid --config: {e}"))
+        }) {
+            Ok(config) => config,
+            Err(message) => {
+                eprintln!("error: {message}");
+                return ExitCode::from(2);
+            }
+        };
+    let (loaded, rejected) = match perf::load_store(&store) {
+        Ok(loaded) => loaded,
+        Err(message) => {
+            eprintln!("error: {message}");
+            return ExitCode::from(2);
+        }
+    };
+    let valgrind_entry = if kind == MeasurementKind::Instructions {
+        let path = valgrind.unwrap_or_else(|| PathBuf::from("valgrind"));
+        let path = if path.components().count() > 1 {
+            Some(path)
+        } else {
+            credential_eval_adapters::provenance::which(
+                &path.to_string_lossy(),
+                std::env::var_os("PATH").as_deref(),
+            )
+        };
+        let Some(path) = path else {
+            eprintln!("error: valgrind not found on PATH");
+            return ExitCode::from(4);
+        };
+        let scratch = match tempfile::tempdir() {
+            Ok(dir) => dir,
+            Err(e) => {
+                eprintln!("error: cannot create a work directory: {e}");
+                return ExitCode::from(1);
+            }
+        };
+        match perf::valgrind_entry(&path, &config, scratch.path(), &CancelToken::new()) {
+            Ok(entry) => Some(entry),
+            Err(error) => {
+                eprintln!("error: {error}");
+                return ExitCode::from(4);
+            }
+        }
+    } else {
+        None
+    };
+    let plan =
+        match perf::plan_performance(&config, kind, valgrind_entry, &loaded, rejected, &options) {
+            Ok(plan) => plan,
+            Err(error @ perf::PerfError::Config(_)) => {
+                eprintln!("error: {error}");
+                return ExitCode::from(2);
+            }
+            Err(error @ perf::PerfError::Subject(_)) => {
+                eprintln!("error: {error}");
+                return ExitCode::from(4);
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                return ExitCode::from(1);
+            }
+        };
+    let rendered = pretty(&plan);
+    match out {
+        Some(out) => {
+            if let Err(e) = write_atomic(&out, &rendered) {
+                eprintln!("error: cannot write --out: {e}");
+                return ExitCode::from(1);
+            }
+        }
+        None => {
+            use std::io::Write;
+            let _ = std::io::stdout().write_all(&rendered);
+        }
+    }
+    eprintln!(
+        "plan: {} cells reused · {} to measure · {} projected process invocations · {} stored artifacts rejected",
+        plan.reused_cells,
+        plan.fresh_cells,
+        plan.projected_invocations,
+        plan.rejected_evidence.len()
+    );
     ExitCode::SUCCESS
 }
 

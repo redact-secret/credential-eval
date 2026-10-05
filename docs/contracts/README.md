@@ -240,6 +240,7 @@ the legacy engine are listed in
 | (new document) | `DirectionConfirmation`, frozen at its first revision. | #25 |
 | (revision of `PerformanceArtifact`) | Optional `HostDiagnostics.cpu_model` (sanitized CPU model name). | #25 |
 | (revision of `PerformanceArtifact`) | `MeasurementKind::Instructions` and optional `instructions[]` (`InstructionResult`, `InstructionArm`): exact instruction counts under callgrind. | #26 |
+| (revision of `PerformanceArtifact`) | Optional `SubjectIdentity.invocation_digest` and `SubjectIdentity.role` (`baseline`\|`candidate`), so a subject's measurement can be matched without the pair's whole config ([ADR 0010](../decisions/0010-performance-reuse-identity.md)). No result field or rule changes. | #42 |
 
 A reader validates with the schema of the engine version that wrote the
 document, or with any later v1 schema. Every struct sets

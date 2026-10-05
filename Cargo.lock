@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-adapters"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "credential-eval-contracts",
  "regex",
@@ -129,7 +129,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-cli"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "credential-eval-adapters",
  "credential-eval-compat",
@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-compat"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "credential-eval-contracts",
  "credential-eval-kernel",
@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-contracts"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "jsonschema",
  "schemars",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-kernel"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "credential-eval-contracts",
  "fancy-regex",
@@ -179,9 +179,10 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-perf"
-version = "0.1.0-alpha.8"
+version = "0.1.0-alpha.9"
 dependencies = [
  "credential-eval-contracts",
+ "serde",
  "serde_json",
  "sha2",
 ]
