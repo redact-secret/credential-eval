@@ -46,6 +46,7 @@ pub fn actual_on_path(findings: &[&NormalizedFinding]) -> Vec<ObservedRange> {
             family: f.family.clone(),
             action: f.action.clone(),
             mapping: f.mapping.clone(),
+            native_labels: f.native_labels.clone(),
         })
         .collect()
 }

@@ -147,6 +147,41 @@ fn a_changed_scanner_runs_fresh_and_is_named() {
     );
 }
 
+/// Retained native labels do not authorize mapping-only rescoring (ADR 0011):
+/// observations made under another adapter identity are scanned again, so a
+/// changed label policy or mapping is never applied to old findings.
+#[test]
+fn observations_of_another_adapter_version_are_scanned_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let (peer, peer_mark) = marked(dir.path(), "peer", "8.30.1");
+    let (product, _) = marked(dir.path(), "product", "8.30.1");
+    let corpus = smoke_corpus();
+    let config = two_scanner_config(&peer, &product);
+    let first = run(&corpus, &config);
+    let mut stored = first.observations.clone();
+    for observation in &mut stored.observations {
+        if observation.scanner.id.as_str() == "peer" {
+            observation.scanner.adapter.version = "0".into();
+        }
+    }
+    let out = run_reuse(&corpus, &config, &stored, &[]).unwrap();
+    // The first run scanned peer twice; a reused peer would add no scan.
+    assert_eq!(scans(&peer_mark), 4);
+    let timing = &out
+        .artifact
+        .non_semantic
+        .execution
+        .as_ref()
+        .unwrap()
+        .scanners["peer"];
+    assert_eq!(timing.origin, Some(ObservationOrigin::Fresh));
+    let reason = timing.origin_reason.clone().unwrap();
+    assert!(
+        reason.starts_with("changed: ") && reason.contains("adapter"),
+        "{reason}"
+    );
+}
+
 #[test]
 fn a_changed_fixture_is_never_given_stale_findings() {
     let dir = tempfile::tempdir().unwrap();

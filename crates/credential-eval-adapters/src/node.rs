@@ -29,7 +29,7 @@ use serde::Deserialize;
 use serde::de::{Deserializer, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde_json::{Value, json};
 
-use crate::families::{FAMILY_MAPPING_VERSION, LabelTable, finding_family};
+use crate::families::{FAMILY_MAPPING_VERSION, LabelTable, finding_family, finding_native_labels};
 use crate::locate::{Fixtures, MapError, Utf16Offsets};
 use crate::process::{self, CancelToken, ProcessRequest};
 use crate::provenance::{self, PackageProblem};
@@ -90,7 +90,7 @@ impl NodeAdapter {
     pub fn openredaction() -> Self {
         Self {
             id: "openredaction",
-            version: "1",
+            version: "2",
             package: "@openredaction/core",
             mode: "Published npm package · default patterns (PII enabled) · pattern coverage only",
             table: LabelTable::OpenRedaction,
@@ -510,6 +510,7 @@ pub fn normalize(
             family: finding_family(table, label, kind),
             action,
             mapping: None,
+            native_labels: finding_native_labels(table, label),
         });
     }
     if done != Some(findings.len() as u64) {
@@ -538,6 +539,36 @@ mod tests {
         assert_eq!(&content[7..20], "FAKE😀TOKEN");
         assert_eq!(f[0].family.as_deref(), Some("github-token"));
         assert_eq!(f[0].action.as_deref(), Some("redact"));
+    }
+
+    #[test]
+    fn native_labels_survive_normalization_for_the_reviewed_table() {
+        let fixtures = fx(&[("a", "😀 secret token here")]);
+        let out = concat!(
+            "{\"path\":\"a\",\"start\":3,\"end\":9,\"label\":\"AWS_SECRET_KEY\"}\n",
+            "{\"path\":\"a\",\"start\":3,\"end\":9,\"label\":\"EMAIL\"}\n",
+            "{\"path\":\"a\",\"start\":10,\"end\":15,\"label\":\"user derived 123\"}\n",
+            "{\"path\":\"a\",\"start\":16,\"end\":20}\n",
+            "{\"done\":true,\"findings\":4}\n",
+        );
+        let f = normalize(LabelTable::OpenRedaction, out.as_bytes(), &fixtures).unwrap();
+        let labels =
+            |i: usize| -> Vec<&str> { f[i].native_labels.iter().map(|l| l.as_str()).collect() };
+        // UTF-16 offsets became UTF-8 bytes; labels sit beside the family.
+        assert_eq!((f[0].start, f[0].end), (5, 11));
+        assert_eq!(labels(0), ["AWS_SECRET_KEY"]);
+        assert_eq!(f[0].family.as_deref(), Some("aws-secret-access-key"));
+        assert_eq!(labels(1), ["EMAIL"]);
+        assert_eq!(f[1].family, None);
+        assert_eq!(labels(2), ["~unrecognized"]);
+        assert!(f[3].native_labels.is_empty());
+        // The same rows through a table with no reviewed set keep no label
+        // and the same positions.
+        let plain = normalize(LabelTable::Gitleaks, out.as_bytes(), &fixtures).unwrap();
+        assert!(plain.iter().all(|x| x.native_labels.is_empty()));
+        for (a, b) in f.iter().zip(&plain) {
+            assert_eq!((a.start, a.end), (b.start, b.end));
+        }
     }
 
     #[test]
@@ -625,6 +656,7 @@ mod tests {
                 family: finding_family(table, label, kind),
                 action,
                 mapping: None,
+                native_labels: finding_native_labels(table, label),
             });
         }
         if done != Some(findings.len() as u64) {

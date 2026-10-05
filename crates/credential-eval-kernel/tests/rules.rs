@@ -485,6 +485,7 @@ fn exact(
                     family: family.map(str::to_owned),
                     action: None,
                     mapping: None,
+                    native_labels: Vec::new(),
                 })
         })
         .collect();
@@ -597,6 +598,7 @@ fn scanner_aggregates_fill_groups_and_targets_only_when_complete() {
         family: Some("seg".into()),
         action: None,
         mapping: None,
+        native_labels: Vec::new(),
     }];
     let observation = ScannerObservation {
         scanner: identity("s", "1"),
@@ -861,6 +863,7 @@ fn assertions_follow_the_protocol() {
         family: None,
         action: None,
         mapping: None,
+        native_labels: Vec::new(),
     };
 }
 

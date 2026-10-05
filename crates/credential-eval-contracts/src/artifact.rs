@@ -18,7 +18,7 @@ use serde_json::Value;
 use crate::canonical::sha256_canonical;
 use crate::config::AccountingConfig;
 use crate::corpus::{CaseKind, EvidenceTier, SnapshotIdentity, SpanRole};
-use crate::ids::{CaseId, ComponentId, FixturePath, ScannerId, Sha256Digest};
+use crate::ids::{CaseId, ComponentId, FixturePath, NativeLabel, ScannerId, Sha256Digest};
 use crate::observation::{NormalizedFinding, Replays, ScannerIdentity, ScannerStatus};
 use crate::range::ByteRange;
 use crate::representation::{FindingMapping, RepresentationReport};
@@ -253,6 +253,10 @@ pub struct ObservedRange {
     /// (revision v1.3); absent for a finding located directly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mapping: Option<FindingMapping>,
+    /// The scanner's own labels for the finding (revision v1.7); see
+    /// [`crate::observation::NormalizedFinding::native_labels`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub native_labels: Vec<NativeLabel>,
 }
 
 /// Span-level outcome lattice (protocol semantics; see `docs/contracts/outcomes.md`).

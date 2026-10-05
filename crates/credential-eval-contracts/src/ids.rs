@@ -139,6 +139,19 @@ fn code_point(value: &str) -> bool {
     })
 }
 
+/// The marker an adapter records for a native label outside its reviewed set.
+/// It starts with `~`, which no native label grammar admits, so it can never
+/// collide with a real label.
+pub const UNRECOGNIZED_NATIVE_LABEL: &str = "~unrecognized";
+
+fn native_label(value: &str) -> bool {
+    value == UNRECOGNIZED_NATIVE_LABEL
+        || (value.as_bytes()[0].is_ascii_alphanumeric()
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'-')))
+}
+
 fn sha256(value: &str) -> bool {
     value.strip_prefix("sha256:").is_some_and(|hex| {
         hex.len() == 64
@@ -186,6 +199,15 @@ validated_string!(
     /// A Unicode code point rendered as `U+` and four to six upper-case hex
     /// digits (`U+200B`).
     CodePoint, kind = "code point", pattern = "^U\\+[0-9A-F]{4,6}$", max = 8, check = code_point
+);
+
+validated_string!(
+    /// A scanner's own label for a finding (a rule id, detector name or
+    /// pattern type), recorded only after an adapter matched it against a
+    /// reviewed static set. ASCII letters, digits, `_`, `.`, `:` and `-`, at
+    /// most 64 bytes; or [`UNRECOGNIZED_NATIVE_LABEL`] for a label outside that
+    /// set (the reported string is then dropped, never stored).
+    NativeLabel, kind = "native label", pattern = "^(~unrecognized|[A-Za-z0-9][A-Za-z0-9_.:-]*)$", max = 64, check = native_label
 );
 
 validated_string!(
@@ -252,6 +274,22 @@ mod tests {
         }
         for bad in ["u+200b", "U+200", "U+D800", "U+110000", "200B", "U+20 0B"] {
             assert!(CodePoint::new(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn native_labels() {
+        for ok in [
+            "AWS_SECRET_KEY",
+            "github-pat",
+            "a.b:c",
+            UNRECOGNIZED_NATIVE_LABEL,
+        ] {
+            assert!(NativeLabel::new(ok).is_ok(), "{ok}");
+        }
+        let long = "A".repeat(65);
+        for bad in ["", "~other", "_x", "a b", "a/b", "é", "a\n", long.as_str()] {
+            assert!(NativeLabel::new(bad).is_err(), "{bad}");
         }
     }
 

@@ -42,6 +42,9 @@ pub enum ContractError {
     /// An unmeasured path is unknown, unsorted or duplicated, or a finding is
     /// reported on a path the same observation declares unmeasured.
     InvalidUnmeasured { path: String },
+    /// A finding's native labels are unsorted, duplicated or over the limit
+    /// (revision v1.7).
+    InvalidNativeLabels { path: String },
     /// Scanner ids are duplicated or empty.
     DuplicateScanner(String),
     /// A representation fact is malformed or inconsistent (revision v1.3).
@@ -101,6 +104,9 @@ impl fmt::Display for ContractError {
             }
             Self::InvalidUnmeasured { path } => {
                 write!(f, "invalid unmeasured path {path}")
+            }
+            Self::InvalidNativeLabels { path } => {
+                write!(f, "invalid native labels on a finding in {path}")
             }
             Self::DuplicateScanner(id) => write!(f, "duplicate or empty scanner id: {id}"),
             Self::InvalidRepresentation { case, reason } => {

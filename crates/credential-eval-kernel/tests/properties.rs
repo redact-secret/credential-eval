@@ -87,6 +87,7 @@ fn findings() -> impl Strategy<Value = Vec<ObservedRange>> {
                     family: f.map(|x| format!("fam-{x}")),
                     action: None,
                     mapping: None,
+                    native_labels: Vec::new(),
                 },
             );
         }

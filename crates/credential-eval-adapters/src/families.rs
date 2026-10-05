@@ -10,6 +10,10 @@
 //! they are not repeated here. Changing a table is an adapter change: bump
 //! [`FAMILY_MAPPING_VERSION`] and the affected adapters' versions.
 
+use credential_eval_contracts::ids::{NativeLabel, UNRECOGNIZED_NATIVE_LABEL};
+
+use crate::openredaction_labels::OPEN_REDACTION_1_1_5_TYPES;
+
 /// Version of the label → family tables (legacy `familyMappingVersion`).
 pub const FAMILY_MAPPING_VERSION: u32 = 2;
 
@@ -395,9 +399,85 @@ pub fn finding_family(
     family.map(str::to_owned)
 }
 
+/// The native labels of `table` that have been reviewed against the exact
+/// published package, or `None` when the table has no reviewed set. Only a
+/// reviewed label is ever recorded (ADR 0011).
+fn reviewed_labels(table: LabelTable) -> Option<&'static [&'static str]> {
+    match table {
+        LabelTable::OpenRedaction => Some(OPEN_REDACTION_1_1_5_TYPES),
+        _ => None,
+    }
+}
+
+/// The native labels to record for a finding the scanner reported as `label`.
+///
+/// * a table with no reviewed set, or an absent label: none (the adapter does
+///   not guess; readers see "native label unavailable");
+/// * a label in the reviewed set: that label;
+/// * any other string: the single [`UNRECOGNIZED_NATIVE_LABEL`] marker. The
+///   reported string, which a scanner may derive from input, is dropped.
+pub fn finding_native_labels(table: LabelTable, label: Option<&str>) -> Vec<NativeLabel> {
+    let (Some(reviewed), Some(label)) = (reviewed_labels(table), label) else {
+        return Vec::new();
+    };
+    let known = reviewed.binary_search(&label).is_ok();
+    let recorded = if known {
+        NativeLabel::new(label)
+    } else {
+        NativeLabel::new(UNRECOGNIZED_NATIVE_LABEL)
+    };
+    recorded.into_iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reviewed_openredaction_labels_are_sorted_and_cover_the_mapping() {
+        let set = OPEN_REDACTION_1_1_5_TYPES;
+        assert!(set.windows(2).all(|w| w[0] < w[1]));
+        for (label, _) in OPEN_REDACTION {
+            assert!(set.binary_search(label).is_ok(), "{label}");
+        }
+        for label in set {
+            assert!(NativeLabel::new(*label).is_ok(), "{label}");
+        }
+    }
+
+    #[test]
+    fn native_labels_are_recorded_only_from_reviewed_sets() {
+        let labels = |table, label| {
+            finding_native_labels(table, label)
+                .iter()
+                .map(|l| l.as_str().to_owned())
+                .collect::<Vec<_>>()
+        };
+        let or = LabelTable::OpenRedaction;
+        // known and mapped, known and unmapped
+        assert_eq!(labels(or, Some("AWS_SECRET_KEY")), ["AWS_SECRET_KEY"]);
+        assert_eq!(labels(or, Some("EMAIL")), ["EMAIL"]);
+        // absent: nothing, never a guess
+        assert!(labels(or, None).is_empty());
+        // unknown, oversized, unsafe: one marker, the string is dropped
+        let long = "X".repeat(500);
+        for odd in ["NOT_A_TYPE", "a b\nc", "é", "", long.as_str()] {
+            assert_eq!(
+                labels(or, Some(odd)),
+                [UNRECOGNIZED_NATIVE_LABEL],
+                "{odd:?}"
+            );
+        }
+        // tables without a reviewed set record nothing
+        for table in [
+            LabelTable::Gitleaks,
+            LabelTable::Trufflehog,
+            LabelTable::FlareRedact,
+            LabelTable::RedactSecret,
+        ] {
+            assert!(labels(table, Some("github-pat")).is_empty());
+        }
+    }
 
     #[test]
     fn native_tables() {

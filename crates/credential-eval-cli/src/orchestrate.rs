@@ -1332,6 +1332,7 @@ mod tests {
             family: None,
             action: None,
             mapping: None,
+            native_labels: Vec::new(),
         }
     }
 
