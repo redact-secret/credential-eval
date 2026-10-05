@@ -171,7 +171,9 @@ The writer is deleted when nothing reads the legacy schemas any more.
    in the tree as a fallback for one release while outputs are compared.
 6. **Removal.** Only when §1 holds in full: delete the modules classified
    **#3** and **#4** in legacy-map §3 from `redact-secret-benchmarks`, and the
-   compatibility writer from credential-eval when its last reader is gone.
+   compatibility writer from credential-eval when its last reader is gone, by
+   the gates and sequence in [compatibility-retirement.md](compatibility-retirement.md)
+   (ADR 0014).
    Everything classified **#6** stays with the product.
 
 ## 6. Identity the product must record
