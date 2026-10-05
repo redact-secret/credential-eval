@@ -28,10 +28,41 @@ Same machine, same input, one trial each (pre-change → post-change):
 | Rust `normalize` (release) | 27.6 s | 7.6 s |
 | Output bytes | 112,604,400 | 112,604,400 |
 
-These are fixture timings of two phases, not a claim about a full pinned run.
-The pinned full plain and methods validation (equal normalized findings,
-per-case states and digests, with wall time and peak RSS) remains to be run
-once, after merge, under `--fresh`; it is not repeated for development.
+These are fixture timings of two phases.
+
+### Pinned full-run validation
+
+`openredaction` (and `redact-secret` as the differential reference) on the
+public snapshot `snapshot-2026.10.01.2` (manifest digest verified, 5,950
+cases), release builds of `02039c9` (alpha.7) and this change (alpha.8),
+`--jobs 4`, exploratory class, one trial each, run back to back on one host.
+The methods run uses the registry's selection (`differential,metamorphic,mutation`,
+reference `redact-secret`, seed `case-id`, evaluation evidence from
+`redact-secret-benchmarks`). The binary peers were not part of it: they are
+not touched by this change.
+
+| | Plain before → after | Methods before → after |
+|---|---|---|
+| Wall time | 46.0 s → 36.7 s | 270.0 s → 216.1 s |
+| `openredaction` process time (2 replays) | 76.4 s → 57.9 s | 446.3 s → 346.7 s |
+| `openredaction` normalize | 0.19 s → 0.11 s | 1.5 s → 0.55 s |
+| Peak RSS (whole run) | 129.1 → 127.8 MB | 1,009 → 1,019 MB |
+| `openredaction` stdout bytes | 6,276,700 → 6,276,700 | 30,638,624 → 30,638,624 |
+| `openredaction` findings | 27,253 → 27,253 | 118,882 → 118,882 |
+
+Semantic result: `scanners` (findings, per-case states, assertions,
+aggregates), `variants` and `comparisons` are equal in both modes. In the
+methods artifact the `review_queue` has 3,776 entries on both sides, equal in
+every field except `id`: a review id binds the peer scanner identity, whose
+`shim.mjs` digest changed (see below). The semantic digest differs only by the
+engine version and that identity.
+
+Limits of this evidence. One trial per side on a shared host, so differences of
+a few seconds are within noise; the 20 to 25 % wall-time reduction is the order
+of magnitude, not a precise figure. Peak RSS is dominated by the evaluator and
+is unchanged. This pinned methods selection reports 118,882 `openredaction`
+findings, not the ~1.8 million of ADR 0004, so the large-output regime was
+exercised only by the synthetic fixture above; the batching matters most there.
 
 ## Decision
 
