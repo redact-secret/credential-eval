@@ -29,6 +29,8 @@ pub mod families;
 pub mod gitleaks;
 pub mod locate;
 pub mod node;
+#[cfg(test)]
+mod openredaction_audit;
 mod openredaction_labels;
 pub mod process;
 pub mod provenance;

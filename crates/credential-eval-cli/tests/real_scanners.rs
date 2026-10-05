@@ -278,3 +278,22 @@ mod representation {
         assert!(!exact(&outcome(trufflehog, id)), "trufflehog {id}");
     }
 }
+
+/// The OpenRedaction audit probe (ADR 0012) must still report what
+/// `tools/openredaction-audit/expected.json` records, against the installed
+/// pinned package.
+#[test]
+fn openredaction_audit_probe_matches_the_recorded_behavior() {
+    if std::env::var("CREDENTIAL_EVAL_REAL_SCANNERS").as_deref() != Ok("1") {
+        eprintln!("skipped: set CREDENTIAL_EVAL_REAL_SCANNERS=1 to run against real scanners");
+        return;
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let status = std::process::Command::new("node")
+        .arg(root.join("tools/openredaction-audit/probe.mjs"))
+        .arg(root.join("adapters/node"))
+        .arg("--check")
+        .status()
+        .expect("node runs");
+    assert!(status.success(), "probe differs from expected.json");
+}
