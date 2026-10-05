@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-contracts"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.9"
 dependencies = [
  "schemars",
  "serde",
@@ -38,9 +38,11 @@ dependencies = [
 
 [[package]]
 name = "credential-eval-perf"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.9"
 dependencies = [
  "credential-eval-contracts",
+ "serde",
+ "serde_json",
  "sha2",
 ]
 
