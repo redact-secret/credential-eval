@@ -15,7 +15,7 @@ members = [
 [workspace.package]
 # Implementation version. The measurement protocol and artifact schema
 # versions are separate constants in credential-eval-contracts.
-version = "0.1.0-alpha.10"
+version = "0.1.0-alpha.11"
 edition = "2024"
 rust-version = "1.85"
 license = "UNLICENSED"

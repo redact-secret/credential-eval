@@ -166,6 +166,12 @@ pub struct ScannerRun {
     /// Absent when every case was measured.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unmeasured_cases: Vec<UnmeasuredCase>,
+    /// Scope accounting of `findings` (revision v1.8, ADR 0016): counts by
+    /// reviewed disposition, reconcilable to `findings`. Present only for a
+    /// complete scanner with a reviewed disposition table; absent means "not
+    /// accounted" (older artifact, other scanner or not measured), never zero.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope_accounting: Option<crate::scope::ScopeAccounting>,
 }
 
 /// A case a scanner observed but whose output could not be mapped to ranges.

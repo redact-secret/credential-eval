@@ -284,6 +284,36 @@ const ALLOWLIST: &[(&str, &[&str], &str)] = &[
         "engine code: a copy of the adapter's fixed sanitized reason for an unmeasured fixture",
     ),
     (
+        "LabelAccount.reason",
+        ARTIFACT,
+        "engine code: the reviewed static reason of a native type from the committed disposition table (ADR 0016); never derived from input",
+    ),
+    (
+        "ScopeAccounting.version",
+        ARTIFACT,
+        "engine code: the fixed scope-accounting version string",
+    ),
+    (
+        "ScopeTableIdentity.id",
+        ARTIFACT,
+        "engine code: the fixed id of the reviewed disposition table",
+    ),
+    (
+        "ScopeTableIdentity.integrity",
+        ARTIFACT,
+        "engine code: the pinned npm integrity the table was reviewed against",
+    ),
+    (
+        "ScopeTableIdentity.package",
+        ARTIFACT,
+        "engine code: the fixed reviewed package name",
+    ),
+    (
+        "ScopeTableIdentity.version",
+        ARTIFACT,
+        "engine code: the fixed reviewed package version",
+    ),
+    (
         "ScannerRun.detail",
         ARTIFACT,
         "engine code: the fixed sanitized reason of a non-complete scanner",

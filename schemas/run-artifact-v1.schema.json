@@ -792,6 +792,77 @@
         }
       ]
     },
+    "DispositionCounts": {
+      "description": "Finding counts by disposition. Every key is always present; a zero is a\nmeasured zero.",
+      "type": "object",
+      "properties": {
+        "ambiguous": {
+          "description": "Unmapped with conflicting or ambiguous scope.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "credential_related_unmapped": {
+          "description": "Unmapped, credential-related, unresolved.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "mapped_credential": {
+          "description": "Findings carrying a family.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "native_label_unavailable": {
+          "description": "No native label.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "out_of_scope": {
+          "description": "Unmapped, reviewed as not a credential (personal data, resource identifiers).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "unrecognized_label": {
+          "description": "Only an unrecognized label.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "mapped_credential",
+        "credential_related_unmapped",
+        "out_of_scope",
+        "ambiguous",
+        "native_label_unavailable",
+        "unrecognized_label"
+      ]
+    },
+    "DispositionStatus": {
+      "description": "Review status of a native type.",
+      "oneOf": [
+        {
+          "description": "The adapter maps the type to a family.",
+          "type": "string",
+          "const": "mapped"
+        },
+        {
+          "description": "Credential-bearing or ambiguous; no family is claimed.",
+          "type": "string",
+          "const": "unresolved"
+        },
+        {
+          "description": "Not a credential by scope.",
+          "type": "string",
+          "const": "not-credential"
+        }
+      ]
+    },
     "EngineIdentity": {
       "description": "Engine identity.",
       "type": "object",
@@ -1263,6 +1334,63 @@
             "diagnostics"
           ]
         }
+      ]
+    },
+    "LabelAccount": {
+      "description": "Findings carrying one native label. A finding with several labels counts\nunder each, so label counts can exceed the finding count.",
+      "type": "object",
+      "properties": {
+        "findings": {
+          "description": "Findings carrying the label.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "label": {
+          "description": "Native label (reviewed, or the unrecognized marker).",
+          "$ref": "#/$defs/NativeLabel"
+        },
+        "reason": {
+          "description": "Reviewed reason; absent for the unrecognized marker.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "description": "Reviewed scope; absent for the unrecognized marker.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "description": "Review status; absent for the unrecognized marker.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DispositionStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "with_family": {
+          "description": "Of those, findings that carry a family.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "findings",
+        "with_family"
       ]
     },
     "MappingBound": {
@@ -2310,6 +2438,17 @@
           "description": "Scanner id (identity is in the manifest).",
           "$ref": "#/$defs/ScannerId"
         },
+        "scope_accounting": {
+          "description": "Scope accounting of `findings` (revision v1.8, ADR 0016): counts by\nreviewed disposition, reconcilable to `findings`. Present only for a\ncomplete scanner with a reviewed disposition table; absent means \"not\naccounted\" (older artifact, other scanner or not measured), never zero.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScopeAccounting"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "status": {
           "description": "Execution status. Anything but `complete` means not measured.",
           "$ref": "#/$defs/ScannerStatus"
@@ -2482,6 +2621,128 @@
         "received_bytes",
         "findings",
         "completion"
+      ]
+    },
+    "Scope": {
+      "description": "Scope of a native type, as reviewed.",
+      "oneOf": [
+        {
+          "description": "A credential or a part of one.",
+          "type": "string",
+          "const": "credential"
+        },
+        {
+          "description": "An identifier that accompanies a credential but is not the secret.",
+          "type": "string",
+          "const": "identifier-of-credential"
+        },
+        {
+          "description": "A session identifier or cookie; needs an explicit scope decision.",
+          "type": "string",
+          "const": "session"
+        },
+        {
+          "description": "Scope cannot be decided from the type.",
+          "type": "string",
+          "const": "ambiguous"
+        },
+        {
+          "description": "A resource identifier (not a credential).",
+          "type": "string",
+          "const": "resource-identifier"
+        },
+        {
+          "description": "Personal data.",
+          "type": "string",
+          "const": "pii"
+        },
+        {
+          "description": "Personal data or a generic identifier.",
+          "type": "string",
+          "const": "pii-or-identifier"
+        }
+      ]
+    },
+    "ScopeAccounting": {
+      "description": "Scope accounting of one scanner's retained findings (revision v1.8).\n\nPresent only when the scanner completed and has a reviewed table. Absent\nmeans \"not accounted\" (legacy artifact, other scanner, or not measured),\nnever zero.",
+      "type": "object",
+      "properties": {
+        "by_disposition": {
+          "description": "One disposition per finding; sums to `findings`.",
+          "$ref": "#/$defs/DispositionCounts"
+        },
+        "by_label": {
+          "description": "Per-label counts, sorted by label.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LabelAccount"
+          }
+        },
+        "conflicting_label_findings": {
+          "description": "Findings whose reviewed labels disagree on scope or status, whatever\ntheir primary disposition.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "findings": {
+          "description": "Retained findings counted; equals `scanners[].findings` length.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "multi_label_findings": {
+          "description": "Findings with two or more native labels.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "table": {
+          "description": "The reviewed table used.",
+          "$ref": "#/$defs/ScopeTableIdentity"
+        },
+        "version": {
+          "description": "Contract and classification-rule version ([`SCOPE_ACCOUNTING_VERSION`]).",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "table",
+        "findings",
+        "by_disposition",
+        "multi_label_findings",
+        "conflicting_label_findings",
+        "by_label"
+      ]
+    },
+    "ScopeTableIdentity": {
+      "description": "Identity of the reviewed table the counts were made with.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Table id.",
+          "type": "string"
+        },
+        "integrity": {
+          "description": "Package integrity.",
+          "type": "string"
+        },
+        "package": {
+          "description": "Package name.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Package version.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "package",
+        "version",
+        "integrity"
       ]
     },
     "ScoredSpan": {
