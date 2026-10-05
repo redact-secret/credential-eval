@@ -581,3 +581,42 @@ pub const OPEN_REDACTION_1_1_5_TYPES: &[&str] = &[
     "YOUTUBE_CHANNEL_ID",
     "ZIP_CODE_US",
 ];
+
+/// The 33 credential-bearing types of the 1.1.5 audit (ADR 0012): the 32 of the
+/// `credentials` category plus `URL_WITH_AUTH`, sorted. Basis of the
+/// `openredaction-credential-bearing` diagnostic profile (ADR 0015).
+pub const OPEN_REDACTION_1_1_5_CREDENTIAL_BEARING: &[&str] = &[
+    "AWS_ACCESS_KEY",
+    "AWS_ARN",
+    "AWS_SECRET_KEY",
+    "AZURE_RESOURCE_ID",
+    "AZURE_STORAGE_KEY",
+    "BEARER_TOKEN",
+    "COOKIE_SESSION",
+    "DATABASE_CONNECTION",
+    "DOCKER_AUTH",
+    "FIREBASE_API_KEY",
+    "GCP_SERVICE_ACCOUNT",
+    "GENERIC_API_KEY",
+    "GENERIC_SECRET",
+    "GITHUB_TOKEN",
+    "GOOGLE_API_KEY",
+    "HEROKU_API_KEY",
+    "JWT_TOKEN",
+    "KUBERNETES_SECRET",
+    "MAILGUN_API_KEY",
+    "NPM_TOKEN",
+    "OAUTH_CLIENT_SECRET",
+    "OAUTH_TOKEN",
+    "OPENAI_API_KEY",
+    "PRIVATE_KEY",
+    "PYPI_TOKEN",
+    "SENDGRID_API_KEY",
+    "SESSION_ID",
+    "SLACK_TOKEN",
+    "SLACK_WEBHOOK",
+    "SSH_PRIVATE_KEY",
+    "STRIPE_API_KEY",
+    "TWILIO_API_KEY",
+    "URL_WITH_AUTH",
+];

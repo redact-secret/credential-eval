@@ -224,6 +224,7 @@ pub fn builtin() -> Vec<Box<dyn Adapter>> {
 /// unaffected (ADR 0013). Sorted by id.
 pub fn diagnostic() -> Vec<Box<dyn Adapter>> {
     vec![
+        Box::new(node::NodeAdapter::openredaction_credential_bearing()),
         Box::new(node::NodeAdapter::openredaction_credentials()),
         Box::new(node::NodeAdapter::openredaction_mapped()),
     ]

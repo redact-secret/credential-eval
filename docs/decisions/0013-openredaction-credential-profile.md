@@ -1,6 +1,6 @@
 # ADR 0013: Credential-scoped OpenRedaction profiles as diagnostics
 
-- Status: accepted
+- Status: accepted; the recommended 33-type profile was built and measured in [ADR 0015](0015-openredaction-mapping-recheck-and-credential-bearing-profile.md)
 - Date: 2026-10-05
 - Issue: #50 (parent: redact-secret-benchmarks#723; follows ADR 0011 and ADR 0012)
 - Amends: nothing frozen. Adds two diagnostic adapters; no contract field,

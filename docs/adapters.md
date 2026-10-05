@@ -206,7 +206,7 @@ the bytes.
 | `flare-redact` | 1 | `flare-redact` 1.6.1 (lockfile) | shim, `scan(text, {disable:['pii','generic_assignment'], includeValues:false})` |
 | `openredaction` | 2 | `@openredaction/core` 1.1.5 (lockfile) | shim, `new OpenRedaction({}).detect(text)`; records the native pattern type as `native_labels` (reviewed set of 575 types, [ADR 0011](decisions/0011-native-scanner-labels.md); native-type audit in [ADR 0012](decisions/0012-openredaction-native-type-audit.md)) |
 
-Diagnostic profiles of `openredaction` (`openredaction-credentials`, `openredaction-mapped`, adapter version 1) are selectable by `--scanner` but are not built in and not in the default set; see [ADR 0013](decisions/0013-openredaction-credential-profile.md).
+Diagnostic profiles of `openredaction` (`openredaction-credentials`, `openredaction-mapped`, `openredaction-credential-bearing`, adapter version 1) are selectable by `--scanner` but are not built in and not in the default set; see [ADR 0013](decisions/0013-openredaction-credential-profile.md) and [ADR 0015](decisions/0015-openredaction-mapping-recheck-and-credential-bearing-profile.md).
 
 Configuration keys are validated. An unknown key, or a change to an
 adapter-owned value (`arguments`, `rules`, `options`, ...), is an `error`,

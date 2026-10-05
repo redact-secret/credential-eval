@@ -35,7 +35,7 @@ credential part. Exceptions in the probe:
 
 | Type | Scope | Why it stays unmapped |
 |---|---|---|
-| `DOCKER_AUTH` | credential | span fits `docker:registry-auth-config-entry`; namespace and draft contract |
+| `DOCKER_AUTH` | credential | the pattern matches the `auth` field of any JSON object; one finding in the 2026.10.01.2 snapshot is on a deepgram case, so a docker family would be unsupported |
 | `SLACK_WEBHOOK` | credential | candidate `slack:workflow-webhook-token` is proposed, no structure |
 | `TWILIO_API_KEY` | key SID (identifier) | the secret is a different value |
 | `SESSION_ID`, `COOKIE_SESSION` | session | explicit scope decision needed |
