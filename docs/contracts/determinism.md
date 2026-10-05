@@ -52,9 +52,11 @@ for reproduction, dual-run and regression comparisons.
 Only `non_semantic` may vary between identical runs. It holds `run_id`,
 `started_at`, `finished_at`, `host`, per-scanner `durations_ms`, and
 `execution` (effective `jobs`, process count, `wall_ms`,
-`scanner_process_ms` and `evaluator_ms`).
+`scanner_process_ms` and `evaluator_ms`, and, from v1.5, per-phase `phases` and
+per-scanner `scanners` timings and sizes).
 Durations separate scanner execution time from evaluator overhead, and they
-are diagnostics, never measurements.
+are diagnostics, never measurements. The progress lines the CLI writes to
+stderr are likewise outside every artifact and every digest.
 
 ## Verified by
 

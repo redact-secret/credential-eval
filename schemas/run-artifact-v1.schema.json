@@ -894,6 +894,17 @@
           "format": "uint32",
           "minimum": 0
         },
+        "phases": {
+          "description": "Where the wall-clock time of each run phase went (v1.5, additive).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PhaseTimings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "processes": {
           "description": "Scanner process invocations that ran (version probes and scans).",
           "type": "integer",
@@ -905,6 +916,13 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "scanners": {
+          "description": "Per-scanner timings and sizes, by scanner id (v1.5, additive).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ScannerTiming"
+          }
         },
         "wall_ms": {
           "description": "Wall-clock time of the whole run, in milliseconds.",
@@ -920,6 +938,31 @@
         "wall_ms",
         "scanner_process_ms",
         "evaluator_ms"
+      ]
+    },
+    "FailedPhase": {
+      "description": "Phase of a run in which a scanner failed. A fixed vocabulary, so a\ntiming record can never carry scanner output.",
+      "oneOf": [
+        {
+          "description": "The version probe failed (the scanner never ran).",
+          "type": "string",
+          "const": "prepare"
+        },
+        {
+          "description": "The scan process failed: timeout, output overflow, non-zero exit.",
+          "type": "string",
+          "const": "scan"
+        },
+        {
+          "description": "The output could not be parsed or mapped to ranges.",
+          "type": "string",
+          "const": "normalize"
+        },
+        {
+          "description": "The replays disagreed, or did not all run.",
+          "type": "string",
+          "const": "replay"
+        }
       ]
     },
     "FindingMapping": {
@@ -1495,6 +1538,64 @@
         "OVERBROAD",
         "PARTIAL",
         "MISS"
+      ]
+    },
+    "PhaseTimings": {
+      "description": "Wall-clock time of each phase of a run, in milliseconds. Phases run one\nafter another, so they sum to about `wall_ms`. Never a measurement.",
+      "type": "object",
+      "properties": {
+        "cases": {
+          "description": "Cases of the corpus the run was given.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "evaluate_ms": {
+          "description": "Observation collation, scoring or method evaluation, and artifact\nconstruction. Writing the artifact is not included: it happens after\nthe artifact exists (the CLI reports it on stderr).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fixtures": {
+          "description": "Fixtures materialized and scanned: the cases, or, for an\nevaluation-method run, the generated variants.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "generate_ms": {
+          "description": "Evaluation-method case building and variant generation (0 for a\nplain run).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "materialize_ms": {
+          "description": "Validation, binding and fixture materialization.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "prepare_ms": {
+          "description": "Version probes of every scanner (sequential).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "scan_ms": {
+          "description": "Bounded parallel scan tasks, from the first start to the last end.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cases",
+        "fixtures",
+        "materialize_ms",
+        "generate_ms",
+        "prepare_ms",
+        "scan_ms",
+        "evaluate_ms"
       ]
     },
     "PositiveDiagnostics": {
@@ -2203,6 +2304,101 @@
           "type": "string",
           "const": "error"
         }
+      ]
+    },
+    "ScannerTiming": {
+      "description": "Timing and size of one scanner's work in a run. Never a measurement.",
+      "type": "object",
+      "properties": {
+        "completion": {
+          "description": "Final scanner status.",
+          "$ref": "#/$defs/ScannerStatus"
+        },
+        "end_ms": {
+          "description": "End of the scanner's last scan task, in milliseconds after the run\nstarted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "failed_phase": {
+          "description": "Phase in which the scanner failed; absent when it completed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FailedPhase"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "findings": {
+          "description": "Normalized findings of the first replay.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fixtures": {
+          "description": "Fixtures the scanner was asked to scan.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "normalize_ms": {
+          "description": "Output parsing, range mapping and normalization, summed over replays.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "prepare_ms": {
+          "description": "Time spent on the scanner's version probes, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "process_ms": {
+          "description": "Scanner process wall-clock time summed over replays, including the\ntransfer of stdout through the bounded pipe.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "queue_ms": {
+          "description": "Time the scanner's first scan task waited for a free job, in\nmilliseconds, from the start of the scan phase.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "received_bytes": {
+          "description": "Scanner stdout bytes received, summed over replays.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "start_ms": {
+          "description": "Start of the scanner's first scan task, in milliseconds after the run\nstarted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tasks": {
+          "description": "Scan tasks that ran (replays; skipped replays are not counted).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "prepare_ms",
+        "queue_ms",
+        "start_ms",
+        "end_ms",
+        "process_ms",
+        "normalize_ms",
+        "tasks",
+        "fixtures",
+        "received_bytes",
+        "findings",
+        "completion"
       ]
     },
     "ScoredSpan": {

@@ -268,6 +268,57 @@ Reading them:
   these are proxies: they bound the allocation cost of the adopted form but do
   not reproduce the card's 5 → 9 and 5 → 15,003 isolated figures.
 
+## Where a long run spends its time: `run` telemetry and progress
+
+`credential-eval run` records where its wall-clock time went, per phase and
+per scanner, and reports liveness on stderr. This is operational telemetry
+(issue #39, contract v1.5): it explains cost, it never changes a measurement.
+
+**Artifact (`non_semantic.execution`)**
+
+| Field | Meaning |
+|---|---|
+| `phases.materialize_ms` | validation, scanner binding, fixture materialization |
+| `phases.generate_ms` | evaluation-method case building and variant generation (0 for a plain run) |
+| `phases.prepare_ms` | scanner version probes, sequential |
+| `phases.scan_ms` | the bounded parallel scan tasks, first start to last end |
+| `phases.evaluate_ms` | collation, scoring or method evaluation, artifact construction |
+| `phases.cases`, `phases.fixtures` | cases of the corpus, and fixtures actually scanned (the variants of a method run) |
+| `scanners.<id>.prepare_ms` / `queue_ms` / `start_ms` / `end_ms` | probe time, wait for a free job, and the scan window as offsets from run start |
+| `scanners.<id>.process_ms` | scanner process time summed over replays. It includes the transfer of stdout through the bounded pipe, which is drained while the process runs |
+| `scanners.<id>.normalize_ms` | output parsing, range mapping and normalization, summed over replays |
+| `scanners.<id>.tasks`, `fixtures`, `received_bytes`, `findings` | replays that ran, fixtures scanned, stdout bytes received, normalized findings (first replay) |
+| `scanners.<id>.completion`, `failed_phase` | final status, and `prepare`, `scan`, `normalize` or `replay` for a scanner that did not complete |
+
+Writing the artifact happens after it exists, so it is reported on stderr
+(`phase=serialize`) and not in the artifact. Where `process_ms` dominates,
+the cost is the scanner; where `normalize_ms` or `evaluate_ms` does, it is the
+evaluator.
+
+**stderr** (stdout is untouched; `--no-progress` silences it)
+
+```text
+progress run_ms=5139 phase=scan event=start scanner=gitleaks processed=1/2
+progress run_ms=15139 phase=scan event=heartbeat scanner=gitleaks elapsed_ms=10000 processed=1/2
+progress run_ms=21201 phase=scan event=failed scanner=gitleaks elapsed_ms=16062 processed=1/2 status=timeout
+```
+
+`event` is `start`, `heartbeat`, `end` or `failed`; `processed` is the replay
+number of a scan, the fixtures of materialization, or the variants of
+generation. While a scanner process runs, one heartbeat line per running task
+is written every `--progress-interval` seconds (default 10; 0 disables;
+at most 3600), so volume is bounded by `jobs` and the run's duration. Lines are
+built only from a configured scanner id, a phase, an event, a status and
+numbers: never fixture text, paths, matched values or scanner stdout/stderr.
+A failure line names the scanner and the phase it failed in. After the run, a
+`phases:` line and one `timing <id>:` line per scanner summarize the artifact.
+
+**Determinism.** All of this lives in `non_semantic`, which the semantic
+digest clears, so a repeat run has the same digest whatever its timings
+(`crates/credential-eval-cli/tests/progress.rs`). **Compatibility.** The fields
+are optional additions (contract v1.5); a reader that tolerates unknown
+`non_semantic.execution` fields reads old and new artifacts alike.
+
 ## Lost paths
 
 Cards #1131 and #1135 measured crate-private functions through exported probe

@@ -39,7 +39,7 @@ pub const REPRESENTATION_CONTRACT: &str = RepresentationContract::VALUE;
 
 /// Revision of the v1 schemas this build writes (the last row of the
 /// "Revisions" table in `docs/contracts/README.md`).
-pub const CONTRACT_REVISION: &str = "1.4";
+pub const CONTRACT_REVISION: &str = "1.5";
 
 /// Most decode steps a span may declare.
 pub const MAX_DECODE_STEPS: usize = 8;
