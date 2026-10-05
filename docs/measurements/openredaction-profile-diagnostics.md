@@ -130,6 +130,29 @@ possible):
   Family-bearing coverage is almost unchanged; what the profiles remove is
   unfamilied personal-data findings and the accidental credit they gave.
 
+## Why the default did not complete on snapshot-2026.10.05.3
+
+Cause found by reading the package and timing real corpus inputs (one trial each):
+
+- `snapshot-2026.10.01.2` is 0.9 MiB in total (largest case 70 KiB).
+  `snapshot-2026.10.05.3` is 29.9 MiB in total with 44 cases of 256 KiB or more
+  (22 of 256 KiB, 22 of 1 MiB), in the policy groups `credential-after-long-input`
+  and `multiple-credentials-per-input`.
+- On those inputs the default's `NAME` pattern matches ordinary prose. Each 1 MiB
+  case took 4.8 to 7.2 s and returned 10,000 findings (the per-pattern cap,
+  9,999 `NAME` plus the real credential); each 256 KiB case took 0.8 to 1.0 s and
+  4,096 findings. About 22 x 6 s + 22 x 0.9 s is roughly 2.5 minutes per replay
+  on an idle host, so two replays exceed the 300 s task limit under load.
+- 22 cases x about 10,000 findings x about 110 bytes per finding is above the
+  16 MiB stdout limit, which is the first failure seen.
+- The credential in those cases was still reported (the cap is per pattern), but
+  the `NAME` findings on prose are truncated at 10,000 per input.
+
+So the default can run on the current snapshot with a task timeout of at least
+15 minutes and a stdout limit of at least 128 MiB (both are scanner-spec limits,
+not code changes), at a cost of about 5 to 6 minutes of scanner time for the two
+replays. The credentials profile avoids the work (see the table above).
+
 ## Residual cost and bounds
 
 With either profile a dense 1 MiB input still takes 5.8 to 6.2 s and 280 to
