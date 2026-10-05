@@ -38,6 +38,7 @@ pub fn default_accounting() -> AccountingConfig {
 /// given scanner ids (all built-in scanners when empty).
 pub fn default_config(scanners: &[String], jobs: u32) -> Result<RunConfig, String> {
     let adapters = credential_eval_adapters::builtin();
+    let diagnostic = credential_eval_adapters::diagnostic();
     let specs = if scanners.is_empty() {
         adapters.iter().map(|a| a.default_spec()).collect()
     } else {
@@ -46,12 +47,14 @@ pub fn default_config(scanners: &[String], jobs: u32) -> Result<RunConfig, Strin
             .map(|id| {
                 adapters
                     .iter()
+                    .chain(diagnostic.iter())
                     .find(|a| a.identity().id.as_str() == id)
                     .map(|a| a.default_spec())
                     .ok_or_else(|| {
                         format!(
-                            "unknown scanner {id:?}; built-in scanners: {}",
-                            builtin_ids()
+                            "unknown scanner {id:?}; built-in scanners: {} (diagnostic profiles: {})",
+                            builtin_ids(),
+                            diagnostic_ids()
                         )
                     })
             })
@@ -70,6 +73,15 @@ pub fn default_config(scanners: &[String], jobs: u32) -> Result<RunConfig, Strin
 /// Comma-separated built-in adapter ids.
 pub fn builtin_ids() -> String {
     credential_eval_adapters::builtin()
+        .iter()
+        .map(|a| a.identity().id.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Comma-separated diagnostic adapter ids.
+pub fn diagnostic_ids() -> String {
+    credential_eval_adapters::diagnostic()
         .iter()
         .map(|a| a.identity().id.to_string())
         .collect::<Vec<_>>()
