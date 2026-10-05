@@ -215,11 +215,33 @@
           "description": "Subject id.",
           "$ref": "#/$defs/ScannerId"
         },
+        "invocation_digest": {
+          "description": "Digest of how the executable is invoked: arguments, input delivery and\nthe exit codes that count as a scan (the subject's activation and\noptions; never the executable path). Recorded from revision v1.1 of the\nartifact so a subject's measurement can be matched without the pair's\nwhole `config_hash` (ADR 0010). Absent in older artifacts, whose\nsubjects are then only reusable as part of their unchanged pair.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "revision": {
           "description": "Source revision, when built from a Git commit.",
           "anyOf": [
             {
               "$ref": "#/$defs/GitRevision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "description": "The arm this subject measured in a pairwise run. Absent for\nallocation, where the results name their subjects.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubjectRole"
             },
             {
               "type": "null"
@@ -235,6 +257,21 @@
       "required": [
         "id",
         "version"
+      ]
+    },
+    "SubjectRole": {
+      "description": "The arm of a pairwise run a subject occupied.",
+      "oneOf": [
+        {
+          "description": "The build every direction is relative to (arm A and its A/A control).",
+          "type": "string",
+          "const": "baseline"
+        },
+        {
+          "description": "The build under test (arm B).",
+          "type": "string",
+          "const": "candidate"
+        }
       ]
     },
     "WorkloadId": {

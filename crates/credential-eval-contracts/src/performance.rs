@@ -368,6 +368,43 @@ pub struct SubjectIdentity {
     /// SHA-256 of the executable, for external-process subjects.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executable_sha256: Option<Sha256Digest>,
+    /// Digest of how the executable is invoked: arguments, input delivery and
+    /// the exit codes that count as a scan (the subject's activation and
+    /// options; never the executable path). Recorded from revision v1.1 of the
+    /// artifact so a subject's measurement can be matched without the pair's
+    /// whole `config_hash` (ADR 0010). Absent in older artifacts, whose
+    /// subjects are then only reusable as part of their unchanged pair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invocation_digest: Option<Sha256Digest>,
+    /// The arm this subject measured in a pairwise run. Absent for
+    /// allocation, where the results name their subjects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<SubjectRole>,
+}
+
+/// The arm of a pairwise run a subject occupied.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum SubjectRole {
+    /// The build every direction is relative to (arm A and its A/A control).
+    Baseline,
+    /// The build under test (arm B).
+    Candidate,
+}
+
+impl PerfSubject {
+    /// Digest of the subject's invocation semantics: arguments, delivery and
+    /// scan-success exit codes. Not the program path, which is where the
+    /// executable lives, not what it is (its digest identifies it).
+    pub fn invocation_digest(&self) -> Sha256Digest {
+        sha256_canonical(&serde_json::json!({
+            "args": self.args,
+            "delivery": self.delivery,
+            "ok_exit_codes": self.ok_exit_codes,
+        }))
+    }
 }
 
 /// The workload generator that produced the inputs.

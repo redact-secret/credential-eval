@@ -30,16 +30,17 @@ use std::time::Duration;
 use credential_eval_adapters::process::{self, CancelToken, ProcessOutcome, ProcessRequest};
 use credential_eval_adapters::provenance;
 use credential_eval_contracts::artifact::EngineIdentity;
+use credential_eval_contracts::canonical::sha256_canonical;
 use credential_eval_contracts::ids::{ComponentId, ReleaseTag, Sha256Digest};
 use credential_eval_contracts::performance::{
     GenerationContract, InputDelivery, InstructionResult, LatencyResult, MeasurementKind,
     PerfSubject, PerformanceArtifact, PerformanceConfig, PerformanceManifest,
-    PerformanceNonSemantic, ScanShape, Schedule, SubjectIdentity, ToolchainEntry,
+    PerformanceNonSemantic, ScanShape, Schedule, SubjectIdentity, SubjectRole, ToolchainEntry,
     WORKLOAD_CONTRACT_VERSION, WorkloadIdentity, bounds,
 };
 use credential_eval_contracts::schema::PerformanceArtifactSchema;
 use credential_eval_contracts::{ENGINE_NAME, performance::PERFORMANCE_PROTOCOL_VERSION};
-use credential_eval_perf::{host, stats, workloads};
+use credential_eval_perf::{host, reuse, stats, workloads};
 
 use crate::time;
 
@@ -335,12 +336,15 @@ pub fn run_latency(
     }
 
     host.load_after = host::load_average();
-    let identity = |subject: &PerfSubject, resolved: &Resolved| SubjectIdentity {
-        id: subject.id.clone(),
-        version: subject.version.clone(),
-        revision: subject.revision.clone(),
-        executable_sha256: Some(resolved.sha256.clone()),
-    };
+    let identity =
+        |subject: &PerfSubject, resolved: &Resolved, role: SubjectRole| SubjectIdentity {
+            id: subject.id.clone(),
+            version: subject.version.clone(),
+            revision: subject.revision.clone(),
+            executable_sha256: Some(resolved.sha256.clone()),
+            invocation_digest: Some(subject.invocation_digest()),
+            role: Some(role),
+        };
     let mut artifact = PerformanceArtifact {
         schema: PerformanceArtifactSchema,
         manifest: PerformanceManifest {
@@ -356,8 +360,8 @@ pub fn run_latency(
                 version: WORKLOAD_CONTRACT_VERSION,
             },
             subjects: vec![
-                identity(&config.baseline, &baseline),
-                identity(&config.candidate, &candidate),
+                identity(&config.baseline, &baseline, SubjectRole::Baseline),
+                identity(&config.candidate, &candidate, SubjectRole::Candidate),
             ],
             toolchain: config.toolchain.clone(),
             schedule: Some(Schedule {
@@ -469,7 +473,7 @@ fn instructions_once(
 }
 
 /// `valgrind --version` as a toolchain entry (`valgrind-3.22.0` -> `3.22.0`).
-fn valgrind_entry(
+pub fn valgrind_entry(
     valgrind: &Path,
     config: &PerformanceConfig,
     cwd: &Path,
@@ -627,12 +631,15 @@ pub fn run_instructions(
 
     let mut host = host;
     host.load_after = host::load_average();
-    let identity = |subject: &PerfSubject, resolved: &Resolved| SubjectIdentity {
-        id: subject.id.clone(),
-        version: subject.version.clone(),
-        revision: subject.revision.clone(),
-        executable_sha256: Some(resolved.sha256.clone()),
-    };
+    let identity =
+        |subject: &PerfSubject, resolved: &Resolved, role: SubjectRole| SubjectIdentity {
+            id: subject.id.clone(),
+            version: subject.version.clone(),
+            revision: subject.revision.clone(),
+            executable_sha256: Some(resolved.sha256.clone()),
+            invocation_digest: Some(subject.invocation_digest()),
+            role: Some(role),
+        };
     let mut toolchain = config.toolchain.clone();
     toolchain.push(valgrind_toolchain);
     toolchain.sort();
@@ -652,8 +659,8 @@ pub fn run_instructions(
                 version: WORKLOAD_CONTRACT_VERSION,
             },
             subjects: vec![
-                identity(&config.baseline, &baseline),
-                identity(&config.candidate, &candidate),
+                identity(&config.baseline, &baseline, SubjectRole::Baseline),
+                identity(&config.candidate, &candidate, SubjectRole::Candidate),
             ],
             toolchain,
             schedule: Some(Schedule {
@@ -973,4 +980,225 @@ mod tests {
         assert!(result.failed_invocations > 0);
         assert_eq!(result.direction, Direction::Indistinguishable);
     }
+}
+
+/// Largest stored artifact read by `perf plan`, in bytes.
+const MAX_STORE_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
+/// Most files read from a `--store` directory.
+pub const MAX_STORE_FILES: usize = 1000;
+
+/// Accepted artifacts (by content address) and the files rejected.
+pub type LoadedStore = (
+    Vec<(Sha256Digest, PerformanceArtifact)>,
+    Vec<reuse::Rejected>,
+);
+
+/// Load stored performance artifacts for [`plan_performance`] from files and
+/// (non-recursive) directories. Anything that is not a performance artifact is
+/// ignored; a performance artifact that cannot be read, parsed or validated is
+/// rejected with its reason, never used. Identical content counts once, so a
+/// copy of a run is not an independent run.
+pub fn load_store(paths: &[PathBuf]) -> Result<LoadedStore, String> {
+    let mut files = Vec::new();
+    for path in paths {
+        let meta = fs::metadata(path)
+            .map_err(|e| format!("cannot read --store {}: {e}", path.display()))?;
+        if meta.is_dir() {
+            let entries = fs::read_dir(path)
+                .map_err(|e| format!("cannot read --store {}: {e}", path.display()))?;
+            let mut found: Vec<PathBuf> = entries
+                .filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "json") && p.is_file())
+                .collect();
+            found.sort();
+            files.extend(found);
+        } else {
+            files.push(path.clone());
+        }
+    }
+    if files.len() > MAX_STORE_FILES {
+        return Err(format!("--store holds more than {MAX_STORE_FILES} files"));
+    }
+    let mut accepted: Vec<(Sha256Digest, PerformanceArtifact)> = Vec::new();
+    let mut rejected = Vec::new();
+    for file in files {
+        let reject = |reason: String| reuse::Rejected {
+            artifact_digest: None,
+            reason,
+        };
+        let meta = fs::metadata(&file).map_err(|e| format!("cannot read --store: {e}"))?;
+        if meta.len() > MAX_STORE_ARTIFACT_BYTES {
+            rejected.push(reject("file exceeds the artifact size bound".into()));
+            continue;
+        }
+        let Ok(bytes) = fs::read(&file) else {
+            rejected.push(reject("unreadable file".into()));
+            continue;
+        };
+        let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+            // Not JSON: not an artifact of ours, but a truncated artifact looks
+            // the same; say so rather than silently skipping.
+            rejected.push(reject("not valid JSON".into()));
+            continue;
+        };
+        if value.get("schema").and_then(|v| v.as_str())
+            != Some("credential-eval/performance-artifact/v1")
+        {
+            continue;
+        }
+        match serde_json::from_value::<PerformanceArtifact>(value) {
+            Err(_) => rejected.push(reject(
+                "performance artifact does not match its schema".into(),
+            )),
+            Ok(artifact) => match reuse::validate(&artifact) {
+                Err(reason) => rejected.push(reuse::Rejected {
+                    artifact_digest: Some(sha256_canonical(&artifact)),
+                    reason,
+                }),
+                Ok(()) => {
+                    let digest = sha256_canonical(&artifact);
+                    if !accepted.iter().any(|(d, _)| *d == digest) {
+                        accepted.push((digest, artifact));
+                    }
+                }
+            },
+        }
+    }
+    Ok((accepted, rejected))
+}
+
+/// Dry-run planning (ADR 0010): which cells of `config` keep a qualified
+/// stored comparison and which must be measured, and how many processes that
+/// would launch. Reads the executables' bytes to digest them and generates
+/// the workloads; launches no process. `valgrind` is the instrumentation
+/// version for the `instructions` kind (its `--version` probe is the caller's).
+pub fn plan_performance(
+    config: &PerformanceConfig,
+    kind: MeasurementKind,
+    valgrind: Option<ToolchainEntry>,
+    store: &[(Sha256Digest, PerformanceArtifact)],
+    rejected: Vec<reuse::Rejected>,
+    options: &reuse::PlanOptions,
+) -> Result<reuse::Plan, PerfError> {
+    config.validate().map_err(PerfError::Config)?;
+    if kind == MeasurementKind::Allocation {
+        return Err(PerfError::Config(
+            "allocation counts are measured by their own package; plan latency or instructions"
+                .into(),
+        ));
+    }
+    if kind == MeasurementKind::Instructions && config.shapes != [ScanShape::Whole] {
+        return Err(PerfError::Config(
+            "instruction counts support the whole shape only".into(),
+        ));
+    }
+    let host = host::diagnostics();
+    let baseline = resolve(&config.baseline)?;
+    let candidate = resolve(&config.candidate)?;
+    let mut toolchain = config.toolchain.clone();
+    if kind == MeasurementKind::Instructions {
+        let Some(entry) = valgrind else {
+            return Err(PerfError::Subject(
+                "instruction planning needs the valgrind version".into(),
+            ));
+        };
+        toolchain.push(entry);
+        toolchain.sort();
+        toolchain.dedup_by(|a, b| a.name == b.name);
+    }
+    let schedule = if kind == MeasurementKind::Instructions {
+        Schedule {
+            rounds: config.rounds,
+            batch_invocations: 1,
+            warmup_invocations: 0,
+            chunk_bytes: config.chunk_bytes,
+        }
+    } else {
+        Schedule {
+            rounds: config.rounds,
+            batch_invocations: config.batch_invocations,
+            warmup_invocations: config.warmup_invocations,
+            chunk_bytes: config.chunk_bytes,
+        }
+    };
+    let ctx = reuse::KeyContext {
+        kind,
+        protocol: PERFORMANCE_PROTOCOL_VERSION.to_string(),
+        generation: GenerationContract {
+            id: ComponentId::new(GENERATOR_ID).expect("constant is a valid id"),
+            version: WORKLOAD_CONTRACT_VERSION,
+        },
+        schedule: Some(schedule),
+        toolchain,
+        os: host.os.to_string(),
+        arch: host.arch.to_string(),
+        cpu_model: host.cpu_model.clone(),
+        cpus: host.cpus,
+    };
+    let subject_key = |subject: &PerfSubject, resolved: &Resolved| reuse::SubjectKey {
+        version: subject.version.clone(),
+        revision: subject.revision.clone(),
+        executable_sha256: Some(resolved.sha256.clone()),
+        invocation_digest: Some(subject.invocation_digest()),
+    };
+    let (bkey, ckey) = (
+        subject_key(&config.baseline, &baseline),
+        subject_key(&config.candidate, &candidate),
+    );
+    let max_input = usize::try_from(config.limits.max_input_bytes).unwrap_or(usize::MAX);
+    let mut requested = Vec::new();
+    for spec in &config.workloads {
+        let text = workloads::generate(spec.id, spec.units, max_input)
+            .map_err(|e| PerfError::Workload(format!("{:?}: {e}", spec.id)))?;
+        let identity = WorkloadIdentity {
+            id: spec.id,
+            units: spec.units,
+            bytes: text.len() as u64,
+            digest: workloads::digest(text.as_bytes()),
+        };
+        for shape in &config.shapes {
+            let pieces = match shape {
+                ScanShape::Whole => 1,
+                ScanShape::Chunked => {
+                    workloads::chunks(&text, config.chunk_bytes as usize).len() as u64
+                }
+            };
+            let invocations_per_run = if kind == MeasurementKind::Instructions {
+                reuse::instruction_invocations(config.rounds)
+            } else {
+                reuse::latency_invocations(
+                    pieces,
+                    config.rounds,
+                    config.batch_invocations,
+                    config.warmup_invocations,
+                )
+            };
+            requested.push(reuse::RequestedCell {
+                workload: spec.id,
+                shape: *shape,
+                baseline: (
+                    config.baseline.id.clone(),
+                    ctx.key(&bkey, &identity, Some(*shape)),
+                ),
+                candidate: (
+                    config.candidate.id.clone(),
+                    ctx.key(&ckey, &identity, Some(*shape)),
+                ),
+                invocations_per_run,
+            });
+        }
+    }
+    let mut stored = Vec::new();
+    let mut rejected = rejected;
+    for (digest, artifact) in store {
+        match reuse::cells_of(artifact) {
+            Ok(cells) => stored.extend(cells),
+            Err(reason) => rejected.push(reuse::Rejected {
+                artifact_digest: Some(digest.clone()),
+                reason,
+            }),
+        }
+    }
+    Ok(reuse::plan(kind, &requested, &stored, rejected, options))
 }
