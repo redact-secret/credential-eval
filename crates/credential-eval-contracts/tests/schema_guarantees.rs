@@ -324,6 +324,16 @@ const ALLOWLIST: &[(&str, &[&str], &str)] = &[
         "npm lockfile Subresource Integrity string (a digest)",
     ),
     (
+        "MeasurementBinding.protocol_version",
+        &["observation-set-v1.schema.json"],
+        "engine code: the fixed measurement protocol identifier the observations were normalized under",
+    ),
+    (
+        "ScannerTiming.origin_reason",
+        ARTIFACT,
+        "engine code: a fixed vocabulary naming why a scanner ran fresh or was reused (ADR 0008); never scanner output",
+    ),
+    (
         "ScannerIdentity.version",
         OBSERVATIONS_AND_ARTIFACT,
         "scanner version: the first semantic-version match of the version probe (version_number) or the package's declared version; never raw probe output",

@@ -516,6 +516,7 @@ fn scored_suite(fixtures: &Value, findings: &Value) -> (CorpusSnapshot, Vec<Case
     let observation = complete(findings.as_array().unwrap().iter().map(finding).collect());
     let set = ObservationSet {
         schema: ObservationSetSchema,
+        measurement: None,
         corpus_digest: corpus.identity.corpus_digest.clone(),
         observations: vec![observation.clone()],
     };
@@ -952,6 +953,7 @@ fn evaluation_matches_legacy() {
     let variant_corpus = plan.variant_corpus(&corpus.identity);
     let observations = ObservationSet {
         schema: ObservationSetSchema,
+        measurement: None,
         corpus_digest: variant_corpus.identity.corpus_digest.clone(),
         observations: g["observations"]
             .as_array()

@@ -79,6 +79,7 @@ fn run_with_progress(
         cancel: &CancelToken::new(),
         enforce_pins: false,
         progress,
+        reuse: None,
     })
     .expect("run")
     .artifact

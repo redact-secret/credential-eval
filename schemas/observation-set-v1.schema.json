@@ -9,6 +9,17 @@
       "description": "Digest of the corpus the scanners observed.",
       "$ref": "#/$defs/Sha256Digest"
     },
+    "measurement": {
+      "description": "What these observations are valid for, beyond `corpus_digest`\n(revision v1.6). Absent in observations that did not record it; such a\nset can be scored against its own corpus but is never reused.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MeasurementBinding"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "observations": {
       "description": "One entry per scanner, unique by `scanner.id`.",
       "type": "array",
@@ -122,6 +133,36 @@
           "type": "string",
           "const": "source-block"
         }
+      ]
+    },
+    "MeasurementBinding": {
+      "description": "The measurement inputs an [`ObservationSet`] was produced under, other\nthan the scanners' own identities. Together with each scanner's identity\nit decides whether an observation may be reused (ADR 0008).",
+      "type": "object",
+      "properties": {
+        "input_digest": {
+          "description": "Digest of the exact fixture paths and bytes the scanners saw\n([`crate::corpus::input_digest`]). Unlike `corpus_digest` it does not\nchange with expected spans, labels or the evidence release.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "protocol_version": {
+          "description": "Measurement protocol the observations were normalized under.",
+          "type": "string"
+        },
+        "restriction": {
+          "description": "Evidence digest of the family allowlist the findings were restricted\nby, when they were (an evaluation-method run). Restriction drops\nfamilies, so restricted findings only serve a run with the same\nrestriction.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sha256Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "input_digest",
+        "protocol_version"
       ]
     },
     "NetworkPolicy": {

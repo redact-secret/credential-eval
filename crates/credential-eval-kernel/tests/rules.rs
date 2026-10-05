@@ -451,6 +451,7 @@ fn observe_all(
 ) -> ObservationSet {
     ObservationSet {
         schema: ObservationSetSchema,
+        measurement: None,
         corpus_digest: plan.variant_corpus(&base.identity).identity.corpus_digest,
         observations: scanners
             .into_iter()

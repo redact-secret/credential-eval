@@ -73,6 +73,20 @@ An `ObservationSet` names the `corpus_digest` it was observed against.
 the snapshot's. It also rejects any finding on an unknown path or with an
 invalid range. So scanner results are never applied to changed fixture bytes.
 
+## Input digest and observation reuse
+
+```
+input_digest = "sha256:" + hex(SHA-256(canonical_json([{path, sha256(content)} sorted by path])))
+```
+
+It covers exactly what a scanner is shown and nothing it is not: expected
+spans, labels, grouping, twin lineage and the snapshot identity are outside it
+(`corpus::input_digest`). `ObservationSet.measurement` records it with the
+protocol version and any family restriction, so an observation can be reused
+by a run over the same bytes even when `corpus_digest` changed
+([ADR 0008](../decisions/0008-accuracy-observation-reuse.md)).
+`validate_inputs` checks it; `validate_against` still checks `corpus_digest`.
+
 ## Reproduction identities in a run artifact
 
 | Identity | Field |

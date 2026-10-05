@@ -86,6 +86,7 @@ pub fn run_with(corpus: &CorpusSnapshot, config: &RunConfig, env: &AdapterEnv) -
         cancel: &CancelToken::new(),
         enforce_pins: false,
         progress: &credential_eval_cli::progress::Silent,
+        reuse: None,
     })
     .expect("run")
 }

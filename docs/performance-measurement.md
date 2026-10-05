@@ -346,3 +346,11 @@ its five baseline entries, step 6 repoints the evidence READMEs of #1121,
 #1131, #1133, #1134 and #1135 at this harness, and step 7 amends
 `docs/rust-workspace.md`. The `perf-latency` workflow produces the timing
 direction for each card from pinned commits on a quiet runner.
+
+## Reused accuracy observations are not performance evidence
+
+`run --reuse-observations` (ADR 0008) keeps a scanner's earlier accuracy
+observation instead of scanning again. A reused scanner ran no scan task in
+that run; its `non_semantic.execution.scanners.<id>` entry is marked
+`origin: reused`, and any duration it carries is the source run's diagnostic.
+None of it supports a latency, instruction or allocation claim.

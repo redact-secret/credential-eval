@@ -28,6 +28,31 @@ pub struct ObservationSet {
     pub corpus_digest: Sha256Digest,
     /// One entry per scanner, unique by `scanner.id`.
     pub observations: Vec<ScannerObservation>,
+    /// What these observations are valid for, beyond `corpus_digest`
+    /// (revision v1.6). Absent in observations that did not record it; such a
+    /// set can be scored against its own corpus but is never reused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measurement: Option<MeasurementBinding>,
+}
+
+/// The measurement inputs an [`ObservationSet`] was produced under, other
+/// than the scanners' own identities. Together with each scanner's identity
+/// it decides whether an observation may be reused (ADR 0008).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MeasurementBinding {
+    /// Digest of the exact fixture paths and bytes the scanners saw
+    /// ([`crate::corpus::input_digest`]). Unlike `corpus_digest` it does not
+    /// change with expected spans, labels or the evidence release.
+    pub input_digest: Sha256Digest,
+    /// Measurement protocol the observations were normalized under.
+    pub protocol_version: String,
+    /// Evidence digest of the family allowlist the findings were restricted
+    /// by, when they were (an evaluation-method run). Restriction drops
+    /// families, so restricted findings only serve a run with the same
+    /// restriction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restriction: Option<Sha256Digest>,
 }
 
 /// Recorded identity of an executed scanner.
@@ -303,6 +328,28 @@ impl ObservationSet {
                 found: self.corpus_digest.to_string(),
             });
         }
+        self.validate_content(corpus)
+    }
+
+    /// Validate that these observations were made over the same fixture paths
+    /// and bytes as `corpus` (by `measurement.input_digest`), and that every
+    /// finding names a known path with a valid range. Unlike
+    /// [`Self::validate_against`] it accepts a corpus whose expectations
+    /// changed, so observations can be re-scored (ADR 0008).
+    pub fn validate_inputs(&self, corpus: &CorpusSnapshot) -> Result<(), ContractError> {
+        let found = self
+            .measurement
+            .as_ref()
+            .map(|m| m.input_digest.to_string())
+            .ok_or(ContractError::UnboundObservations)?;
+        let expected = crate::corpus::input_digest(&corpus.cases).to_string();
+        if found != expected {
+            return Err(ContractError::StaleInputs { expected, found });
+        }
+        self.validate_content(corpus)
+    }
+
+    fn validate_content(&self, corpus: &CorpusSnapshot) -> Result<(), ContractError> {
         let content: BTreeMap<&FixturePath, &str> = corpus
             .cases
             .iter()

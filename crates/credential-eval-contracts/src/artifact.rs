@@ -818,6 +818,34 @@ pub struct ExecutionDiagnostics {
     /// Per-scanner timings and sizes, by scanner id (v1.5, additive).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub scanners: BTreeMap<String, ScannerTiming>,
+    /// The earlier observations this run drew on; absent when every scanner
+    /// ran fresh (v1.6, additive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reuse: Option<ReuseDiagnostics>,
+}
+
+/// Where reused observations came from. Provenance, not a measurement: it
+/// stays out of the semantic digest, so a run that reused a scanner's
+/// observations and a run that scanned it fresh have the same digest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReuseDiagnostics {
+    /// Canonical digest of the whole `ObservationSet` that was offered for
+    /// reuse (its original receipts).
+    pub source_digest: Sha256Digest,
+    /// Input digest both the source and this run were observed over.
+    pub input_digest: Sha256Digest,
+}
+
+/// Whether a scanner's observation was made in this run or taken from an
+/// earlier one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ObservationOrigin {
+    /// Scanned in this run.
+    Fresh,
+    /// Taken, with its original receipt, from an earlier verified run.
+    Reused,
 }
 
 /// Wall-clock time of each phase of a run, in milliseconds. Phases run one
@@ -878,6 +906,17 @@ pub struct ScannerTiming {
     /// Phase in which the scanner failed; absent when it completed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failed_phase: Option<FailedPhase>,
+    /// Whether this run scanned the scanner or reused an earlier observation
+    /// (v1.6). A reused scanner ran no scan task: its sizes and times above
+    /// describe this run (version probe only), never the original scan.
+    /// Absent in a run that did not offer observations for reuse.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<ObservationOrigin>,
+    /// Why the scanner ran fresh or was reused. A fixed vocabulary
+    /// (`compatible`, `forced`, `no-recorded-observation`, `not-prepared`,
+    /// `changed: <field>[, <field>]`); never scanner output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_reason: Option<String>,
 }
 
 /// Phase of a run in which a scanner failed. A fixed vocabulary, so a
