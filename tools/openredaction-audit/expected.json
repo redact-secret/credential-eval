@@ -1,0 +1,1835 @@
+{
+  "package": "@openredaction/core",
+  "version": "1.1.5",
+  "profiles": {
+    "default": [
+      {
+        "id": "docker-auth-positive",
+        "type": "DOCKER_AUTH",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "DOCKER_AUTH"
+        ]
+      },
+      {
+        "id": "docker-auth-negative",
+        "type": "DOCKER_AUTH",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "slack-webhook-positive",
+        "type": "SLACK_WEBHOOK",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "wider",
+        "own_start_offset": -53,
+        "own_end_offset": 0,
+        "all_types": [
+          "SLACK_WEBHOOK"
+        ]
+      },
+      {
+        "id": "slack-webhook-negative",
+        "type": "SLACK_WEBHOOK",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "twilio-positive",
+        "type": "TWILIO_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "TWILIO_API_KEY"
+        ]
+      },
+      {
+        "id": "twilio-negative-no-context",
+        "type": "TWILIO_API_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "session-id-positive",
+        "type": "SESSION_ID",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SESSION_ID"
+        ]
+      },
+      {
+        "id": "session-id-negative",
+        "type": "SESSION_ID",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "azure-storage-positive",
+        "type": "AZURE_STORAGE_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "AZURE_STORAGE_KEY"
+        ]
+      },
+      {
+        "id": "azure-storage-negative",
+        "type": "AZURE_STORAGE_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "kubernetes-secret-positive",
+        "type": "KUBERNETES_SECRET",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "KUBERNETES_SECRET"
+        ]
+      },
+      {
+        "id": "kubernetes-secret-negative",
+        "type": "KUBERNETES_SECRET",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "INSTAGRAM_USERNAME"
+        ]
+      },
+      {
+        "id": "cookie-session-positive",
+        "type": "COOKIE_SESSION",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "COOKIE_SESSION"
+        ]
+      },
+      {
+        "id": "cookie-session-negative",
+        "type": "COOKIE_SESSION",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "heroku-positive",
+        "type": "HEROKU_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "HEROKU_API_KEY"
+        ]
+      },
+      {
+        "id": "heroku-negative-uuid-no-context",
+        "type": "HEROKU_API_KEY",
+        "polarity": "benign",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "DISCOVERY_NUMBER"
+        ]
+      },
+      {
+        "id": "oauth-client-secret-positive",
+        "type": "OAUTH_CLIENT_SECRET",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "OAUTH_CLIENT_SECRET"
+        ]
+      },
+      {
+        "id": "oauth-client-secret-negative",
+        "type": "OAUTH_CLIENT_SECRET",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "oauth-token-positive",
+        "type": "OAUTH_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "OAUTH_TOKEN"
+        ]
+      },
+      {
+        "id": "oauth-token-negative",
+        "type": "OAUTH_TOKEN",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "google-api-key-positive",
+        "type": "GOOGLE_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GOOGLE_API_KEY"
+        ]
+      },
+      {
+        "id": "firebase-api-key-positive",
+        "type": "FIREBASE_API_KEY",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "GOOGLE_API_KEY",
+          "INSTAGRAM_USERNAME"
+        ]
+      },
+      {
+        "id": "google-api-key-negative",
+        "type": "GOOGLE_API_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "gcp-service-account-positive",
+        "type": "GCP_SERVICE_ACCOUNT",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "EMAIL"
+        ]
+      },
+      {
+        "id": "gcp-service-account-negative",
+        "type": "GCP_SERVICE_ACCOUNT",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "aws-arn-positive",
+        "type": "AWS_ARN",
+        "polarity": "benign",
+        "detected_own": true,
+        "own_span": "unmarked",
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "AWS_ARN",
+          "AWS_CERTIFICATION"
+        ]
+      },
+      {
+        "id": "azure-resource-id-positive",
+        "type": "AZURE_RESOURCE_ID",
+        "polarity": "benign",
+        "detected_own": true,
+        "own_span": "unmarked",
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "AZURE_RESOURCE_ID"
+        ]
+      },
+      {
+        "id": "stripe-secret-positive",
+        "type": "STRIPE_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "STRIPE_API_KEY"
+        ]
+      },
+      {
+        "id": "stripe-publishable",
+        "type": "STRIPE_API_KEY",
+        "polarity": "benign",
+        "detected_own": true,
+        "own_span": "unmarked",
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "STRIPE_API_KEY"
+        ]
+      },
+      {
+        "id": "generic-secret-positive",
+        "type": "GENERIC_SECRET",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GENERIC_SECRET"
+        ]
+      },
+      {
+        "id": "generic-secret-negative",
+        "type": "GENERIC_SECRET",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "generic-api-key-positive",
+        "type": "GENERIC_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GENERIC_API_KEY"
+        ]
+      },
+      {
+        "id": "generic-api-key-negative",
+        "type": "GENERIC_API_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "url-with-auth-positive",
+        "type": "URL_WITH_AUTH",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "wider",
+        "own_start_offset": -21,
+        "own_end_offset": 17,
+        "all_types": [
+          "URL_WITH_AUTH"
+        ]
+      },
+      {
+        "id": "url-with-auth-negative",
+        "type": "URL_WITH_AUTH",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "database-connection-positive",
+        "type": "DATABASE_CONNECTION",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "wider",
+        "own_start_offset": -15,
+        "own_end_offset": 24,
+        "all_types": [
+          "DATABASE_CONNECTION"
+        ]
+      },
+      {
+        "id": "database-connection-negative",
+        "type": "DATABASE_CONNECTION",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "aws-access-key-positive",
+        "type": "AWS_ACCESS_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "AWS_ACCESS_KEY"
+        ]
+      },
+      {
+        "id": "aws-secret-key-positive",
+        "type": "AWS_SECRET_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "AWS_SECRET_KEY"
+        ]
+      },
+      {
+        "id": "bearer-positive",
+        "type": "BEARER_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "BEARER_TOKEN",
+          "CARD_AUTH_CODE"
+        ]
+      },
+      {
+        "id": "jwt-positive",
+        "type": "JWT_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "JWT_TOKEN"
+        ]
+      },
+      {
+        "id": "private-key-positive",
+        "type": "PRIVATE_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "PRIVATE_KEY"
+        ]
+      },
+      {
+        "id": "ssh-private-key-positive",
+        "type": "SSH_PRIVATE_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SSH_PRIVATE_KEY"
+        ]
+      },
+      {
+        "id": "public-key-benign",
+        "type": "PRIVATE_KEY",
+        "polarity": "benign",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "AWS_SECRET_KEY"
+        ]
+      },
+      {
+        "id": "github-token-positive",
+        "type": "GITHUB_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GITHUB_TOKEN"
+        ]
+      },
+      {
+        "id": "slack-token-positive",
+        "type": "SLACK_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SLACK_TOKEN"
+        ]
+      },
+      {
+        "id": "npm-token-positive",
+        "type": "NPM_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "NPM_TOKEN"
+        ]
+      },
+      {
+        "id": "sendgrid-positive",
+        "type": "SENDGRID_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SENDGRID_API_KEY"
+        ]
+      },
+      {
+        "id": "mailgun-positive",
+        "type": "MAILGUN_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "MAILGUN_API_KEY"
+        ]
+      },
+      {
+        "id": "openai-positive",
+        "type": "OPENAI_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "OPENAI_API_KEY"
+        ]
+      },
+      {
+        "id": "pypi-positive",
+        "type": "PYPI_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "PYPI_TOKEN"
+        ]
+      },
+      {
+        "id": "kubernetes-secret-password-key",
+        "type": "KUBERNETES_SECRET",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "GENERIC_SECRET"
+        ]
+      },
+      {
+        "id": "heroku-keyword-only",
+        "type": "HEROKU_API_KEY",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "GENERIC_API_KEY"
+        ]
+      }
+    ],
+    "credentials": [
+      {
+        "id": "docker-auth-positive",
+        "type": "DOCKER_AUTH",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "DOCKER_AUTH"
+        ]
+      },
+      {
+        "id": "docker-auth-negative",
+        "type": "DOCKER_AUTH",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "slack-webhook-positive",
+        "type": "SLACK_WEBHOOK",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "wider",
+        "own_start_offset": -53,
+        "own_end_offset": 0,
+        "all_types": [
+          "SLACK_WEBHOOK"
+        ]
+      },
+      {
+        "id": "slack-webhook-negative",
+        "type": "SLACK_WEBHOOK",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "twilio-positive",
+        "type": "TWILIO_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "TWILIO_API_KEY"
+        ]
+      },
+      {
+        "id": "twilio-negative-no-context",
+        "type": "TWILIO_API_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "session-id-positive",
+        "type": "SESSION_ID",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SESSION_ID"
+        ]
+      },
+      {
+        "id": "session-id-negative",
+        "type": "SESSION_ID",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "azure-storage-positive",
+        "type": "AZURE_STORAGE_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "AZURE_STORAGE_KEY"
+        ]
+      },
+      {
+        "id": "azure-storage-negative",
+        "type": "AZURE_STORAGE_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "kubernetes-secret-positive",
+        "type": "KUBERNETES_SECRET",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "KUBERNETES_SECRET"
+        ]
+      },
+      {
+        "id": "kubernetes-secret-negative",
+        "type": "KUBERNETES_SECRET",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "cookie-session-positive",
+        "type": "COOKIE_SESSION",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "COOKIE_SESSION"
+        ]
+      },
+      {
+        "id": "cookie-session-negative",
+        "type": "COOKIE_SESSION",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "heroku-positive",
+        "type": "HEROKU_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "HEROKU_API_KEY"
+        ]
+      },
+      {
+        "id": "heroku-negative-uuid-no-context",
+        "type": "HEROKU_API_KEY",
+        "polarity": "benign",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "oauth-client-secret-positive",
+        "type": "OAUTH_CLIENT_SECRET",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "OAUTH_CLIENT_SECRET"
+        ]
+      },
+      {
+        "id": "oauth-client-secret-negative",
+        "type": "OAUTH_CLIENT_SECRET",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "oauth-token-positive",
+        "type": "OAUTH_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "OAUTH_TOKEN"
+        ]
+      },
+      {
+        "id": "oauth-token-negative",
+        "type": "OAUTH_TOKEN",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "google-api-key-positive",
+        "type": "GOOGLE_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GOOGLE_API_KEY"
+        ]
+      },
+      {
+        "id": "firebase-api-key-positive",
+        "type": "FIREBASE_API_KEY",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "GOOGLE_API_KEY"
+        ]
+      },
+      {
+        "id": "google-api-key-negative",
+        "type": "GOOGLE_API_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "gcp-service-account-positive",
+        "type": "GCP_SERVICE_ACCOUNT",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "gcp-service-account-negative",
+        "type": "GCP_SERVICE_ACCOUNT",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "aws-arn-positive",
+        "type": "AWS_ARN",
+        "polarity": "benign",
+        "detected_own": true,
+        "own_span": "unmarked",
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "AWS_ARN"
+        ]
+      },
+      {
+        "id": "azure-resource-id-positive",
+        "type": "AZURE_RESOURCE_ID",
+        "polarity": "benign",
+        "detected_own": true,
+        "own_span": "unmarked",
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "AZURE_RESOURCE_ID"
+        ]
+      },
+      {
+        "id": "stripe-secret-positive",
+        "type": "STRIPE_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "STRIPE_API_KEY"
+        ]
+      },
+      {
+        "id": "stripe-publishable",
+        "type": "STRIPE_API_KEY",
+        "polarity": "benign",
+        "detected_own": true,
+        "own_span": "unmarked",
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "STRIPE_API_KEY"
+        ]
+      },
+      {
+        "id": "generic-secret-positive",
+        "type": "GENERIC_SECRET",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GENERIC_SECRET"
+        ]
+      },
+      {
+        "id": "generic-secret-negative",
+        "type": "GENERIC_SECRET",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "generic-api-key-positive",
+        "type": "GENERIC_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GENERIC_API_KEY"
+        ]
+      },
+      {
+        "id": "generic-api-key-negative",
+        "type": "GENERIC_API_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "url-with-auth-positive",
+        "type": "URL_WITH_AUTH",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "url-with-auth-negative",
+        "type": "URL_WITH_AUTH",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "database-connection-positive",
+        "type": "DATABASE_CONNECTION",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "wider",
+        "own_start_offset": -15,
+        "own_end_offset": 24,
+        "all_types": [
+          "DATABASE_CONNECTION"
+        ]
+      },
+      {
+        "id": "database-connection-negative",
+        "type": "DATABASE_CONNECTION",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "aws-access-key-positive",
+        "type": "AWS_ACCESS_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "AWS_ACCESS_KEY"
+        ]
+      },
+      {
+        "id": "aws-secret-key-positive",
+        "type": "AWS_SECRET_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "AWS_SECRET_KEY"
+        ]
+      },
+      {
+        "id": "bearer-positive",
+        "type": "BEARER_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "BEARER_TOKEN"
+        ]
+      },
+      {
+        "id": "jwt-positive",
+        "type": "JWT_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "JWT_TOKEN"
+        ]
+      },
+      {
+        "id": "private-key-positive",
+        "type": "PRIVATE_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "PRIVATE_KEY"
+        ]
+      },
+      {
+        "id": "ssh-private-key-positive",
+        "type": "SSH_PRIVATE_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SSH_PRIVATE_KEY"
+        ]
+      },
+      {
+        "id": "public-key-benign",
+        "type": "PRIVATE_KEY",
+        "polarity": "benign",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "AWS_SECRET_KEY"
+        ]
+      },
+      {
+        "id": "github-token-positive",
+        "type": "GITHUB_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GITHUB_TOKEN"
+        ]
+      },
+      {
+        "id": "slack-token-positive",
+        "type": "SLACK_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SLACK_TOKEN"
+        ]
+      },
+      {
+        "id": "npm-token-positive",
+        "type": "NPM_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "NPM_TOKEN"
+        ]
+      },
+      {
+        "id": "sendgrid-positive",
+        "type": "SENDGRID_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SENDGRID_API_KEY"
+        ]
+      },
+      {
+        "id": "mailgun-positive",
+        "type": "MAILGUN_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "MAILGUN_API_KEY"
+        ]
+      },
+      {
+        "id": "openai-positive",
+        "type": "OPENAI_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "OPENAI_API_KEY"
+        ]
+      },
+      {
+        "id": "pypi-positive",
+        "type": "PYPI_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "PYPI_TOKEN"
+        ]
+      },
+      {
+        "id": "kubernetes-secret-password-key",
+        "type": "KUBERNETES_SECRET",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "GENERIC_SECRET"
+        ]
+      },
+      {
+        "id": "heroku-keyword-only",
+        "type": "HEROKU_API_KEY",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "GENERIC_API_KEY"
+        ]
+      }
+    ],
+    "no-false-positive-filter": [
+      {
+        "id": "docker-auth-positive",
+        "type": "DOCKER_AUTH",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "DOCKER_AUTH"
+        ]
+      },
+      {
+        "id": "docker-auth-negative",
+        "type": "DOCKER_AUTH",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "slack-webhook-positive",
+        "type": "SLACK_WEBHOOK",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "wider",
+        "own_start_offset": -53,
+        "own_end_offset": 0,
+        "all_types": [
+          "SLACK_WEBHOOK"
+        ]
+      },
+      {
+        "id": "slack-webhook-negative",
+        "type": "SLACK_WEBHOOK",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "twilio-positive",
+        "type": "TWILIO_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "TWILIO_API_KEY"
+        ]
+      },
+      {
+        "id": "twilio-negative-no-context",
+        "type": "TWILIO_API_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "session-id-positive",
+        "type": "SESSION_ID",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SESSION_ID"
+        ]
+      },
+      {
+        "id": "session-id-negative",
+        "type": "SESSION_ID",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "azure-storage-positive",
+        "type": "AZURE_STORAGE_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "AZURE_STORAGE_KEY"
+        ]
+      },
+      {
+        "id": "azure-storage-negative",
+        "type": "AZURE_STORAGE_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "kubernetes-secret-positive",
+        "type": "KUBERNETES_SECRET",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "KUBERNETES_SECRET"
+        ]
+      },
+      {
+        "id": "kubernetes-secret-negative",
+        "type": "KUBERNETES_SECRET",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "INSTAGRAM_USERNAME"
+        ]
+      },
+      {
+        "id": "cookie-session-positive",
+        "type": "COOKIE_SESSION",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "COOKIE_SESSION"
+        ]
+      },
+      {
+        "id": "cookie-session-negative",
+        "type": "COOKIE_SESSION",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "heroku-positive",
+        "type": "HEROKU_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "HEROKU_API_KEY"
+        ]
+      },
+      {
+        "id": "heroku-negative-uuid-no-context",
+        "type": "HEROKU_API_KEY",
+        "polarity": "benign",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "DISCOVERY_NUMBER"
+        ]
+      },
+      {
+        "id": "oauth-client-secret-positive",
+        "type": "OAUTH_CLIENT_SECRET",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "OAUTH_CLIENT_SECRET"
+        ]
+      },
+      {
+        "id": "oauth-client-secret-negative",
+        "type": "OAUTH_CLIENT_SECRET",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "oauth-token-positive",
+        "type": "OAUTH_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "OAUTH_TOKEN"
+        ]
+      },
+      {
+        "id": "oauth-token-negative",
+        "type": "OAUTH_TOKEN",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "google-api-key-positive",
+        "type": "GOOGLE_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GOOGLE_API_KEY"
+        ]
+      },
+      {
+        "id": "firebase-api-key-positive",
+        "type": "FIREBASE_API_KEY",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "GOOGLE_API_KEY",
+          "INSTAGRAM_USERNAME"
+        ]
+      },
+      {
+        "id": "google-api-key-negative",
+        "type": "GOOGLE_API_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "gcp-service-account-positive",
+        "type": "GCP_SERVICE_ACCOUNT",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "EMAIL",
+          "GCP_SERVICE_ACCOUNT"
+        ]
+      },
+      {
+        "id": "gcp-service-account-negative",
+        "type": "GCP_SERVICE_ACCOUNT",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "aws-arn-positive",
+        "type": "AWS_ARN",
+        "polarity": "benign",
+        "detected_own": true,
+        "own_span": "unmarked",
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "AWS_ARN",
+          "AWS_CERTIFICATION"
+        ]
+      },
+      {
+        "id": "azure-resource-id-positive",
+        "type": "AZURE_RESOURCE_ID",
+        "polarity": "benign",
+        "detected_own": true,
+        "own_span": "unmarked",
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "AZURE_RESOURCE_ID"
+        ]
+      },
+      {
+        "id": "stripe-secret-positive",
+        "type": "STRIPE_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "STRIPE_API_KEY"
+        ]
+      },
+      {
+        "id": "stripe-publishable",
+        "type": "STRIPE_API_KEY",
+        "polarity": "benign",
+        "detected_own": true,
+        "own_span": "unmarked",
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "STRIPE_API_KEY"
+        ]
+      },
+      {
+        "id": "generic-secret-positive",
+        "type": "GENERIC_SECRET",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GENERIC_SECRET"
+        ]
+      },
+      {
+        "id": "generic-secret-negative",
+        "type": "GENERIC_SECRET",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "generic-api-key-positive",
+        "type": "GENERIC_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GENERIC_API_KEY"
+        ]
+      },
+      {
+        "id": "generic-api-key-negative",
+        "type": "GENERIC_API_KEY",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "url-with-auth-positive",
+        "type": "URL_WITH_AUTH",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "wider",
+        "own_start_offset": -21,
+        "own_end_offset": 17,
+        "all_types": [
+          "URL_WITH_AUTH"
+        ]
+      },
+      {
+        "id": "url-with-auth-negative",
+        "type": "URL_WITH_AUTH",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "database-connection-positive",
+        "type": "DATABASE_CONNECTION",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "EMAIL"
+        ]
+      },
+      {
+        "id": "database-connection-negative",
+        "type": "DATABASE_CONNECTION",
+        "polarity": "negative",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": []
+      },
+      {
+        "id": "aws-access-key-positive",
+        "type": "AWS_ACCESS_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "AWS_ACCESS_KEY"
+        ]
+      },
+      {
+        "id": "aws-secret-key-positive",
+        "type": "AWS_SECRET_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "AWS_SECRET_KEY"
+        ]
+      },
+      {
+        "id": "bearer-positive",
+        "type": "BEARER_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "BEARER_TOKEN",
+          "CARD_AUTH_CODE"
+        ]
+      },
+      {
+        "id": "jwt-positive",
+        "type": "JWT_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "JWT_TOKEN"
+        ]
+      },
+      {
+        "id": "private-key-positive",
+        "type": "PRIVATE_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "PRIVATE_KEY"
+        ]
+      },
+      {
+        "id": "ssh-private-key-positive",
+        "type": "SSH_PRIVATE_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SSH_PRIVATE_KEY"
+        ]
+      },
+      {
+        "id": "public-key-benign",
+        "type": "PRIVATE_KEY",
+        "polarity": "benign",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "AWS_SECRET_KEY"
+        ]
+      },
+      {
+        "id": "github-token-positive",
+        "type": "GITHUB_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "GITHUB_TOKEN"
+        ]
+      },
+      {
+        "id": "slack-token-positive",
+        "type": "SLACK_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SLACK_TOKEN"
+        ]
+      },
+      {
+        "id": "npm-token-positive",
+        "type": "NPM_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "NPM_TOKEN"
+        ]
+      },
+      {
+        "id": "sendgrid-positive",
+        "type": "SENDGRID_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "SENDGRID_API_KEY"
+        ]
+      },
+      {
+        "id": "mailgun-positive",
+        "type": "MAILGUN_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "MAILGUN_API_KEY"
+        ]
+      },
+      {
+        "id": "openai-positive",
+        "type": "OPENAI_API_KEY",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "OPENAI_API_KEY"
+        ]
+      },
+      {
+        "id": "pypi-positive",
+        "type": "PYPI_TOKEN",
+        "polarity": "positive",
+        "detected_own": true,
+        "own_span": "exact",
+        "own_start_offset": 0,
+        "own_end_offset": 0,
+        "all_types": [
+          "PYPI_TOKEN"
+        ]
+      },
+      {
+        "id": "kubernetes-secret-password-key",
+        "type": "KUBERNETES_SECRET",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "GENERIC_SECRET"
+        ]
+      },
+      {
+        "id": "heroku-keyword-only",
+        "type": "HEROKU_API_KEY",
+        "polarity": "positive",
+        "detected_own": false,
+        "own_span": null,
+        "own_start_offset": null,
+        "own_end_offset": null,
+        "all_types": [
+          "GENERIC_API_KEY"
+        ]
+      }
+    ]
+  }
+}

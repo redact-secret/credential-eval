@@ -1,0 +1,536 @@
+{
+ "description": "Synthetic probe cases for the @openredaction/core 1.1.5 audit (ADR 0012). Every value is invented or a documented public test value. ⟦ ⟧ mark the credential-bearing part; they are removed before scanning. A case's text is an array of parts joined without a separator; credential-shaped values are split so that no line of this file is itself a credential-shaped literal.",
+ "cases": [
+  {
+   "id": "docker-auth-positive",
+   "type": "DOCKER_AUTH",
+   "polarity": "positive",
+   "text": [
+    "{\"auths\":{\"registry.example.com\":{\"auth\":\"⟦",
+    "ZXhh",
+    "bXBsZS11c2VyOmV4YW1wbGUtcGFzc3dvcmQtMDEyMzQ1",
+    "⟧",
+    "\"}}}"
+   ]
+  },
+  {
+   "id": "docker-auth-negative",
+   "type": "DOCKER_AUTH",
+   "polarity": "negative",
+   "text": [
+    "{\"auth\":\"short\"}"
+   ]
+  },
+  {
+   "id": "slack-webhook-positive",
+   "type": "SLACK_WEBHOOK",
+   "polarity": "positive",
+   "text": [
+    "url=https://hooks.slack.com/services/T00000000/B00000000/⟦",
+    "XXXX",
+    "XXXXXXXXXXXXXXXXXXXX",
+    "⟧"
+   ]
+  },
+  {
+   "id": "slack-webhook-negative",
+   "type": "SLACK_WEBHOOK",
+   "polarity": "negative",
+   "text": [
+    "see https://hooks.slack.com/ for documentation"
+   ]
+  },
+  {
+   "id": "twilio-positive",
+   "type": "TWILIO_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "twilio api key: ⟦",
+    "SK01",
+    "23456789abcdef0123456789abcdef",
+    "⟧"
+   ]
+  },
+  {
+   "id": "twilio-negative-no-context",
+   "type": "TWILIO_API_KEY",
+   "polarity": "negative",
+   "text": [
+    "build id SK",
+    "0123456789abcdef0123456789abcdef"
+   ]
+  },
+  {
+   "id": "session-id-positive",
+   "type": "SESSION_ID",
+   "polarity": "positive",
+   "text": [
+    "session=⟦",
+    "0123",
+    "456789abcdef0123456789abcdef",
+    "⟧"
+   ]
+  },
+  {
+   "id": "session-id-negative",
+   "type": "SESSION_ID",
+   "polarity": "negative",
+   "text": [
+    "session=short"
+   ]
+  },
+  {
+   "id": "azure-storage-positive",
+   "type": "AZURE_STORAGE_KEY",
+   "polarity": "positive",
+   "text": [
+    "azure storage AccountKey=⟦",
+    "QUJD",
+    "REVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoAAA==",
+    "⟧"
+   ]
+  },
+  {
+   "id": "azure-storage-negative",
+   "type": "AZURE_STORAGE_KEY",
+   "polarity": "negative",
+   "text": [
+    "AccountKey=short"
+   ]
+  },
+  {
+   "id": "kubernetes-secret-positive",
+   "type": "KUBERNETES_SECRET",
+   "polarity": "positive",
+   "text": [
+    "apiVersion: v1\nkind: Secret\ndata:\n  tok: ⟦",
+    "ZXhh",
+    "bXBsZS1wYXNzd29yZC0wMTIzNDU2",
+    "⟧",
+    "\n"
+   ]
+  },
+  {
+   "id": "kubernetes-secret-negative",
+   "type": "KUBERNETES_SECRET",
+   "polarity": "negative",
+   "text": [
+    "kind: ConfigMap\ndata:\n  mode: fast\n"
+   ]
+  },
+  {
+   "id": "cookie-session-positive",
+   "type": "COOKIE_SESSION",
+   "polarity": "positive",
+   "text": [
+    "Set-Cookie: session=⟦",
+    "abcd",
+    "efghijklmnopqrstuvwxyz012345",
+    "⟧"
+   ]
+  },
+  {
+   "id": "cookie-session-negative",
+   "type": "COOKIE_SESSION",
+   "polarity": "negative",
+   "text": [
+    "Set-Cookie: theme=dark"
+   ]
+  },
+  {
+   "id": "heroku-positive",
+   "type": "HEROKU_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "HEROKU_API_KEY=⟦",
+    "0123",
+    "4567-89ab-cdef-0123-456789abcdef",
+    "⟧"
+   ]
+  },
+  {
+   "id": "heroku-negative-uuid-no-context",
+   "type": "HEROKU_API_KEY",
+   "polarity": "benign",
+   "text": [
+    "request 01234567-89ab-cdef-0123-456789abcdef done"
+   ]
+  },
+  {
+   "id": "oauth-client-secret-positive",
+   "type": "OAUTH_CLIENT_SECRET",
+   "polarity": "positive",
+   "text": [
+    "client_secret=⟦",
+    "abcd",
+    "efghijklmnopqrst0123456789",
+    "⟧"
+   ]
+  },
+  {
+   "id": "oauth-client-secret-negative",
+   "type": "OAUTH_CLIENT_SECRET",
+   "polarity": "negative",
+   "text": [
+    "client_secret=example_placeholder_value_0123"
+   ]
+  },
+  {
+   "id": "oauth-token-positive",
+   "type": "OAUTH_TOKEN",
+   "polarity": "positive",
+   "text": [
+    "access_token=⟦",
+    "abcd",
+    "efghijklmnopqrst0123456789",
+    "⟧"
+   ]
+  },
+  {
+   "id": "oauth-token-negative",
+   "type": "OAUTH_TOKEN",
+   "polarity": "negative",
+   "text": [
+    "access_token=fake_placeholder_value_0123456"
+   ]
+  },
+  {
+   "id": "google-api-key-positive",
+   "type": "GOOGLE_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "google key: ⟦",
+    "AIza",
+    "0123456789abcdefghijklmnopqrstuvwxy",
+    "⟧"
+   ]
+  },
+  {
+   "id": "firebase-api-key-positive",
+   "type": "FIREBASE_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "firebase config apiKey: ⟦",
+    "AIza",
+    "0123456789abcdefghijklmnopqrstuvwxy",
+    "⟧"
+   ]
+  },
+  {
+   "id": "google-api-key-negative",
+   "type": "GOOGLE_API_KEY",
+   "polarity": "negative",
+   "text": [
+    "AIza-too-short"
+   ]
+  },
+  {
+   "id": "gcp-service-account-positive",
+   "type": "GCP_SERVICE_ACCOUNT",
+   "polarity": "positive",
+   "text": [
+    "{\"type\": \"service_account\", \"project_id\": \"my-project\", \"private_key_id\": \"⟦",
+    "0123",
+    "456789abcdef0123456789abcdef01234567",
+    "⟧",
+    "\", \"client_email\": \"svc@my-project.iam.gserviceaccount.com\"}"
+   ]
+  },
+  {
+   "id": "gcp-service-account-negative",
+   "type": "GCP_SERVICE_ACCOUNT",
+   "polarity": "negative",
+   "text": [
+    "{\"type\": \"user\", \"id\": \"1\"}"
+   ]
+  },
+  {
+   "id": "aws-arn-positive",
+   "type": "AWS_ARN",
+   "polarity": "benign",
+   "text": [
+    "aws resource arn:aws:iam::123456789012:role/example-role"
+   ]
+  },
+  {
+   "id": "azure-resource-id-positive",
+   "type": "AZURE_RESOURCE_ID",
+   "polarity": "benign",
+   "text": [
+    "azure resource /subscriptions/01234567-89ab-cdef-0123-456789abcdef/resourceGroups/example-rg/providers/Microsoft.Storage/storageAccounts/exampleacct"
+   ]
+  },
+  {
+   "id": "stripe-secret-positive",
+   "type": "STRIPE_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "key ⟦",
+    "sk_t",
+    "est_0123456789abcdefghijklmn",
+    "⟧"
+   ]
+  },
+  {
+   "id": "stripe-publishable",
+   "type": "STRIPE_API_KEY",
+   "polarity": "benign",
+   "text": [
+    "key pk_test_",
+    "0123456789abcdefghijklmn"
+   ]
+  },
+  {
+   "id": "generic-secret-positive",
+   "type": "GENERIC_SECRET",
+   "polarity": "positive",
+   "text": [
+    "password: ⟦",
+    "Zk9!",
+    "qL2#vB7x",
+    "⟧"
+   ]
+  },
+  {
+   "id": "generic-secret-negative",
+   "type": "GENERIC_SECRET",
+   "polarity": "negative",
+   "text": [
+    "password: example-placeholder"
+   ]
+  },
+  {
+   "id": "generic-api-key-positive",
+   "type": "GENERIC_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "api_key: ⟦",
+    "Zk9q",
+    "L2vB7xQ4mN8pR1sT6uW0",
+    "⟧"
+   ]
+  },
+  {
+   "id": "generic-api-key-negative",
+   "type": "GENERIC_API_KEY",
+   "polarity": "negative",
+   "text": [
+    "api_key: example_placeholder_0123456789"
+   ]
+  },
+  {
+   "id": "url-with-auth-positive",
+   "type": "URL_WITH_AUTH",
+   "polarity": "positive",
+   "text": [
+    "fetch https://example-user:⟦",
+    "Zk9q",
+    "L2vB7x",
+    "⟧",
+    "@example.com/path"
+   ]
+  },
+  {
+   "id": "url-with-auth-negative",
+   "type": "URL_WITH_AUTH",
+   "polarity": "negative",
+   "text": [
+    "fetch https://example.com/path"
+   ]
+  },
+  {
+   "id": "database-connection-positive",
+   "type": "DATABASE_CONNECTION",
+   "polarity": "positive",
+   "text": [
+    "url=postgres://app:⟦",
+    "Zk9q",
+    "L2vB7x",
+    "⟧",
+    "@db.example.com:5432/app"
+   ]
+  },
+  {
+   "id": "database-connection-negative",
+   "type": "DATABASE_CONNECTION",
+   "polarity": "negative",
+   "text": [
+    "url=postgres://db.example.com:5432/app"
+   ]
+  },
+  {
+   "id": "aws-access-key-positive",
+   "type": "AWS_ACCESS_KEY",
+   "polarity": "positive",
+   "text": [
+    "id ⟦",
+    "AKIA",
+    "IOSFODNN7EXAMPLE",
+    "⟧"
+   ]
+  },
+  {
+   "id": "aws-secret-key-positive",
+   "type": "AWS_SECRET_KEY",
+   "polarity": "positive",
+   "text": [
+    "aws secret key ⟦",
+    "wJal",
+    "rXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "⟧"
+   ]
+  },
+  {
+   "id": "bearer-positive",
+   "type": "BEARER_TOKEN",
+   "polarity": "positive",
+   "text": [
+    "Authorization: Bearer ⟦",
+    "abcd",
+    "efghijklmnopqrstuvwxyz012345",
+    "⟧"
+   ]
+  },
+  {
+   "id": "jwt-positive",
+   "type": "JWT_TOKEN",
+   "polarity": "positive",
+   "text": [
+    "token ⟦",
+    "eyJh",
+    "bGciOiJIUzI1NiJ9.eyJzdWIiOiJleGFtcGxlIn0.c2lnbmF0dXJlLWV4YW1wbGU",
+    "⟧"
+   ]
+  },
+  {
+   "id": "private-key-positive",
+   "type": "PRIVATE_KEY",
+   "polarity": "positive",
+   "text": [
+    "⟦",
+    "----",
+    "-BEGIN PRIVATE KEY-----\nMIIBVgIBADANBgkqhkiG9w0BAQEFAASCAUAwggE8AgEAAkEAexample0123456789\n-----END PRIVATE KEY-----",
+    "⟧"
+   ]
+  },
+  {
+   "id": "ssh-private-key-positive",
+   "type": "SSH_PRIVATE_KEY",
+   "polarity": "positive",
+   "text": [
+    "⟦",
+    "----",
+    "-BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAAexample0123456789\n-----END OPENSSH PRIVATE KEY-----",
+    "⟧"
+   ]
+  },
+  {
+   "id": "public-key-benign",
+   "type": "PRIVATE_KEY",
+   "polarity": "benign",
+   "text": [
+    "-----BEGIN PUBLIC KEY-----\nMFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAexample0123456789\n-----END PUBLIC KEY-----"
+   ]
+  },
+  {
+   "id": "github-token-positive",
+   "type": "GITHUB_TOKEN",
+   "polarity": "positive",
+   "text": [
+    "⟦",
+    "ghp_",
+    "0123456789abcdefghijklmnopqrstuvwxyz",
+    "⟧"
+   ]
+  },
+  {
+   "id": "slack-token-positive",
+   "type": "SLACK_TOKEN",
+   "polarity": "positive",
+   "text": [
+    "⟦",
+    "xoxb",
+    "-0123456789-abcdefghij",
+    "⟧"
+   ]
+  },
+  {
+   "id": "npm-token-positive",
+   "type": "NPM_TOKEN",
+   "polarity": "positive",
+   "text": [
+    "⟦",
+    "npm_",
+    "0123456789abcdefghijklmnopqrstuvwxyz",
+    "⟧"
+   ]
+  },
+  {
+   "id": "sendgrid-positive",
+   "type": "SENDGRID_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "⟦",
+    "SG.0",
+    "123456789abcdefghijkl.0123456789abcdefghijklmnopqrstuvwxyz0123456",
+    "⟧"
+   ]
+  },
+  {
+   "id": "mailgun-positive",
+   "type": "MAILGUN_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "mailgun key ⟦",
+    "key-",
+    "0123456789abcdef0123456789abcdef",
+    "⟧"
+   ]
+  },
+  {
+   "id": "openai-positive",
+   "type": "OPENAI_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "⟦",
+    "sk-a",
+    "1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8s9T0uV1wX2yZ",
+    "⟧"
+   ]
+  },
+  {
+   "id": "pypi-positive",
+   "type": "PYPI_TOKEN",
+   "polarity": "positive",
+   "text": [
+    "⟦",
+    "pypi",
+    "-0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz",
+    "⟧"
+   ]
+  },
+  {
+   "id": "kubernetes-secret-password-key",
+   "type": "KUBERNETES_SECRET",
+   "polarity": "positive",
+   "text": [
+    "apiVersion: v1\nkind: Secret\ndata:\n  password: ⟦",
+    "ZXhh",
+    "bXBsZS1wYXNzd29yZC0wMTIzNDU2",
+    "⟧",
+    "\n"
+   ]
+  },
+  {
+   "id": "heroku-keyword-only",
+   "type": "HEROKU_API_KEY",
+   "polarity": "positive",
+   "text": [
+    "heroku api key ⟦",
+    "0123",
+    "4567-89ab-cdef-0123-456789abcdef",
+    "⟧"
+   ]
+  }
+ ]
+}
