@@ -911,6 +911,17 @@
           "format": "uint64",
           "minimum": 0
         },
+        "reuse": {
+          "description": "The earlier observations this run drew on; absent when every scanner\nran fresh (v1.6, additive).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReuseDiagnostics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "scanner_process_ms": {
           "description": "Sum of scanner process wall-clock times, in milliseconds. With\nparallel jobs this can exceed `wall_ms`.",
           "type": "integer",
@@ -1418,6 +1429,21 @@
         "end"
       ]
     },
+    "ObservationOrigin": {
+      "description": "Whether a scanner's observation was made in this run or taken from an\nearlier one.",
+      "oneOf": [
+        {
+          "description": "Scanned in this run.",
+          "type": "string",
+          "const": "fresh"
+        },
+        {
+          "description": "Taken, with its original receipt, from an earlier verified run.",
+          "type": "string",
+          "const": "reused"
+        }
+      ]
+    },
     "ObservedRange": {
       "description": "A finding range on one case.",
       "type": "object",
@@ -1899,6 +1925,25 @@
         "decoded_unverified"
       ]
     },
+    "ReuseDiagnostics": {
+      "description": "Where reused observations came from. Provenance, not a measurement: it\nstays out of the semantic digest, so a run that reused a scanner's\nobservations and a run that scanned it fresh have the same digest.",
+      "type": "object",
+      "properties": {
+        "input_digest": {
+          "description": "Input digest both the source and this run were observed over.",
+          "$ref": "#/$defs/Sha256Digest"
+        },
+        "source_digest": {
+          "description": "Canonical digest of the whole `ObservationSet` that was offered for\nreuse (its original receipts).",
+          "$ref": "#/$defs/Sha256Digest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source_digest",
+        "input_digest"
+      ]
+    },
     "ReviewOccurrence": {
       "description": "One entry of the review queue: an occurrence that needs an authored\ndecision. Neither scanner of a disagreement is ground truth.",
       "type": "object",
@@ -2348,6 +2393,24 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "origin": {
+          "description": "Whether this run scanned the scanner or reused an earlier observation\n(v1.6). A reused scanner ran no scan task: its sizes and times above\ndescribe this run (version probe only), never the original scan.\nAbsent in a run that did not offer observations for reuse.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObservationOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "origin_reason": {
+          "description": "Why the scanner ran fresh or was reused. A fixed vocabulary\n(`compatible`, `forced`, `no-recorded-observation`, `not-prepared`,\n`changed: <field>[, <field>]`); never scanner output.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "prepare_ms": {
           "description": "Time spent on the scanner's version probes, in milliseconds.",

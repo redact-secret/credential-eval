@@ -11,6 +11,7 @@
 //!                     [--run-class official|exploratory]
 //!                     [--evidence-release <tag> --evidence-manifest <file>
 //!                      --evidence-manifest-digest <sha256>]
+//!                     [--reuse-observations <observations.json> [--fresh <scanner>]...]
 //!                     [--require-complete] [--strict] [--require-fully-measured]
 //!                     [--progress-interval <seconds>] [--no-progress]
 //! credential-eval compat legacy-bench --artifact <artifact.json> --index <legacy-index.json>
@@ -36,6 +37,13 @@
 //! run when either does not verify (`docs/official-runs.md`). The evidence
 //! release flags may also be given to an exploratory run; a mismatch is then
 //! refused as well.
+//!
+//! `--reuse-observations` offers the `--observations-out` of an earlier run
+//! over the same fixture bytes: a scanner whose identity is unchanged keeps
+//! its recorded observation (launching no scan), every other scanner runs
+//! fresh, and `--fresh` forces a scanner to run. A population, protocol or
+//! receipt that does not verify is refused (exit 4) instead of being scanned
+//! around. Exploratory runs only (`docs/decisions/0008-*`).
 //!
 //! Progress: unless `--no-progress`, `run` writes bounded `progress ...` lines
 //! to stderr (scanner, phase, elapsed time, processed count) and, every
@@ -74,7 +82,7 @@ use credential_eval_contracts::artifact::{RunArtifact, RunClass};
 use credential_eval_contracts::config::{EvaluationSettings, RunConfig, SeedConvention};
 use credential_eval_contracts::corpus::CorpusSnapshot;
 use credential_eval_contracts::ids::ScannerId;
-use credential_eval_contracts::observation::ScannerStatus;
+use credential_eval_contracts::observation::{ObservationSet, ScannerStatus};
 use credential_eval_contracts::performance::{PerformanceArtifact, PerformanceConfig};
 use credential_eval_kernel::evaluation::{GenerationLimits, MethodId};
 
@@ -90,6 +98,7 @@ usage:
                       [--run-class official|exploratory]
                       [--evidence-release <tag> --evidence-manifest <file>
                        --evidence-manifest-digest <sha256>]
+                      [--reuse-observations <observations.json> [--fresh <scanner>]...]
                       [--require-complete] [--strict] [--require-fully-measured]
                       [--progress-interval <seconds>] [--no-progress]
   credential-eval compat legacy-bench --artifact <artifact.json>
@@ -136,7 +145,12 @@ struct RunArgs {
     evidence_manifest_digest: Option<String>,
     no_progress: bool,
     progress_interval: Option<u64>,
+    reuse_observations: Option<PathBuf>,
+    fresh: Vec<String>,
 }
+
+/// Largest observation set accepted by `--reuse-observations`, in bytes.
+const MAX_REUSE_BYTES: u64 = 512 * 1024 * 1024;
 
 /// Default seconds between heartbeat lines.
 const DEFAULT_PROGRESS_INTERVAL: u64 = 10;
@@ -176,6 +190,12 @@ fn parse(args: &[OsString]) -> Result<RunArgs, Usage> {
             "--out" => parsed.out = Some(value()?.into()),
             "--config" => parsed.config = Some(value()?.into()),
             "--observations-out" => parsed.observations_out = Some(value()?.into()),
+            "--reuse-observations" => parsed.reuse_observations = Some(value()?.into()),
+            "--fresh" => parsed.fresh.push(
+                value()?
+                    .into_string()
+                    .map_err(|_| usage("--fresh must be UTF-8"))?,
+            ),
             "--node-dir" => parsed.node_dir = Some(value()?.into()),
             "--work-dir" => parsed.work_dir = Some(value()?.into()),
             "--scanner" => parsed.scanners.push(
@@ -466,6 +486,9 @@ fn summarize(artifact: &RunArtifact) -> bool {
             );
         }
         for (id, t) in &execution.scanners {
+            if let (Some(origin), Some(reason)) = (t.origin, &t.origin_reason) {
+                eprintln!("origin {id}: {} ({reason})", serde_name(&Some(origin)));
+            }
             eprintln!(
                 "timing {id}: queue {} ms · process {} ms · normalize {} ms · {} tasks · {} B received · {} findings · {}{}",
                 t.queue_ms,
@@ -508,7 +531,7 @@ fn fail(error: RunError) -> ExitCode {
             eprintln!("error: {error}");
             ExitCode::from(2)
         }
-        error @ RunError::Refused(_) => {
+        error @ (RunError::Refused(_) | RunError::ReuseRefused(_)) => {
             eprintln!("error: {error}; no artifact written");
             ExitCode::from(4)
         }
@@ -580,6 +603,17 @@ fn run(args: &[OsString]) -> ExitCode {
             return ExitCode::from(2);
         }
     }
+    if args.reuse_observations.is_none() && !args.fresh.is_empty() {
+        eprintln!("error: --fresh needs --reuse-observations");
+        return ExitCode::from(2);
+    }
+    if args.reuse_observations.is_some() && run_class == RunClass::Official {
+        eprintln!(
+            "error: an official run measures every scanner fresh; --reuse-observations \
+             is for exploratory runs (docs/decisions/0008)"
+        );
+        return ExitCode::from(2);
+    }
     let corpus_bytes = match fs::read(corpus_path) {
         Ok(bytes) => bytes,
         Err(e) => {
@@ -628,6 +662,39 @@ fn run(args: &[OsString]) -> ExitCode {
     }
     env.candidate_roots = args.candidate_roots.clone();
 
+    let source = match &args.reuse_observations {
+        None => None,
+        Some(path) => {
+            match read_bounded(path, MAX_REUSE_BYTES, "--reuse-observations").and_then(|bytes| {
+                serde_json::from_slice::<ObservationSet>(&bytes).map_err(|e| {
+                    format!("--reuse-observations is not a valid observation set: {e}")
+                })
+            }) {
+                Ok(set) => Some(set),
+                Err(message) => {
+                    eprintln!("error: observation reuse refused: {message}; no artifact written");
+                    return ExitCode::from(4);
+                }
+            }
+        }
+    };
+    let mut fresh = std::collections::BTreeSet::new();
+    for id in &args.fresh {
+        match ScannerId::new(id.clone()) {
+            Ok(id) => {
+                fresh.insert(id);
+            }
+            Err(e) => {
+                eprintln!("error: --fresh: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let reuse = source.as_ref().map(|source| orchestrate::ReuseRequest {
+        source,
+        fresh: &fresh,
+    });
+
     let cancel = CancelToken::new();
     let handler = cancel.clone();
     if ctrlc::set_handler(move || handler.cancel()).is_err() {
@@ -646,6 +713,7 @@ fn run(args: &[OsString]) -> ExitCode {
         cancel: &cancel,
         enforce_pins: run_class == RunClass::Official,
         progress,
+        reuse: reuse.as_ref(),
     };
     let (observations, artifact, method_failure) = match &methods {
         None => match orchestrate::run(&request) {

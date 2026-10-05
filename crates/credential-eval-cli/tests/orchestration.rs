@@ -470,6 +470,7 @@ fn invalid_configurations_fail_before_running() {
             cancel: &credential_eval_adapters::process::CancelToken::new(),
             enforce_pins: false,
             progress: &credential_eval_cli::progress::Silent,
+            reuse: None,
         })
         .err()
         .expect("run must fail")

@@ -12,7 +12,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::ContractError;
-use crate::canonical::sha256_canonical;
+use crate::canonical::{sha256_bytes, sha256_canonical};
 use crate::ids::{CaseId, FixturePath, ReleaseTag, Sha256Digest};
 use crate::range::{ByteRange, Envelope};
 use crate::representation::{DecodedFact, Representation, case_has_facts, check_case};
@@ -261,6 +261,32 @@ pub fn corpus_digest(cases: &[Case]) -> Sha256Digest {
     let mut sorted: Vec<&Case> = cases.iter().collect();
     sorted.sort_by(|a, b| a.id.cmp(&b.id));
     sha256_canonical(&sorted)
+}
+
+/// Compute the input digest: SHA-256 of the canonical JSON of
+/// `{path, sha256(content)}` for every case, sorted by path (see
+/// `docs/contracts/identity.md`).
+///
+/// It covers exactly what a scanner is shown (fixture paths and bytes) and
+/// nothing a scanner is not shown: expected spans, envelopes, grouping, twin
+/// lineage and the snapshot identity are all outside it. Two corpora with the
+/// same input digest feed every scanner the same files, so a scanner's
+/// observations of one are the observations of the other (revision v1.6).
+pub fn input_digest(cases: &[Case]) -> Sha256Digest {
+    #[derive(Serialize)]
+    struct Input<'a> {
+        path: &'a FixturePath,
+        sha256: Sha256Digest,
+    }
+    let mut inputs: Vec<Input<'_>> = cases
+        .iter()
+        .map(|c| Input {
+            path: &c.path,
+            sha256: sha256_bytes(c.content.as_bytes()),
+        })
+        .collect();
+    inputs.sort_by(|a, b| a.path.cmp(b.path));
+    sha256_canonical(&inputs)
 }
 
 impl CorpusSnapshot {

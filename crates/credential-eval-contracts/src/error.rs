@@ -33,6 +33,10 @@ pub enum ContractError {
     CorpusDigestMismatch { declared: String, computed: String },
     /// Observations were recorded against a different corpus.
     StaleObservations { expected: String, found: String },
+    /// Observations were made over different fixture paths or bytes.
+    StaleInputs { expected: String, found: String },
+    /// Observations record no measurement binding (written before v1.6).
+    UnboundObservations,
     /// A normalized finding names an unknown path or an invalid range.
     InvalidFinding { path: String, start: u64, end: u64 },
     /// An unmeasured path is unknown, unsorted or duplicated, or a finding is
@@ -82,6 +86,16 @@ impl fmt::Display for ContractError {
                 f,
                 "observations were recorded for corpus {found}, expected {expected}"
             ),
+            Self::StaleInputs { expected, found } => write!(
+                f,
+                "observations were made over fixture inputs {found}, expected {expected}"
+            ),
+            Self::UnboundObservations => {
+                write!(
+                    f,
+                    "observations record no measurement binding (input digest)"
+                )
+            }
             Self::InvalidFinding { path, start, end } => {
                 write!(f, "invalid normalized finding {path}:[{start}, {end})")
             }

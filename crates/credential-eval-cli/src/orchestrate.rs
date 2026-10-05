@@ -25,13 +25,15 @@ use credential_eval_adapters::{
     ScannerObservation, ScannerProvenance, classify, request,
 };
 use credential_eval_contracts::artifact::{
-    ExecutionDiagnostics, FailedPhase, PhaseTimings, RunArtifact, ScannerTiming,
+    ExecutionDiagnostics, FailedPhase, ObservationOrigin, PhaseTimings, ReuseDiagnostics,
+    RunArtifact, ScannerTiming,
 };
+use credential_eval_contracts::canonical::sha256_canonical;
 use credential_eval_contracts::config::{RunConfig, ScannerSpec, SeedConvention};
 use credential_eval_contracts::corpus::CorpusSnapshot;
-use credential_eval_contracts::ids::FixturePath;
+use credential_eval_contracts::ids::{FixturePath, ScannerId, Sha256Digest};
 use credential_eval_contracts::observation::{
-    ObservationSet, Replays, ScannerStatus, UnmeasuredPath,
+    MeasurementBinding, ObservationSet, Replays, ScannerStatus, UnmeasuredPath,
 };
 use credential_eval_contracts::schema::ObservationSetSchema;
 use credential_eval_kernel::evaluation::cases::build_cases;
@@ -54,6 +56,9 @@ pub enum RunError {
     Cancelled,
     /// An official run refused its inputs (a scanner did not match its pin).
     Refused(String),
+    /// Observations offered for reuse were refused (ADR 0008): wrong
+    /// population, corrupt, or a receipt that is not a verified complete one.
+    ReuseRefused(String),
 }
 
 impl std::fmt::Display for RunError {
@@ -64,6 +69,7 @@ impl std::fmt::Display for RunError {
             Self::Io(m) => write!(f, "I/O error: {m}"),
             Self::Cancelled => write!(f, "run cancelled"),
             Self::Refused(m) => write!(f, "official run refused: {m}"),
+            Self::ReuseRefused(m) => write!(f, "observation reuse refused: {m}"),
         }
     }
 }
@@ -88,6 +94,17 @@ pub struct RunRequest<'a> {
     /// Operational progress receiver (stderr in the CLI). Progress never
     /// feeds the artifact's semantic content.
     pub progress: &'a dyn Progress,
+    /// Earlier observations to reuse for scanners whose identity is unchanged
+    /// (ADR 0008). `None`: every scanner runs fresh.
+    pub reuse: Option<&'a ReuseRequest<'a>>,
+}
+
+/// Earlier observations offered for whole-population reuse (ADR 0008).
+pub struct ReuseRequest<'a> {
+    /// The recorded observations, with their original receipts.
+    pub source: &'a ObservationSet,
+    /// Scanners that run fresh whatever the source holds.
+    pub fresh: &'a BTreeSet<ScannerId>,
 }
 
 /// Result of a run.
@@ -101,6 +118,141 @@ pub struct RunOutput {
 struct Scanner {
     spec: ScannerSpec,
     adapter: Box<dyn Adapter>,
+}
+
+impl Scanner {
+    /// The identity recorded for this scanner when it resolved to `version`
+    /// and `provenance`.
+    fn identity(&self, version: Option<String>, provenance: ScannerProvenance) -> ScannerIdentity {
+        ScannerIdentity {
+            id: self.spec.id.clone(),
+            version,
+            mode: self.spec.mode.clone(),
+            adapter: self.spec.adapter.clone(),
+            configuration_hash: self.spec.configuration_hash(),
+            provenance: Some(provenance),
+            build: Some(self.adapter.build(&self.spec)),
+        }
+    }
+}
+
+/// What a run does with one scanner when observations are offered for reuse.
+enum Decision {
+    /// Scan it. The reason is `None` when no observations were offered.
+    Fresh(Option<String>),
+    /// Keep the recorded observation, receipt untouched.
+    Reused(Box<ScannerObservation>),
+}
+
+/// Refuse a source that cannot serve this run at all: wrong population,
+/// unbound, other protocol, incompatible restriction or corrupt content.
+/// Nothing is scanned or assigned before this passes.
+fn check_source(
+    reuse: &ReuseRequest<'_>,
+    corpus: &CorpusSnapshot,
+    input_digest: &Sha256Digest,
+    restriction: Option<&Sha256Digest>,
+    scanners: &[Scanner],
+) -> Result<(), RunError> {
+    let refuse = |m: String| RunError::ReuseRefused(m);
+    let Some(binding) = &reuse.source.measurement else {
+        return Err(refuse(
+            "the observations record no measurement binding (written before contract v1.6);              run the scanners fresh"
+                .into(),
+        ));
+    };
+    if binding.protocol_version != credential_eval_contracts::PROTOCOL_VERSION {
+        return Err(refuse(format!(
+            "the observations were normalized under {}, this run measures under {}",
+            binding.protocol_version,
+            credential_eval_contracts::PROTOCOL_VERSION
+        )));
+    }
+    if &binding.input_digest != input_digest {
+        return Err(refuse(format!(
+            "the fixture inputs changed (observed {}, now {input_digest}); accuracy must be              re-measured for the changed population, run without --reuse-observations",
+            binding.input_digest
+        )));
+    }
+    if let Some(recorded) = &binding.restriction {
+        if Some(recorded) != restriction {
+            return Err(refuse(
+                "the observations were restricted by a different family allowlist".into(),
+            ));
+        }
+    }
+    reuse
+        .source
+        .validate_inputs(corpus)
+        .map_err(|e| refuse(format!("the observations are corrupt: {e}")))?;
+    for id in reuse.fresh {
+        if !scanners.iter().any(|s| &s.spec.id == id) {
+            return Err(RunError::Config(format!(
+                "--fresh {id} is not a configured scanner"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Decide one scanner: reuse its recorded observation only when its identity
+/// is exactly what ran, and only when the record is a verified complete one.
+fn decide(
+    scanner: &Scanner,
+    prepared: &Result<Prepared, Box<credential_eval_adapters::PrepareFailure>>,
+    reuse: &ReuseRequest<'_>,
+    replays: u32,
+) -> Result<Decision, RunError> {
+    let fresh = |reason: &str| Ok(Decision::Fresh(Some(reason.to_owned())));
+    let id = &scanner.spec.id;
+    if reuse.fresh.contains(id) {
+        return fresh("forced");
+    }
+    let Some(recorded) = reuse
+        .source
+        .observations
+        .iter()
+        .find(|o| &o.scanner.id == id)
+    else {
+        return fresh("no-recorded-observation");
+    };
+    let Ok(prepared) = prepared else {
+        return fresh("not-prepared");
+    };
+    let current = scanner.identity(prepared.version.clone(), prepared.provenance.clone());
+    let mut changed = Vec::new();
+    let found = &recorded.scanner;
+    for (name, differs) in [
+        ("version", found.version != current.version),
+        ("mode", found.mode != current.mode),
+        ("adapter", found.adapter != current.adapter),
+        (
+            "configuration",
+            found.configuration_hash != current.configuration_hash,
+        ),
+        ("provenance", found.provenance != current.provenance),
+        ("build", found.build != current.build),
+    ] {
+        if differs {
+            changed.push(name);
+        }
+    }
+    if !changed.is_empty() {
+        return fresh(&format!("changed: {}", changed.join(", ")));
+    }
+    match &recorded.result {
+        ObservationResult::Complete { replays: r, .. } if r.agreed && r.count >= replays => {
+            Ok(Decision::Reused(Box::new(recorded.clone())))
+        }
+        ObservationResult::Complete { replays: r, .. } => Err(RunError::ReuseRefused(format!(
+            "the recorded {id} observation has {} replay(s) (agreed: {}), {replays} required;              reuse serves only verified deterministic observations (pass --fresh {id})",
+            r.count, r.agreed
+        ))),
+        other => Err(RunError::ReuseRefused(format!(
+            "the recorded {id} observation is {}, not a complete one; reuse serves only              verified deterministic observations (pass --fresh {id})",
+            status_name(other)
+        ))),
+    }
 }
 
 /// Check the configuration and bind every scanner to its adapter.
@@ -257,6 +409,7 @@ struct Timing {
     scanner_process: Duration,
     phases: PhaseTimings,
     scanners: BTreeMap<String, ScannerTiming>,
+    reuse: Option<ReuseDiagnostics>,
 }
 
 impl Timing {
@@ -269,6 +422,7 @@ impl Timing {
             scanner_process: Duration::ZERO,
             phases: PhaseTimings::default(),
             scanners: BTreeMap::new(),
+            reuse: None,
         }
     }
 
@@ -306,6 +460,7 @@ impl Timing {
             evaluator_ms: millis(self.evaluator),
             phases: Some(self.phases),
             scanners: self.scanners,
+            reuse: self.reuse,
         });
     }
 }
@@ -328,7 +483,7 @@ pub fn run(request: &RunRequest<'_>) -> Result<RunOutput, RunError> {
         .validate()
         .map_err(|e| RunError::Corpus(e.to_string()))?;
     timing.phases.materialize_ms += millis(phase.elapsed());
-    let observations = scan(request, request.corpus, &mut timing)?;
+    let observations = scan(request, request.corpus, None, &mut timing)?;
     timing.emit(request.progress, None, Phase::Evaluate, Kind::Start, None);
     let phase = Instant::now();
     let artifact = credential_eval_kernel::score::build_artifact(
@@ -360,6 +515,7 @@ pub fn run(request: &RunRequest<'_>) -> Result<RunOutput, RunError> {
 fn scan(
     request: &RunRequest<'_>,
     corpus: &CorpusSnapshot,
+    restriction: Option<&Sha256Digest>,
     timing: &mut Timing,
 ) -> Result<ObservationSet, RunError> {
     let activity = Activity::default();
@@ -383,7 +539,7 @@ fn scan(
                 }
             });
         }
-        let result = scan_tasks(request, corpus, timing, &activity);
+        let result = scan_tasks(request, corpus, restriction, timing, &activity);
         *stop.0.lock().expect("heartbeat lock") = true;
         stop.1.notify_all();
         result
@@ -393,6 +549,7 @@ fn scan(
 fn scan_tasks(
     request: &RunRequest<'_>,
     corpus: &CorpusSnapshot,
+    restriction: Option<&Sha256Digest>,
     timing: &mut Timing,
     activity: &Activity,
 ) -> Result<ObservationSet, RunError> {
@@ -404,6 +561,10 @@ fn scan_tasks(
     let run_started = timing.wall;
     let phase = Instant::now();
     let scanners = bind(request.config)?;
+    let input_digest = credential_eval_contracts::corpus::input_digest(&corpus.cases);
+    if let Some(reuse) = request.reuse {
+        check_source(reuse, corpus, &input_digest, restriction, &scanners)?;
+    }
     let (guard, root) = materialize(corpus, request.work_dir)?;
     let mut paths: Vec<&str> = corpus.cases.iter().map(|c| c.path.as_str()).collect();
     paths.sort_unstable();
@@ -499,12 +660,27 @@ fn scan_tasks(
         }
     }
 
-    // Fixed task list: scanners in id order, replays ascending.
+    // Reuse decisions: which scanners keep an earlier observation (ADR 0008).
     let replays = request.config.accounting.replays;
+    let mut decisions: Vec<Decision> = Vec::new();
+    for (scanner, result) in scanners.iter().zip(&prepared) {
+        decisions.push(match request.reuse {
+            Some(reuse) => decide(scanner, result, reuse, replays)?,
+            None => Decision::Fresh(None),
+        });
+    }
+    if let Some(reuse) = request.reuse {
+        timing.reuse = Some(ReuseDiagnostics {
+            source_digest: sha256_canonical(reuse.source),
+            input_digest: input_digest.clone(),
+        });
+    }
+
+    // Fixed task list: scanners in id order, replays ascending.
     let tasks: Vec<Task> = prepared
         .iter()
         .enumerate()
-        .filter(|(_, p)| p.is_ok())
+        .filter(|(i, p)| p.is_ok() && !matches!(decisions[*i], Decision::Reused(_)))
         .flat_map(|(scanner, _)| (0..replays).map(move |replay| Task { scanner, replay }))
         .collect();
     let slots: Vec<Mutex<Option<Slot>>> = tasks.iter().map(|_| Mutex::new(None)).collect();
@@ -632,6 +808,8 @@ fn scan_tasks(
             // Replaced from the observation once collated.
             completion: ScannerStatus::Error,
             failed_phase: None,
+            origin: None,
+            origin_reason: None,
         })
         .collect();
     let mut spans: Vec<Option<(Instant, Instant)>> = vec![None; scanners.len()];
@@ -667,15 +845,26 @@ fn scan_tasks(
         }
         per_scanner[task.scanner].push((task.replay, slot.result));
     }
-    let observations: Vec<ScannerObservation> = scanners
+    let mut origins: Vec<Option<(ObservationOrigin, String)>> = Vec::new();
+    let mut observations: Vec<ScannerObservation> = Vec::new();
+    for ((((scanner, prepared), results), duration), decision) in scanners
         .iter()
         .zip(prepared)
         .zip(per_scanner)
         .zip(durations)
-        .map(|(((scanner, prepared), results), duration)| {
-            observe(scanner, prepared, results, replays, duration)
-        })
-        .collect();
+        .zip(decisions)
+    {
+        match decision {
+            Decision::Reused(recorded) => {
+                origins.push(Some((ObservationOrigin::Reused, "compatible".into())));
+                observations.push(*recorded);
+            }
+            Decision::Fresh(reason) => {
+                origins.push(reason.map(|reason| (ObservationOrigin::Fresh, reason)));
+                observations.push(observe(scanner, prepared, results, replays, duration));
+            }
+        }
+    }
     for (index, (scanner, observation)) in scanners.iter().zip(&observations).enumerate() {
         let shape = &mut shapes[index];
         if let Some((start, end)) = spans[index] {
@@ -684,6 +873,15 @@ fn scan_tasks(
             shape.end_ms = timing.offset_ms(end);
         }
         shape.completion = observation.result.status();
+        if let Some((origin, reason)) = origins[index].take() {
+            shape.origin = Some(origin);
+            shape.origin_reason = Some(reason);
+        }
+        if shape.origin == Some(ObservationOrigin::Reused) {
+            if let ObservationResult::Complete { findings, .. } = &observation.result {
+                shape.findings = findings.len() as u64;
+            }
+        }
         // No task ran: the scanner failed in `prepare`. Replay disagreement
         // (or missing replays) is the only other failure without a task phase.
         shape.failed_phase = match (&observation.result, failed_phase[index]) {
@@ -700,6 +898,11 @@ fn scan_tasks(
         schema: ObservationSetSchema,
         corpus_digest: corpus.identity.corpus_digest.clone(),
         observations,
+        measurement: Some(MeasurementBinding {
+            input_digest,
+            protocol_version: credential_eval_contracts::PROTOCOL_VERSION.into(),
+            restriction: None,
+        }),
     };
     drop(guard); // remove the materialized fixtures
     evaluator += phase.elapsed();
@@ -794,12 +997,19 @@ pub fn run_methods(
         None,
     );
 
-    let observed = scan(request, &variants, &mut timing)?;
+    let restriction = methods.allowlist.map(|_| &settings.evidence_digest);
+    let observed = scan(request, &variants, restriction, &mut timing)?;
 
     timing.emit(request.progress, None, Phase::Evaluate, Kind::Start, None);
     let phase = Instant::now();
     let observations = match methods.allowlist {
-        Some(allowlist) => restrict_observations(&observed, allowlist),
+        Some(allowlist) => {
+            let mut restricted = restrict_observations(&observed, allowlist);
+            if let Some(binding) = restricted.measurement.as_mut() {
+                binding.restriction = restriction.cloned();
+            }
+            restricted
+        }
         None => observed,
     };
     let report = evaluate(
@@ -1010,14 +1220,8 @@ fn observe(
     replays: u32,
     duration: Duration,
 ) -> ScannerObservation {
-    let identity = |version: Option<String>, provenance: ScannerProvenance| ScannerIdentity {
-        id: scanner.spec.id.clone(),
-        version,
-        mode: scanner.spec.mode.clone(),
-        adapter: scanner.spec.adapter.clone(),
-        configuration_hash: scanner.spec.configuration_hash(),
-        provenance: Some(provenance),
-        build: Some(scanner.adapter.build(&scanner.spec)),
+    let identity = |version: Option<String>, provenance: ScannerProvenance| {
+        scanner.identity(version, provenance)
     };
     let duration_ms = Some(millis(duration));
     let prepared = match prepared {
