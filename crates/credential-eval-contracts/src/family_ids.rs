@@ -16,14 +16,14 @@
 //! before). Changing the table is a protocol revision.
 
 /// Version of the legacy-to-evidence coverage table.
-pub const FAMILY_COVERAGE_VERSION: &str = "1";
+pub const FAMILY_COVERAGE_VERSION: &str = "2";
 
 /// `(legacy id, covered evidence families)`. An entry ending in `:` covers every
 /// family of that provider; any other entry covers exactly that family.
 const COVERAGE: &[(&str, &[&str])] = &[
     ("ai21-api-key", &["ai21:"]),
     ("anthropic-admin01-key", &["anthropic:admin-api-key"]),
-    ("anthropic-api01-key", &["anthropic:secret-api-key"]),
+    ("anthropic-api01-key", &["anthropic:compliance-access-key"]),
     ("anthropic-token", &["anthropic:"]),
     ("apify-api-token", &["apify:"]),
     ("aws-access-key", &["aws:"]),
@@ -253,5 +253,52 @@ mod tests {
         assert!(!same_family("slack-token", "github:oauth-access-token"));
         // an id the table does not know covers nothing
         assert!(!same_family("unknown-token", "github:oauth-access-token"));
+    }
+
+    /// Each specific Anthropic legacy id is pinned to the evidence family that
+    /// owns its documented prefix (contract `^sk-ant-<class>-...`), not merely
+    /// to a family that exists in the snapshot (issue #63).
+    #[test]
+    fn anthropic_class_ids_pin_their_prefix_class() {
+        // (legacy id, documented prefix, evidence family that owns the prefix)
+        let classes = [
+            (
+                "anthropic-admin01-key",
+                "sk-ant-admin01-",
+                "anthropic:admin-api-key",
+            ),
+            (
+                "anthropic-api01-key",
+                "sk-ant-api01-",
+                "anthropic:compliance-access-key",
+            ),
+        ];
+        let api03 = "anthropic:secret-api-key"; // `sk-ant-api03-`
+        for (legacy, prefix, family) in classes {
+            assert!(same_family(legacy, family), "{legacy} ({prefix})");
+            assert!(!same_family(legacy, api03), "{legacy} must not cover api03");
+        }
+        assert!(!same_family(
+            "anthropic-api01-key",
+            "anthropic:admin-api-key"
+        ));
+        assert!(!same_family(
+            "anthropic-admin01-key",
+            "anthropic:compliance-access-key"
+        ));
+    }
+
+    /// ADR 0019: a provider-wide entry covers every family of its provider,
+    /// including a sibling class a scoped twin wears. Pinned so a change is a
+    /// reviewed revision.
+    #[test]
+    fn provider_wide_entry_covers_sibling_class_twin_scopes() {
+        for scope in [
+            "anthropic:admin-api-key",
+            "anthropic:compliance-access-key",
+            "anthropic:secret-api-key",
+        ] {
+            assert!(same_family("anthropic-token", scope), "{scope}");
+        }
     }
 }

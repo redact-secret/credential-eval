@@ -45,7 +45,8 @@ This is legacy `scoreRow`, `lattice.ts:76-97`, ported as
     twin's own family, flags. So unattributed findings fail closed. Two ids
     are the same family when they are equal or when a legacy id covers an
     evidence `provider:family` id (`family_ids::same_family`, table version
-    `1`, [ADR 0018](../decisions/0018-family-id-namespaces-and-twin-scoping.md)).
+    `2`, [ADR 0018](../decisions/0018-family-id-namespaces-and-twin-scoping.md),
+    [ADR 0019](../decisions/0019-provider-wide-coverage-and-sibling-class-twins.md)).
   - `action_counts`: a tally of scanner-reported `action` values. It is
     additive and never changes `flagged` or `findings`.
 - **Not measured**: the scanner's status is not `complete`. Every case records
