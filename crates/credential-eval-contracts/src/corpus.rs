@@ -253,6 +253,14 @@ pub struct TwinLineage {
     pub mutation: String,
     /// Mutated property (e.g. `length`, `alphabet`, `prefix`, `context`).
     pub mutation_kind: String,
+    /// The family whose contract owns this twin's value, when the twin is a
+    /// real credential of another class of the same provider (revision v1.9,
+    /// ADR 0020). Absent for an ordinary near-miss twin. A finding that is the
+    /// same family as this one is co-detection, even when the same finding also
+    /// covers the scope family (a provider-wide legacy id). Never read from a
+    /// scanner; never relabels an expected family.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sibling_family: Option<String>,
 }
 
 /// Compute the corpus digest: SHA-256 of the canonical JSON of the case array
@@ -365,6 +373,18 @@ impl CorpusSnapshot {
             }
             if twin.mutation.trim().is_empty() {
                 return Err(invalid("twin without mutation"));
+            }
+            if let Some(sibling) = &twin.sibling_family {
+                let scope = case.grouping.family.as_deref();
+                if sibling.trim().is_empty() || sibling.trim() != sibling {
+                    return Err(invalid("sibling_family is blank or padded"));
+                }
+                if scope.is_none() {
+                    return Err(invalid("sibling_family without a scope family"));
+                }
+                if scope == Some(sibling.as_str()) {
+                    return Err(invalid("sibling_family equals the scope family"));
+                }
             }
         }
         let computed = corpus_digest(&self.cases);

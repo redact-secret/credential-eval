@@ -215,6 +215,7 @@ fn case_of(f: &Value, prefix: Option<&str>) -> Case {
             twin_of: CaseId::new(id(s(t))).unwrap(),
             mutation: s(&f["mutation"]).to_owned(),
             mutation_kind: s(&f["mutationKind"]).to_owned(),
+            sibling_family: None,
         }),
         representation: None,
     }

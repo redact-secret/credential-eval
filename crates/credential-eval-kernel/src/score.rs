@@ -29,7 +29,7 @@ use credential_eval_contracts::{ENGINE_NAME, PROTOCOL_VERSION};
 
 use crate::KernelError;
 use crate::accounting::{SuiteCase, account_groups, summarize_selections, validate_accounting};
-use crate::lattice::score_row;
+use crate::lattice::score_row_scoped;
 
 /// Implementation version of the kernel, recorded as the engine version.
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -179,7 +179,8 @@ pub fn score_scanner(corpus: &CorpusSnapshot, observation: &ScannerObservation) 
                 CaseMeasurement::Pending
             } else {
                 let scope = case.twin.as_ref().and(case.grouping.family.as_deref());
-                score_row(&expected_of(case), &actual, scope)
+                let sibling = case.twin.as_ref().and_then(|t| t.sibling_family.as_deref());
+                score_row_scoped(&expected_of(case), &actual, scope, sibling)
             };
             case_result(case, actual, measurement)
         })

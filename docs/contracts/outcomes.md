@@ -47,6 +47,12 @@ This is legacy `scoreRow`, `lattice.ts:76-97`, ported as
     evidence `provider:family` id (`family_ids::same_family`, table version
     `2`, [ADR 0018](../decisions/0018-family-id-namespaces-and-twin-scoping.md),
     [ADR 0019](../decisions/0019-provider-wide-coverage-and-sibling-class-twins.md)).
+    When the twin declares `twin.sibling_family`
+    ([ADR 0020](../decisions/0020-sibling-family-on-twin-lineage.md)), a
+    finding that is the same family as it is co-detection too, even if the same
+    finding also covers the twin's own family (a provider-wide legacy id cannot
+    say which class it found). A class-specific finding of the twin's own family
+    still flags.
   - `action_counts`: a tally of scanner-reported `action` values. It is
     additive and never changes `flagged` or `findings`.
 - **Not measured**: the scanner's status is not `complete`. Every case records

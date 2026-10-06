@@ -11,7 +11,7 @@ use credential_eval_contracts::observation::{NormalizedFinding, ScannerStatus};
 use serde::Serialize;
 
 use super::model::{GeneratedVariant, MethodId, secrets};
-use crate::lattice::{is_acceptable, score_row};
+use crate::lattice::{is_acceptable, score_row, score_row_scoped};
 
 /// Reason recorded on review-required absolute assertions (`assertions.ts:23`).
 pub const PENDING_REVIEW: &str = "Expectation is pending review.";
@@ -61,7 +61,12 @@ pub fn observe(v: &GeneratedVariant, findings: &[&NormalizedFinding]) -> CaseRes
     let actual = actual_on_path(findings);
     let family = v.fixture.grouping.family.as_deref();
     let measurement = if v.transformation.relation == Some(Relation::MustFlip) && family.is_some() {
-        score_row(&expected, &actual, family)
+        let sibling = v
+            .fixture
+            .twin
+            .as_ref()
+            .and_then(|t| t.sibling_family.as_deref());
+        score_row_scoped(&expected, &actual, family, sibling)
     } else if v.fixture.grouping.tier == EvidenceTier::T0 {
         CaseMeasurement::Pending
     } else {

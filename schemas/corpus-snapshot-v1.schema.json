@@ -1159,6 +1159,13 @@
           "description": "Mutated property (e.g. `length`, `alphabet`, `prefix`, `context`).",
           "type": "string"
         },
+        "sibling_family": {
+          "description": "The family whose contract owns this twin's value, when the twin is a\nreal credential of another class of the same provider (revision v1.9,\nADR 0020). Absent for an ordinary near-miss twin. A finding that is the\nsame family as this one is co-detection, even when the same finding also\ncovers the scope family (a provider-wide legacy id). Never read from a\nscanner; never relabels an expected family.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "twin_of": {
           "description": "The positive case this control is paired with.",
           "$ref": "#/$defs/CaseId"
