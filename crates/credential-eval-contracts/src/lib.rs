@@ -26,6 +26,7 @@ pub mod canonical;
 pub mod config;
 pub mod corpus;
 pub mod error;
+pub mod family_ids;
 pub mod ids;
 pub mod observation;
 pub mod performance;

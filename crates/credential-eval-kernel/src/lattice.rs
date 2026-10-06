@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 
 use credential_eval_contracts::artifact::{CaseMeasurement, ObservedRange, Outcome, ScoredSpan};
 use credential_eval_contracts::corpus::SpanRole;
+use credential_eval_contracts::family_ids::same_family;
 use credential_eval_contracts::range::ByteRange;
 
 /// `a` and `b` share at least one byte (`lattice.ts:10`).
@@ -133,7 +134,11 @@ pub fn score_row(
             Some(scope) => {
                 let other = actual
                     .iter()
-                    .filter(|a| a.family.as_deref().is_some_and(|family| family != scope))
+                    .filter(|a| {
+                        a.family
+                            .as_deref()
+                            .is_some_and(|family| !same_family(family, scope))
+                    })
                     .count();
                 CaseMeasurement::Control {
                     flagged: other < actual.len(),
@@ -302,5 +307,44 @@ mod tests {
         // Unscoped controls flag on any finding.
         let m = score_row(&[], &[found(0, 3, Some("other"))], None);
         assert!(matches!(m, CaseMeasurement::Control { flagged: true, .. }));
+    }
+
+    #[test]
+    fn scoped_twin_matches_a_legacy_id_that_covers_the_evidence_family() {
+        let scope = Some("github:classic-personal-access-token");
+        // Legacy id of the same provider: the twin is flagged, not co-detected.
+        let m = score_row(&[], &[found(0, 3, Some("github-token"))], scope);
+        assert!(matches!(
+            m,
+            CaseMeasurement::Control {
+                flagged: true,
+                co_detected: false,
+                ..
+            }
+        ));
+        // Legacy id of another provider: co-detection.
+        let m = score_row(&[], &[found(0, 3, Some("slack-token"))], scope);
+        assert!(matches!(
+            m,
+            CaseMeasurement::Control {
+                flagged: false,
+                co_detected: true,
+                ..
+            }
+        ));
+        // Evidence ids are compared exactly.
+        let m = score_row(
+            &[],
+            &[found(0, 3, Some("github:oauth-access-token"))],
+            scope,
+        );
+        assert!(matches!(
+            m,
+            CaseMeasurement::Control {
+                flagged: false,
+                co_detected: true,
+                ..
+            }
+        ));
     }
 }
