@@ -39,14 +39,25 @@ were covered by a mapped finding but not flagged (OpenRedaction default,
    Every table entry resolves to a family present in `snapshot-2026.10.06`
    (checked when written; a unit test checks shape and ordering).
 
-## Not decided here
+## Measured effect
 
-How many twin controls flip on each scanner (gitleaks, trufflehog, redact-secret,
-flare-redact, OpenRedaction) is a measurement and needs a scanner run. It was
-not run for this change; the next official run on an evidence snapshot reports
-it, and should be compared with the previous run as a protocol delta. Coverage
-at provider level is deliberately broad where the legacy id never named a
-sub-family; a narrower reading would count more co-detection.
+Local plain run, `snapshot-2026.10.01.2` (5,950 cases; 1,366 scoped twin
+controls without a secret span), `--jobs 2`, one trial, exploratory run class,
+engine alpha.13. Old rule: raw id equality; new rule: `same_family`. The run is
+deterministic (two runs, same semantic digest `sha256:b9716b15d5e2c5f6759f0ee09d2c2be0cbfe0ff7727b05573d83288f20f9b61e`).
+
+| Scanner | Flagged old / new | Co-detected old / new | Flagged gained |
+|---|---|---|---|
+| openredaction 1.1.5 (27,253 findings) | 373 / 396 | 215 / 185 | 23 |
+| gitleaks 8.30.1 (2,410 findings) | 58 / 92 | 595 / 559 | 34 |
+
+The issue's 112 unflagged twins covered by a mapped finding were mostly not a
+namespace artifact: 23 flip, the other 89 remain co-detections because the
+finding is a different family (for example `aws-secret-access-key` or
+`generic-token` on another provider's twin), which is what the rule intends.
+
+Not run: trufflehog (local 3.97.6, pin 3.97.4), redact-secret, flare-redact.
+The next official run reports them.
 
 ## Tests
 
