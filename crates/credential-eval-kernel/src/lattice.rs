@@ -116,6 +116,19 @@ pub fn score_row(
     actual: &[ObservedRange],
     scope_family: Option<&str>,
 ) -> CaseMeasurement {
+    score_row_scoped(expected, actual, scope_family, None)
+}
+
+/// [`score_row`] with a twin's `sibling_family` (ADR 0020). A finding that is
+/// the same family as `sibling_family` is co-detection even when it also
+/// covers `scope_family`: a provider-wide legacy id covers both and cannot say
+/// which class it found. Without a sibling this is exactly [`score_row`].
+pub fn score_row_scoped(
+    expected: &[ScoredSpan],
+    actual: &[ObservedRange],
+    scope_family: Option<&str>,
+    sibling_family: Option<&str>,
+) -> CaseMeasurement {
     let secrets: Vec<&ScoredSpan> = expected
         .iter()
         .filter(|e| e.role == SpanRole::Secret)
@@ -135,9 +148,10 @@ pub fn score_row(
                 let other = actual
                     .iter()
                     .filter(|a| {
-                        a.family
-                            .as_deref()
-                            .is_some_and(|family| !same_family(family, scope))
+                        a.family.as_deref().is_some_and(|family| {
+                            !same_family(family, scope)
+                                || sibling_family.is_some_and(|s| same_family(family, s))
+                        })
                     })
                     .count();
                 CaseMeasurement::Control {
@@ -346,5 +360,41 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn sibling_family_makes_provider_wide_findings_co_detection() {
+        // `anthropic-token` covers both the scope and the sibling family.
+        let scope = Some("anthropic:admin-api-key");
+        let sibling = Some("anthropic:secret-api-key");
+        let wide = [found(0, 3, Some("anthropic-token"))];
+        let flagged =
+            |m: CaseMeasurement| matches!(m, CaseMeasurement::Control { flagged: true, .. });
+        let co = |m: CaseMeasurement| {
+            matches!(
+                m,
+                CaseMeasurement::Control {
+                    co_detected: true,
+                    ..
+                }
+            )
+        };
+        // no sibling: unchanged, the provider-wide finding flags
+        let m = score_row_scoped(&[], &wide, scope, None);
+        assert!(flagged(m.clone()) && !co(m));
+        // with a sibling: co-detection, not a flag
+        let m = score_row_scoped(&[], &wide, scope, sibling);
+        assert!(!flagged(m.clone()) && co(m));
+        // a class-specific finding of the scope class still flags
+        let own = [found(0, 3, Some("anthropic-admin01-key"))];
+        let m = score_row_scoped(&[], &own, scope, sibling);
+        assert!(flagged(m.clone()) && !co(m));
+        // the sibling's own class id is co-detection
+        let sib = [found(0, 3, Some("anthropic:secret-api-key"))];
+        let m = score_row_scoped(&[], &sib, scope, sibling);
+        assert!(!flagged(m.clone()) && co(m));
+        // a finding with no family still flags (fails closed)
+        let none = [found(0, 3, None)];
+        assert!(flagged(score_row_scoped(&[], &none, scope, sibling)));
     }
 }

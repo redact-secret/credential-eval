@@ -3,6 +3,7 @@
 - Status: accepted
 - Date: 2026-10-06
 - Issue: #63 (found in the redact-secret alpha.5 vs alpha.13 control comparison).
+- Partly superseded by [ADR 0020](0020-sibling-family-on-twin-lineage.md): decision 3 is done there, and the GitLab remark in the issue is withdrawn.
 - Amends: ADR 0018 decision 2 (coverage table). Engine `0.1.0-alpha.14`,
   `FAMILY_COVERAGE_VERSION` `2`. No schema change; no adapter output change.
 

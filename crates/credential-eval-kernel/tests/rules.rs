@@ -402,6 +402,7 @@ fn snapshot() -> CorpusSnapshot {
         twin_of: CaseId::new("pos").unwrap(),
         mutation: "alphabet".into(),
         mutation_kind: "alphabet".into(),
+        sibling_family: None,
     });
     twin.grouping.taxonomy = None;
     CorpusSnapshot::seal(

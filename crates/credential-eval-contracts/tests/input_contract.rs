@@ -134,6 +134,46 @@ fn twin_lineage_is_checked() {
 }
 
 #[test]
+fn twin_sibling_family_is_checked_and_digest_neutral_when_absent() {
+    let corpus = snapshot();
+    let seal = |cases| CorpusSnapshot::seal("s".into(), "r".into(), "e".into(), cases);
+    let with_sibling = |sibling: Option<&str>, scope: Option<&str>| {
+        let mut cases = corpus.cases.clone();
+        let twin = cases
+            .iter_mut()
+            .find(|c| c.twin.is_some())
+            .expect("twin case");
+        twin.grouping.family = scope.map(str::to_owned);
+        twin.twin.as_mut().expect("lineage").sibling_family = sibling.map(str::to_owned);
+        seal(cases)
+    };
+    // absent: serialization and digest are unchanged
+    let plain = with_sibling(None, Some("a:one"));
+    assert!(
+        !serde_json::to_string(&plain)
+            .unwrap()
+            .contains("sibling_family")
+    );
+    plain.validate().expect("no sibling");
+    // present and valid
+    let ok = with_sibling(Some("a:two"), Some("a:one"));
+    ok.validate().expect("sibling");
+    assert_ne!(ok.identity.corpus_digest, plain.identity.corpus_digest);
+    // equal to scope, blank, padded, or without a scope family
+    for bad in [
+        with_sibling(Some("a:one"), Some("a:one")),
+        with_sibling(Some(" "), Some("a:one")),
+        with_sibling(Some(" a:two"), Some("a:one")),
+        with_sibling(Some("a:two"), None),
+    ] {
+        assert!(matches!(
+            bad.validate(),
+            Err(ContractError::InvalidTwin { .. })
+        ));
+    }
+}
+
+#[test]
 fn unknown_fields_and_wrong_schema_tags_fail_closed() {
     let mut value: serde_json::Value =
         serde_json::from_slice(&fixture("corpus-snapshot.json")).expect("json");
