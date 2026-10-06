@@ -190,6 +190,8 @@ configuration:
 |---|---|
 | [`configs/official/credential-public-v1.json`](../configs/official/credential-public-v1.json) | linux-x64, the `redact-secret-benchmarks` CI platform (canonical) |
 | [`configs/official/credential-public-v1.darwin-arm64.json`](../configs/official/credential-public-v1.darwin-arm64.json) | darwin-arm64, for local reproduction |
+| [`configs/official/credential-public-v1.without-openredaction.json`](../configs/official/credential-public-v1.without-openredaction.json) | linux-x64, the canonical configuration without the optional default OpenRedaction profile ([ADR 0017](decisions/0017-optional-openredaction-default-in-official-configurations.md)) |
+| [`configs/official/credential-public-v1.without-openredaction.darwin-arm64.json`](../configs/official/credential-public-v1.without-openredaction.darwin-arm64.json) | darwin-arm64 counterpart of the above, for local reproduction |
 
 Both are (and, from `v0.1.0-alpha.5`, the two `core-beta.12` files below are
 variants of) `tools/parity/run-config.json` (the configuration parity was proven

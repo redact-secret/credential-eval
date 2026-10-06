@@ -33,6 +33,20 @@ const BETA12: &[(&str, &str)] = &[
         "configs/official/credential-public-v1.darwin-arm64.json",
     ),
 ];
+/// Configurations without the OPTIONAL default OpenRedaction profile (ADR 0017,
+/// redact-secret-benchmarks#763): each is its counterpart with the `openredaction`
+/// entry removed and nothing else changed. The counterparts stay as they are, so
+/// every earlier run remains reproducible. A run selects one of these explicitly.
+const WITHOUT_OPENREDACTION: &[(&str, &str)] = &[
+    (
+        "configs/official/credential-public-v1.without-openredaction.json",
+        CANONICAL,
+    ),
+    (
+        "configs/official/credential-public-v1.without-openredaction.darwin-arm64.json",
+        "configs/official/credential-public-v1.darwin-arm64.json",
+    ),
+];
 /// Node shim directory (lockfile) each configuration family is run with.
 const NODE_DIR: &str = "adapters/node";
 const NODE_DIR_BETA12: &str = "adapters/node-core-beta.12";
@@ -54,6 +68,7 @@ fn all_configs() -> Vec<&'static str> {
     let mut all = vec![CANONICAL];
     all.extend_from_slice(VARIANTS);
     all.extend(BETA12.iter().map(|(path, _)| *path));
+    all.extend(WITHOUT_OPENREDACTION.iter().map(|(path, _)| *path));
     all
 }
 
@@ -88,7 +103,16 @@ fn official_configs_validate_and_are_fully_pinned() {
         official::check_official_config(&config).expect(path);
         assert!(config.methods.is_empty(), "{path}: corpus measurement only");
         let ids: Vec<&str> = config.scanners.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, SCANNERS, "{path}");
+        let expected: Vec<&str> = if WITHOUT_OPENREDACTION.iter().any(|(p, _)| *p == path) {
+            SCANNERS
+                .iter()
+                .copied()
+                .filter(|id| *id != "openredaction")
+                .collect()
+        } else {
+            SCANNERS.to_vec()
+        };
+        assert_eq!(ids, expected, "{path}");
         for spec in &config.scanners {
             let id = spec.id.as_str();
             assert_eq!(spec.network, NetworkPolicy::Disabled, "{path}: {id}");
@@ -168,6 +192,27 @@ fn attribution_configs_differ_only_in_the_redact_secret_pin() {
         };
         assert_eq!(pin(&base), "0.1.0-beta.13", "{counterpart}");
         assert_eq!(pin(&alt), "0.1.0-beta.12", "{path}");
+    }
+}
+
+/// The without-OpenRedaction configurations are the counterpart minus the
+/// `openredaction` entry, byte for byte otherwise: the other scanners are
+/// measured exactly as before, so dropping the optional profile moves no other
+/// scanner's configuration (hence no other scanner's identity).
+#[test]
+fn without_openredaction_configs_differ_only_by_the_missing_entry() {
+    for (path, counterpart) in WITHOUT_OPENREDACTION {
+        let (alt, base) = (read_json(path), read_json(counterpart));
+        let mut expected = base.clone();
+        let scanners = expected["scanners"].as_array_mut().expect("scanners");
+        let before = scanners.len();
+        scanners.retain(|s| s["id"] != "openredaction");
+        assert_eq!(
+            scanners.len(),
+            before - 1,
+            "{counterpart} has openredaction"
+        );
+        assert_eq!(alt, expected, "{path}");
     }
 }
 
