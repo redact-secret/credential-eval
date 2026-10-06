@@ -42,7 +42,10 @@ This is legacy `scoreRow`, `lattice.ts:76-97`, ported as
   - Scoped (a twin whose `grouping.family` is set): a finding whose `family`
     is a known family *other* than the twin's is co-detection. It sets
     `co_detected` and does not flag. A finding with no family, or with the
-    twin's own family, flags. So unattributed findings fail closed.
+    twin's own family, flags. So unattributed findings fail closed. Two ids
+    are the same family when they are equal or when a legacy id covers an
+    evidence `provider:family` id (`family_ids::same_family`, table version
+    `1`, [ADR 0018](../decisions/0018-family-id-namespaces-and-twin-scoping.md)).
   - `action_counts`: a tally of scanner-reported `action` values. It is
     additive and never changes `flagged` or `findings`.
 - **Not measured**: the scanner's status is not `complete`. Every case records
