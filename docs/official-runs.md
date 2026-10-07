@@ -127,9 +127,9 @@ registry `integrity` (`sha512-<base64>`, the tarball's content address) and
 
 ```json
 "pin": {
-  "version": "0.1.0-beta.13",
-  "integrity": "sha512-qZkqRN7CIJ+pc0IteRCXSucr1l9KtTc/nJaM5wPL0NvCiZ4AGWLCyrLy8KD95a2MBgxo8vuUJ/UaKhrny7gMJQ==",
-  "resolved": "https://registry.npmjs.org/@redact-secret/core/-/core-0.1.0-beta.13.tgz"
+  "version": "0.1.0-beta.14",
+  "integrity": "sha512-1h5NxUto2ZEqQD5hfIgbzwDZkmu6WXdlmtF0waG3FcKDhpCEoUphgj4B4VGRyhVhjJOFT58/TrER+3EL1bCnag==",
+  "resolved": "https://registry.npmjs.org/@redact-secret/core/-/core-0.1.0-beta.14.tgz"
 }
 ```
 
@@ -164,14 +164,14 @@ the configuration pins what that lockfile must contain. They go together:
 
 | Configuration (`configs/official/`) | `--node-dir` | `@redact-secret/core` |
 |---|---|---|
-| `credential-public-v1.json`, `credential-public-v1.darwin-arm64.json` | `adapters/node` | 0.1.0-beta.13 |
+| `credential-public-v1.json`, `credential-public-v1.darwin-arm64.json` | `adapters/node` | 0.1.0-beta.14 |
 | `credential-public-v1.core-beta.12.json`, `credential-public-v1.core-beta.12.darwin-arm64.json` | `adapters/node-core-beta.12` | 0.1.0-beta.12 |
 
 `adapters/node-core-beta.12` carries the `package.json` and `package-lock.json`
 of `v0.1.0-alpha.4` byte for byte and links `shim.mjs` to the shim of
 `adapters/node`, so both run one shim. Its configurations differ from their
-beta.13 counterparts only in the `redact-secret` pin (a test enforces it). A
-mismatched pair, for example the beta.13 configuration with the beta.12 shim
+beta.14 counterparts only in the `redact-secret` pin (a test enforces it). A
+mismatched pair, for example the beta.14 configuration with the beta.12 shim
 directory, is refused by the version pin. Use the beta.12 pair to attribute
 a difference to the product build: run the same engine, evidence,
 platform and peers once with each pair.
@@ -203,7 +203,7 @@ scanner has `network: disabled`.
 |---|---|---|---|
 | `gitleaks` | 8.30.1 | `sha256:88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509` | `sha256:ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f` |
 | `trufflehog` | 3.97.4 | `sha256:95c2a42bce979fce6dd73cc629b37ae4d72731b0dc16e047fba41a77bc765620` | `sha256:8c7af13e84f217bffd10aec09780fb7bbe59892187c99006291cef9c6f001beb` |
-| `redact-secret` | 0.1.0-beta.13 | n/a (npm) | n/a (npm) |
+| `redact-secret` | 0.1.0-beta.14 | n/a (npm) | n/a (npm) |
 | `flare-redact` | 1.6.1 | n/a (npm) | n/a (npm) |
 | `openredaction` | 1.1.5 | n/a (npm) | n/a (npm) |
 
@@ -221,7 +221,7 @@ the upstream checksum file before extraction:
 The darwin archive digests also equal the legacy `scanners/peer-checksums.json`
 that parity used. The npm scanners are pinned by version, `sha512` integrity and tarball URL in
 the configuration ([npm package pins](#npm-package-pins)) and by
-`adapters/node/package-lock.json` (`@redact-secret/core` `sha512-qZkqRN7CIJ+p…`,
+`adapters/node/package-lock.json` (`@redact-secret/core` `sha512-1h5NxUto2ZEq…`,
 `flare-redact` `sha512-13Htu6VPk2tt…`, `@openredaction/core`
 `sha512-SpQTBhVV4p3r…`; `v0.1.0-alpha.4` pinned beta.12,
 `sha512-fDVwt2U7VFSK…`). The run records the integrity and an installed-tree

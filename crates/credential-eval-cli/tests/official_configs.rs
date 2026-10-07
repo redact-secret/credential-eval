@@ -190,7 +190,7 @@ fn attribution_configs_differ_only_in_the_redact_secret_pin() {
                 .expect("redact-secret")["pin"]["version"]
                 .clone()
         };
-        assert_eq!(pin(&base), "0.1.0-beta.13", "{counterpart}");
+        assert_eq!(pin(&base), "0.1.0-beta.14", "{counterpart}");
         assert_eq!(pin(&alt), "0.1.0-beta.12", "{path}");
     }
 }
@@ -294,7 +294,7 @@ fn the_attribution_node_dir_shares_the_shim_and_differs_only_in_the_core_family(
         assert_eq!(entry == &old[name], !core, "{name}");
     }
     for (dir, version) in [
-        (NODE_DIR, "0.1.0-beta.13"),
+        (NODE_DIR, "0.1.0-beta.14"),
         (NODE_DIR_BETA12, "0.1.0-beta.12"),
     ] {
         let package = read_json(&format!("{dir}/package.json"));
