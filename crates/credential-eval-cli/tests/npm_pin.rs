@@ -13,9 +13,9 @@ use credential_eval_contracts::observation::{
 use serde_json::{Value, json};
 
 const PACKAGE: &str = "@redact-secret/core";
-const VERSION: &str = "0.1.0-beta.13";
+const VERSION: &str = "0.1.0-beta.14";
 const INTEGRITY: &str = "sha512-AAAA";
-const RESOLVED: &str = "https://registry.npmjs.org/@redact-secret/core/-/core-0.1.0-beta.13.tgz";
+const RESOLVED: &str = "https://registry.npmjs.org/@redact-secret/core/-/core-0.1.0-beta.14.tgz";
 
 fn lock(version: &str, integrity: &str, resolved: &str) -> String {
     json!({"lockfileVersion": 3, "packages": {format!("node_modules/{PACKAGE}"): {
@@ -96,7 +96,7 @@ fn every_disagreement_is_refused() {
         let error = check(dir.path(), pin, integrity).unwrap_err();
         assert!(error.contains(needle), "{error}");
     };
-    // The lockfile is another build (beta.12 against a beta.13 pin).
+    // The lockfile is another build (beta.12 against a beta.14 pin).
     let older_core = lock(
         "0.1.0-beta.12",
         "sha512-BBBB",

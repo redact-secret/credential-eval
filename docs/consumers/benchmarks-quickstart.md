@@ -19,13 +19,13 @@ The CI pins every input in its own files. Nothing is resolved at run time.
 
 | Input | Pin |
 |---|---|
-| credential-eval | tag `v0.1.0-alpha.5` (`credential-eval --version` prints `credential-eval 0.1.0-alpha.5`) |
+| credential-eval | tag `v0.1.0-alpha.16` (`credential-eval --version` prints `credential-eval 0.1.0-alpha.16`) |
 | Run configuration | `configs/official/credential-public-v1.json` at that tag (linux-x64 executable digests) |
 | Evidence release | `redact-secret/credential-evidence` tag `snapshot-2026.10.01.2`, manifest digest `sha256:2557a72ae8dec3ca6d734a6c87b6db9cb4881543541693a4555fdfd9f7ba26d8` |
 | Corpus | 5,950 cases, corpus digest `sha256:1bc5a07b49dab7b8182f51bf11a65a9bb8a220adbd5216b364bc15b2d8e6a5af` |
 | Gitleaks 8.30.1 | `gitleaks_8.30.1_linux_x64.tar.gz` `sha256:551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`; binary `sha256:88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509` |
 | TruffleHog 3.97.4 | `trufflehog_3.97.4_linux_amd64.tar.gz` `sha256:dc24007c2f233bd61c05beabeb44aa27ea9b43288166279209abe0458c5ce76b`; binary `sha256:95c2a42bce979fce6dd73cc629b37ae4d72731b0dc16e047fba41a77bc765620` |
-| npm scanners | `adapters/node/package-lock.json` at the tag: `@redact-secret/core` 0.1.0-beta.13, `flare-redact` 1.6.1, `@openredaction/core` 1.1.5, each with its `sha512` integrity and tarball URL, also pinned in the configuration |
+| npm scanners | `adapters/node/package-lock.json` at the tag: `@redact-secret/core` 0.1.0-beta.14, `flare-redact` 1.6.1, `@openredaction/core` 1.1.5, each with its `sha512` integrity and tarball URL, also pinned in the configuration |
 | Node | 22 (the run that verified this used v22.16.0) |
 
 The archive digests come from the upstream release checksum files:
@@ -42,7 +42,7 @@ archives. They are what the `pin.sha256` in the configuration checks
 set -euo pipefail
 TAG=snapshot-2026.10.01.2
 MANIFEST_DIGEST=2557a72ae8dec3ca6d734a6c87b6db9cb4881543541693a4555fdfd9f7ba26d8
-CE=v0.1.0-alpha.5
+CE=v0.1.0-alpha.16
 
 # 1. Fetch the evidence release by tag and verify the manifest digest.
 #    credential-eval verifies it again (step 5); checking here fails earlier.
@@ -57,7 +57,7 @@ echo "$MANIFEST_DIGEST  evidence/release-manifest.json" | sha256sum -c -
 #    Record the tag's commit SHA with the artifact.
 git clone --depth 1 --branch "$CE" https://github.com/redact-secret/credential-eval ce
 cargo build --release --locked -p credential-eval-cli --manifest-path ce/Cargo.toml
-ce/target/release/credential-eval --version   # credential-eval 0.1.0-alpha.5
+ce/target/release/credential-eval --version   # credential-eval 0.1.0-alpha.16
 
 # 3. Provision the binary scanners at their pins (linux-x64), read-only.
 mkdir -p peer-bin dl
@@ -177,7 +177,7 @@ The darwin-arm64 pair is `credential-public-v1.core-beta.12.darwin-arm64.json`.
 Expect `manifest.scanners[id=redact-secret].version` `0.1.0-beta.12`, its
 provenance `npm-package` `@redact-secret/core` integrity
 `sha512-fDVwt2U7VFSKb/0ixSuU5e+TOGVaUnyR1sIYwgS4S6gMndFnaq0M7ikaqac8wnTMYfYO/LS12JayXXeKbhE4aw==`,
-and a `config_hash` different from the beta.13 run's (the pin is part of the
+and a `config_hash` different from the beta.14 run's (the pin is part of the
 configuration). See official-runs.md, "npm package pins".
 
 ## Product-owned populations
